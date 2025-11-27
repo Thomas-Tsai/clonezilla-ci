@@ -1,0 +1,3 @@
+clone vda to image
+
+/usr/sbin/ocs-sr -q2 -c -j2 -z9 -i 0 -sfsck -scs -senc -p true savedisk "2025-11-27-06-img" vda

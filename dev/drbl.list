@@ -1,0 +1,8 @@
+deb http://free.nchc.org.tw/drbl-core drbl stable dev
+deb-src http://free.nchc.org.tw/drbl-core drbl stable dev
+
+#deb http://free.nchc.org.tw/drbl-core drbl testing dev
+#deb-src http://free.nchc.org.tw/drbl-core drbl testing dev
+
+#deb http://free.nchc.org.tw/drbl-core drbl unstable dev
+#deb-src http://free.nchc.org.tw/drbl-core drbl unstable dev
