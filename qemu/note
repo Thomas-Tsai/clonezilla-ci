@@ -1,0 +1,2 @@
+qemu-img create -f qcow2 debian.qcow2 20G
+qemu-img create -f qcow2 restore.qcow2 30G
