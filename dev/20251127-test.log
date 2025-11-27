@@ -1,0 +1,238 @@
+## clonezilla static build partclone 0.3.40
+### crc32 clone
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ partclone.extfs -v
+Partclone : v0.3.40 (0.3.39-19-g5475e12)
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ partclone.extfs -d -c -a 1 -s /dev/vda1 -o vda1.crc32.img
+Partclone v0.3.40 http://partclone.org
+Starting to clone device (/dev/vda1) to image (vda1.crc32.img)
+Reading Super Block
+Elapsed: 00:00:01, Remaining: 00:00:00, Completed: 100.00%Current block:          1, Total block:    4960256, Complete: 100.00%
+Total Time: 00:00:01, 100.00% completed!Completed:   1.00%Current block:          0, Total block:    4960256, Complete:   0.00%
+done!
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+Elapsed: 00:00:18, Remaining: 00:00:00, Completed: 100.00%, Rate:   5.09GB/min,
+Current block:    4722688, Total block:    4960256, Complete: 100.00%
+Total Time: 00:00:18, Ave. Rate:   5.09GB/min, 100.00% completed!
+Syncing... OK!
+Partclone successfully cloned the device (/dev/vda1) to the image (vda1.crc32.img)
+Cloned successfully.
+
+### crc32 restore
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ /sbin/partclone.extfs -d -r -a 1 -s ./vda1.crc32.img -o /dev/vda1 ; /home/partimag/checksum.log/testdata.sh
+Partclone v0.3.40 http://partclone.org
+Starting to restore image (./vda1.crc32.img) to device (/dev/vda1)
+Reading Super Block
+Calculating bitmap... Please wait...
+done!
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+Elapsed: 00:00:16, Remaining: 00:00:00, Completed: 100.00%, Rate:   5.73GB/min,
+Current block:    4722688, Total block:    4960256, Complete: 100.00%
+Total Time: 00:00:16, Ave. Rate:   5.73GB/min, 100.00% completed!
+Syncing... OK!
+Partclone successfully restored the image (./vda1.crc32.img) to the device (/dev/vda1)
+Cloned successfully.
+
+
+
+## dev version of partclone isalcrc32 and xxhash
+### isal crc32 clone
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ ./partclone.extfs -d -c -a 1 -s /dev/vda1 -o vda1.crc32isal.img
+Partclone v0.3.40 http://partclone.org
+Starting to clone device (/dev/vda1) to image (vda1.crc32isal.img)
+Reading Super Block
+Elapsed: 00:00:01, Remaining: 00:00:00, Completed: 100.00%Current block:          1, Total block:    4960256, Complete: 100.00%
+Total Time: 00:00:01, 100.00% completed!Completed:   1.00%Current block:          0, Total block:    4960256, Complete:   0.00%
+done!
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+Elapsed: 00:00:16, Remaining: 00:00:00, Completed: 100.00%, Rate:   5.73GB/min,
+Current block:    4722688, Total block:    4960256, Complete: 100.00%
+Total Time: 00:00:16, Ave. Rate:   5.73GB/min, 100.00% completed!
+Syncing... OK!
+Partclone successfully cloned the device (/dev/vda1) to the image (vda1.crc32isal.img)
+Cloned successfully.
+
+### isal crc32 restore
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ ./partclone.extfs -d -r -a 1 -s vda1.crc32isal.img -o /dev/vda1 ; /home/partimag/checksum.log/testdata.sh
+Partclone v0.3.40 http://partclone.org
+Starting to restore image (vda1.crc32isal.img) to device (/dev/vda1)
+Reading Super Block
+Calculating bitmap... Please wait...
+done!
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+Elapsed: 00:00:14, Remaining: 00:00:00, Completed: 100.00%, Rate:   6.55GB/min,
+Current block:    4722688, Total block:    4960256, Complete: 100.00%
+Total Time: 00:00:14, Ave. Rate:   6.55GB/min, 100.00% completed!
+Syncing... OK!
+Partclone successfully restored the image (vda1.crc32isal.img) to the device (/dev/vda1)
+Cloned successfully.
+
+### xxhash clone
+Partclone : v0.3.40 (0.3.40-5-g6f4aa6c)
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ ./partclone.extfs -d -c -a 2  -s /dev/vda1 -o vda1.xxhash.img
+Partclone v0.3.40 http://partclone.org
+Starting to clone device (/dev/vda1) to image (vda1.xxhash.img)
+Reading Super Block
+Elapsed: 00:00:01, Remaining: 00:00:00, Completed: 100.00%Current block:          1, Total block:    4960256, Complete: 100.00%
+Total Time: 00:00:01, 100.00% completed!Completed:   1.00%Current block:          0, Total block:    4960256, Complete:   0.00%
+done!
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+Elapsed: 00:00:16, Remaining: 00:00:00, Completed: 100.00%, Rate:   5.73GB/min, 
+Current block:    4722688, Total block:    4960256, Complete: 100.00%           
+Total Time: 00:00:16, Ave. Rate:   5.73GB/min, 100.00% completed!
+Syncing... OK!
+Partclone successfully cloned the device (/dev/vda1) to the image (vda1.xxhash.img)
+Cloned successfully.
+
+
+### xxhash restore
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ ./partclone.extfs -d -r -a 2 -s vda1.xxhash.img -o /dev/vda1 ; /home/partimag/checksum.log/testdata.sh
+Partclone v0.3.40 http://partclone.org
+Starting to restore image (vda1.xxhash.img) to device (/dev/vda1)
+Reading Super Block
+Calculating bitmap... Please wait...
+done!
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+Elapsed: 00:00:14, Remaining: 00:00:00, Completed: 100.00%, Rate:   6.55GB/min,
+Current block:    4722688, Total block:    4960256, Complete: 100.00%
+Total Time: 00:00:14, Ave. Rate:   6.55GB/min, 100.00% completed!
+Syncing... OK!
+Partclone successfully restored the image (vda1.xxhash.img) to the device (/dev/vda1)
+Cloned successfully.
+
+## image format test from old partclone
+### crc32 restore
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ /sbin/partclone.extfs -d -r -s ./vda1.crc32.img -o /dev/vda1 ;  /home/partimag/checksum.log/testdata.sh
+Partclone v0.3.38 http://partclone.org
+Starting to restore image (./vda1.crc32.img) to device (/dev/vda1)
+Reading Super Block
+Calculating bitmap... Please wait...
+done!
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+Elapsed: 00:00:16, Remaining: 00:00:00, Completed: 100.00%, Rate:   5.73GB/min, 
+Current block:    4722688, Total block:    4960256, Complete: 100.00%           
+Total Time: 00:00:16, Ave. Rate:   5.73GB/min, 100.00% completed!
+Syncing... OK!
+Partclone successfully restored the image (./vda1.crc32.img) to the device (/dev/vda1)
+Cloned successfully.
+
+### crc32isal restore
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ /sbin/partclone.extfs -d -r -s ./vda1.crc32isal.img -o /dev/vda1 ;  /home/partimag/checksum.log/testdata.sh
+Partclone v0.3.38 http://partclone.org
+Starting to restore image (./vda1.crc32isal.img) to device (/dev/vda1)
+Reading Super Block
+Calculating bitmap... Please wait...
+done!
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+Elapsed: 00:00:16, Remaining: 00:00:00, Completed: 100.00%, Rate:   5.73GB/min, 
+Current block:    4722688, Total block:    4960256, Complete: 100.00%           
+Total Time: 00:00:16, Ave. Rate:   5.73GB/min, 100.00% completed!
+Syncing... OK!
+Partclone successfully restored the image (./vda1.crc32isal.img) to the device (/dev/vda1)
+Cloned successfully.
+
+### xxhash restore
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ /sbin/partclone.extfs -d -r -s ./vda1.xxhash.img -o /dev/vda1 ;  /home/partimag/checksum.log/testdata.sh
+Partclone v0.3.38 http://partclone.org
+Starting to restore image (./vda1.xxhash.img) to device (/dev/vda1)
+Reading Super Block
+Calculating bitmap... Please wait...
+done!
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+Unknown checksum mode [48]ng: 00:01:39, Completed:   1.00%,   0.00byte/min,
+Partclone fail, please check /var/log/partclone.log
+
+### xxhash restore with old partclone --ignore_crc
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ /sbin/partclone.extfs -d -r --ignore_crc -s ./vda1.xxhash.img -o /dev/vda1 ;  /home/partimag/checksum.log/testdata.sh
+Partclone v0.3.38 http://partclone.org
+Starting to restore image (./vda1.xxhash.img) to device (/dev/vda1)
+Ignore CRC errors
+Reading Super Block
+Calculating bitmap... Please wait...
+done!
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+Elapsed: 00:00:14, Remaining: 00:00:00, Completed: 100.00%, Rate:   6.55GB/min,
+Current block:    4722688, Total block:    4960256, Complete: 100.00%
+Total Time: 00:00:14, Ave. Rate:   6.55GB/min, 100.00% completed!
+Syncing... OK!
+Partclone successfully restored the image (./vda1.xxhash.img) to the device (/dev/vda1)
+Cloned successfully.
+/home/partimag/checksum.log /home/partimag/dev/partclone/src
+umount: /mnt: not mounted.
+/home/partimag/dev/partclone/src
+
+## partclone.info
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ /sbin/partclone.info -s ./vda1.xxhash.img
+Partclone v0.3.38 http://partclone.org
+Showing info of image (./vda1.xxhash.img)
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+
+image format:    0002
+created on a:    64 bits platform
+with partclone:  v0.3.40
+bitmap mode:     BIT
+checksum algo:   UNKNOWN
+checksum size:   8
+blocks/checksum: 256
+reseed checksum: yes
+root@cl-3.3.0-33:/home/partimag/dev/partclone/src$ ./partclone.info -s ./vda1.xxhash.img
+Partclone v0.3.40 http://partclone.org
+Showing info of image (./vda1.xxhash.img)
+File system:  EXTFS
+Device size:   20.3 GB = 4960256 Blocks
+Space in use:   1.5 GB = 372889 Blocks
+Free Space:    18.8 GB = 4587367 Blocks
+Block size:   4096 Byte
+
+image format:    0002
+created on a:    64 bits platform
+with partclone:  v0.3.40
+bitmap mode:     BIT
+checksum algo:   XXH64
+checksum size:   8
+blocks/checksum: 256
+reseed checksum: yes
+

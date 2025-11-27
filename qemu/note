@@ -1,2 +1,9 @@
+
 qemu-img create -f qcow2 debian.qcow2 20G
 qemu-img create -f qcow2 restore.qcow2 30G
+
+get from debian cloud image
+https://cdimage.debian.org/images/cloud/
+
+wget https://cdimage.debian.org/images/cloud/sid/daily/20251126-2308/debian-sid-nocloud-amd64-daily-20251126-2308.qcow2
+
