@@ -1,9 +1,9 @@
 #!/bin/bash
-# 腳本用途：使用 QEMU 安裝 Debian 作業系統
-# 準備工作：確保已下載 Debian 安裝映像並放置於 isos/ 目錄
+# Script purpose: Install Debian OS using QEMU
+# Prerequisites: Ensure Debian installation image is downloaded and placed in the isos/ directory
 iso_path="isos/debian-13.2.0-amd64-netinst.iso"
 debian_image="qemu/debian.qcow2"
-# 啟動安裝流程
+# Start installation process
 qemu-system-x86_64 \
   -enable-kvm \
   -m 4096 \

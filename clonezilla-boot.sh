@@ -1,6 +1,6 @@
 #!/bin/bash
-# 腳本用途：使用 QEMU 啟動 Clonezilla 以備份或還原磁碟映像
-# 準備工作：確保已下載 Clonezilla 映像並放置於 isos/ 目錄
+# Script purpose: Use QEMU to boot Clonezilla for backing up or restoring disk images
+# Prerequisites: Ensure Clonezilla image is downloaded and placed in the isos/ directory
 
 # Default paths (can be overridden by positional arguments)
 
@@ -30,7 +30,7 @@ if [[ -n "$2" ]]; then
 fi
 
 
-# 啟動 QEMU，使用 9p 共享
+# Start QEMU with 9p share
 qemu-system-x86_64 \
   -enable-kvm -m 4096 -cpu host \
   -drive file=${debian_image},if=virtio,format=qcow2 \
@@ -41,16 +41,16 @@ qemu-system-x86_64 \
   -nic user,hostfwd=tcp::2222-:22 \
   -display gtk \
   -serial mon:stdio <<'QEMU_EOF'
-# 這段文字會被送到 QEMU 的「monitor / serial」介面
-# 只要 guest 已經啟動到可以執行 shell（Clonezilla boot 完成後的 console），
-# 下面的指令就會在 guest 裡跑。
+# This text will be sent to the QEMU monitor/serial interface
+# Once the guest has booted into a shell (console after Clonezilla boot completes),
+# the following commands will be executed in the guest.
 
-# 1) 建立掛載點
+# 1) Create mount point
 mkdir -p /home/partimag
 
-# 2) 掛載 9p（mount_tag 必須與上面的 -device 參數相同）
+# 2) Mount 9p (mount_tag must match the -device parameter above)
 mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag
 
-# 3) 顯示提示，讓使用者在圖形介面中自行操作 Clonezilla
-echo "=== 9p 已掛載於 /home/partimag ==="
+# 3) Display a prompt for the user to operate Clonezilla in the GUI
+echo "=== 9p mounted at /home/partimag ==="
 QEMU_EOF
