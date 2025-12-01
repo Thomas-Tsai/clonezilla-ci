@@ -2,7 +2,7 @@
 
 image_path="qemu/debian.qcow2"
 if [[ -n "$1" ]]; then
-  debian_image="$2"
+  image_path="$1"
 fi
 qemu-system-x86_64 \
   -enable-kvm -m 4096 -cpu host \
