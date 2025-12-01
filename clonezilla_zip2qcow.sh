@@ -14,6 +14,7 @@ command -v virt-make-fs >/dev/null 2>&1 || { echo >&2 "ERROR: The 'virt-make-fs'
 # Default values
 FORCE_OVERWRITE=0
 CLONEZILLA_ZIP=""
+OUTPUT_BASE_DIR="."
 
 # Processing arguments
 while [[ "$#" -gt 0 ]]; do
@@ -21,12 +22,21 @@ while [[ "$#" -gt 0 ]]; do
         -f|--force)
             FORCE_OVERWRITE=1
             ;;
+        -o)
+            if [ -n "$2" ]; then
+                OUTPUT_BASE_DIR="$2"
+                shift
+            else
+                echo "ERROR: -o requires a directory"
+                exit 1
+            fi
+            ;;
         *)
             if [[ -z "$CLONEZILLA_ZIP" ]]; then
                 CLONEZILLA_ZIP="$1"
             else
                 echo "ERROR: Unknown argument or redundant ZIP file path: $1"
-                echo "Usage: $0 <Clonezilla_ZIP_Path> [-f|--force]"
+                echo "Usage: $0 <Clonezilla_ZIP_Path> [-f|--force] [-o <output_dir>]"
                 exit 1
             fi
             ;;
@@ -37,7 +47,7 @@ done
 # Check if ZIP file is provided
 if [[ -z "$CLONEZILLA_ZIP" ]]; then
     echo "ERROR: Please provide the Clonezilla ZIP file path."
-    echo "Usage: $0 <Clonezilla_ZIP_Path> [-f|--force]"
+    echo "Usage: $0 <Clonezilla_ZIP_Path> [-f|--force] [-o <output_dir>]"
     exit 1
 fi
 
@@ -53,7 +63,7 @@ FILENAME=$(basename "$CLONEZILLA_ZIP")
 # Get base name without extension (e.g., clonezilla-live-3.1.2-9-amd64)
 BASE_NAME="${FILENAME%.zip}"
 # Set output directory
-OUTPUT_DIR="./$BASE_NAME"
+OUTPUT_DIR="$OUTPUT_BASE_DIR/$BASE_NAME"
 # Set QCOW2 filename (requirement 4)
 OUTPUT_IMAGE="$OUTPUT_DIR/$BASE_NAME.qcow2"
 IMAGE_SIZE="1G"  # Output image size, adjust based on your ZIP file size

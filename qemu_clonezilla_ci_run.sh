@@ -99,7 +99,13 @@ echo "-------------------------------------"
 # Use double quotes (") internally to wrap parameter values containing spaces, like ocs_prerun1 and ocs_live_run.
 # The outer single quotes (see QEMU_CMD) will ensure this string is passed completely.
 #APPEND_ARGS="boot=live config union=overlay noswap edd=on nomodeset noninteractive locales=en_US.UTF-8 keyboard-layouts=us live-getty console=ttyS0,38400n81 live-media=/dev/sdb1 live-media-path=/live toram ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\" ocs_daemonon=\"ssh\" ocs_live_run=\"$OCS_COMMAND\" noeject noprompt"
-APPEND_ARGS="boot=live config union=overlay noswap edd=on nomodeset noninteractive locales=en_US.UTF-8 keyboard-layouts=us live-getty console=ttyS0,38400n81 live-media=/dev/sdb1 live-media-path=/live toram ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\" ocs_daemonon=\"ssh\" ocs_live_run=\"$OCS_COMMAND\" ocs_postrun=\"sudo poweroff\" noeject noprompt"
+APPEND_ARGS="boot=live config union=overlay noswap edd=on nomodeset noninteractive locales=en_US.UTF-8 keyboard-layouts=us live-getty console=ttyS0,38400n81 live-media=/dev/sdb1 live-media-path=/live toram ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\" ocs_daemonon=\"ssh\" ocs_live_run=\"$OCS_COMMAND\""
+
+# If not in interactive mode, add the post-run command to power off the VM.
+if [ "$INTERACTIVE_MODE" -eq 0 ]; then
+    APPEND_ARGS="$APPEND_ARGS ocs_postrun=\"sudo poweroff\""
+fi
+APPEND_ARGS="$APPEND_ARGS noeject noprompt"
 
 # QEMU startup command (build command string)
 # Use eval to execute the command to correctly handle quotes and redirection
