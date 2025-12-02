@@ -5,79 +5,249 @@
 # This script starts QEMU in console mode to run automated Clonezilla tasks and powers off on completion.
 # ----------------------------------------------------------------------
 
+# Function to print usage information
+print_usage() {
+    echo "Usage: $0 [Options]"
+    echo ""
+    echo "Required Options:"
+    echo "  --disk <DiskImage>     : Path to a disk image. Can be specified multiple times."
+    echo "  --live <LiveDisk>        : Path to the Clonezilla live medium (QCOW2)."
+    echo "  --kernel <KernelPath>    : Path to the vmlinuz kernel file."
+    echo "  --initrd <InitrdPath>    : Path to the initrd.img file."
+    echo "  --cmd \"<OCS_Command>\"    : The OCS command to execute inside Clonezilla."
+    echo "  --cmdpath <ScriptPath> : Path to a script file to execute inside Clonezilla."
+    echo ""
+    echo "Optional Options:"
+    echo "  -i, --interactive        : Enable interactive mode (QEMU output to terminal)."
+    echo "  --image <ImagePath>      : Path to the directory for shared resources (default: './partimag')."
+    echo "  --append-args \"<Args>\"   : A complete string to override kernel boot parameters."
+    echo "  --append-args-file <File> : Path to a file containing kernel boot parameters."
+    echo "  -h, --help               : Display this help message and exit."
+    echo ""
+    echo "Example:"
+    echo "$0 --disk r.qcow2 --live live.qcow2 --kernel vmlinuz --initrd initrd.img --cmd \"pwd\" --image \"./partimag\""
+    echo "$0 --disk r.qcow2 --live live.qcow2 --kernel vmlinuz --initrd initrd.img --cmdpath \"./myscript.sh\" --image \"./partimag\""
+    exit 0
+}
+
+# Cleanup function to remove temporary files and directories
+cleanup() {
+    echo "--- Running cleanup ---"
+    if [ -n "$HOST_SCRIPT_DIR" ] && [ -d "$HOST_SCRIPT_DIR" ]; then
+        echo "Removing temporary script directory: $HOST_SCRIPT_DIR"
+        rm -rf "$HOST_SCRIPT_DIR"
+    fi
+}
+
+# Set a trap to call the cleanup function on script exit
+trap cleanup EXIT
+
 # Default values
 INTERACTIVE_MODE=0
 PARTIMAG_PATH="./partimag"
-ARGS=()
+DISKS=()
+LIVE_DISK=""
+KERNEL_PATH=""
+INITRD_PATH=""
+OCS_COMMAND=""
+CMDPATH=""
+CUSTOM_APPEND_ARGS=""
+APPEND_ARGS_FILE=""
+HOST_SCRIPT_DIR="" # Ensure variable is declared for the trap
 
-# Argument parsing: handle flags and other positional arguments
-# Allow -i/--interactive flag at any position
+# Argument parsing
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         -i|--interactive)
             INTERACTIVE_MODE=1
-            shift # Consume flag
+            shift # past argument
+            ;;
+        -h|--help)
+            print_usage
+            ;;
+        --disk)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                DISKS+=("$2")
+                shift # past argument
+                shift # past value
+            else
+                echo "Error: --disk requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --live)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                LIVE_DISK="$2"
+                shift # past argument
+                shift # past value
+            else
+                echo "Error: --live requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --kernel)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                KERNEL_PATH="$2"
+                shift # past argument
+                shift # past value
+            else
+                echo "Error: --kernel requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --initrd)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                INITRD_PATH="$2"
+                shift # past argument
+                shift # past value
+            else
+                echo "Error: --initrd requires a value." >&2
+                print 1
+            fi
+            ;;
+        --cmd)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                OCS_COMMAND="$2"
+                shift # past argument
+                shift # past value
+            else
+                echo "Error: --cmd requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --cmdpath)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                CMDPATH="$2"
+                shift # past argument
+                shift # past value
+            else
+                echo "Error: --cmdpath requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --image)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                PARTIMAG_PATH="$2"
+                shift # past argument
+                shift # past value
+            else
+                echo "Error: --image requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --append-args)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                CUSTOM_APPEND_ARGS="$2"
+                shift # past argument
+                shift # past value
+            else
+                echo "Error: --append-args requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --append-args-file)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                APPEND_ARGS_FILE="$2"
+                shift # past argument
+                shift # past value
+            else
+                echo "Error: --append-args-file requires a value." >&2
+                print_usage
+            fi
             ;;
         *)
-            ARGS+=("$1") # Store positional argument
-            shift
+            echo "Error: Unknown option or missing value for $1" >&2
+            print_usage
             ;;
     esac
 done
 
-# Check the number of required positional arguments
-if [ "${#ARGS[@]}" -lt 5 ]; then
-    echo "Error: Not enough arguments."
-    echo "Usage: $0 [Options] <RestoreDisk> <LiveDisk> <KernelPath> <InitrdPath> \"<OCS_Live_Run_Command>\" [Optional_Image_Path]"
-    echo ""
-    echo "Options:"
-    echo "  -i, --interactive: Enable interactive mode (output to terminal, no log file)."
-    echo ""
-    echo "Example:"
-    echo "$0 -i restore.qcow2 live.qcow2 ./clonezilla/vmlinuz ./clonezilla/initrd.img \"sudo /usr/sbin/ocs-sr -g auto -p poweroff restoredisk ask_user sda\" \"/path/to/my/images\""
-    echo "  * If [Optional_Image_Path] is omitted, defaults to './partimag'."
-    exit 1
+# --- Argument Validation ---
+
+# Ensure either --cmd or --cmdpath is provided, but not both.
+if [[ -z "$OCS_COMMAND" && -z "$CMDPATH" ]]; then
+    echo "Error: Missing command. Please provide either --cmd or --cmdpath." >&2
+    print_usage
+fi
+if [[ -n "$OCS_COMMAND" && -n "$CMDPATH" ]]; then
+    echo "Error: Conflicting arguments. --cmd and --cmdpath cannot be used together." >&2
+    print_usage
 fi
 
-# Reassign positional arguments
-RESTORE_DISK="${ARGS[0]}"  # 1. Destination disk (hda)
-LIVE_DISK="${ARGS[1]}"     # 2. Live media disk (hdb)
-KERNEL_PATH="${ARGS[2]}"   # 3. Kernel file path
-INITRD_PATH="${ARGS[3]}"   # 4. Initrd file path
-OCS_COMMAND="${ARGS[4]}"   # 5. Full OCS_Live_Run command
-
-# 6. Image storage directory (Host) - use if the 6th argument is provided
-if [ "${#ARGS[@]}" -ge 6 ]; then
-    PARTIMAG_PATH="${ARGS[5]}"
+# Ensure --append-args and --append-args-file are not used together.
+if [[ -n "$CUSTOM_APPEND_ARGS" && -n "$APPEND_ARGS_FILE" ]]; then
+    echo "Error: Conflicting arguments. --append-args and --append-args-file cannot be used together." >&2
+    print_usage
 fi
-# Otherwise, use the default "./partimag" (set at the beginning)
+
+# Validation for other required arguments
+if [[ ${#DISKS[@]} -eq 0 || -z "$LIVE_DISK" || -z "$KERNEL_PATH" || -z "$INITRD_PATH" ]]; then
+    echo "Error: Missing one or more required arguments: --disk, --live, --kernel, --initrd." >&2
+    print_usage
+fi
+
+
+# --- Command and Script Handling ---
+
+if [ -n "$CMDPATH" ]; then
+    # If --cmdpath is used, prepare the script for execution in the VM.
+    if [ ! -f "$CMDPATH" ]; then
+        echo "Error: Script file not found at path: $CMDPATH" >&2
+        print_usage
+    fi
+    
+    # Create a temporary directory within the shared 'partimag' folder to hold the script.
+    # This keeps the root of the image directory clean.
+    SCRIPT_DIR_NAME="cmd_script_$(date +%s)_$RANDOM"
+    HOST_SCRIPT_DIR="$PARTIMAG_PATH/$SCRIPT_DIR_NAME"
+    mkdir -p "$HOST_SCRIPT_DIR"
+    
+    # Copy the user's script to the temporary directory.
+    cp "$CMDPATH" "$HOST_SCRIPT_DIR/"
+    SCRIPT_BASENAME=$(basename "$CMDPATH")
+    
+    # The command to be run in the VM is now 'bash' on the script's path in the shared folder.
+    VM_SCRIPT_PATH="/home/partimag/$SCRIPT_DIR_NAME/$SCRIPT_BASENAME"
+    OCS_COMMAND="bash $VM_SCRIPT_PATH"
+fi
+
+# If --append-args-file is used, read the content into CUSTOM_APPEND_ARGS.
+if [ -n "$APPEND_ARGS_FILE" ]; then
+    if [ ! -f "$APPEND_ARGS_FILE" ]; then
+        echo "Error: Append args file not found at path: $APPEND_ARGS_FILE" >&2
+        print_usage
+    fi
+    CUSTOM_APPEND_ARGS=$(cat "$APPEND_ARGS_FILE")
+fi
 
 # Set log file name (only needed in non-interactive mode)
 if [ "$INTERACTIVE_MODE" -eq 0 ]; then
     LOG_FILE="./clonezilla_ci_$(date +%Y%m%d_%H%M%S).log"
 fi
 
-# Check if files exist (logic unchanged)
-if [ ! -f "$RESTORE_DISK" ]; then
-    echo "Error: Destination disk file not found: $RESTORE_DISK"
-    exit 1
-fi
+# Check if files exist
+for disk in "${DISKS[@]}"; do
+    if [ ! -f "$disk" ]; then
+        echo "Error: Disk image file not found: $disk" >&2
+        print_usage
+    fi
+done
 if [ ! -f "$LIVE_DISK" ]; then
-    echo "Error: Live media disk file not found: $LIVE_DISK"
-    exit 1
+    echo "Error: Live media disk file not found: $LIVE_DISK" >&2
+    print_usage
 fi
 if [ ! -f "$KERNEL_PATH" ]; then
-    echo "Error: Kernel file not found: $KERNEL_PATH"
-    exit 1
+    echo "Error: Kernel file not found: $KERNEL_PATH" >&2
+    print_usage
 fi
 if [ ! -f "$INITRD_PATH" ]; then
-    echo "Error: Initrd file not found: $INITRD_PATH"
-    exit 1
+    echo "Error: Initrd file not found: $INITRD_PATH" >&2
+    print_usage
 fi
 if [ ! -d "$PARTIMAG_PATH" ]; then
-    echo "Error: Image storage directory not found: $PARTIMAG_PATH"
-    echo "Please ensure the directory exists, or specify the correct path with the sixth argument."
-    exit 1
+    echo "Error: Image storage directory not found: $PARTIMAG_PATH" >&2
+    echo "Please ensure the directory exists, or specify the correct path with the --image option." >&2
+    print_usage
 fi
 
 echo "--- Starting QEMU for CI test ---"
@@ -95,39 +265,105 @@ else
 fi
 echo "-------------------------------------"
 
-# Key fix: combine all -append parameter content into a single string
-# Use double quotes (") internally to wrap parameter values containing spaces, like ocs_prerun1 and ocs_live_run.
-# The outer single quotes (see QEMU_CMD) will ensure this string is passed completely.
-#APPEND_ARGS="boot=live config union=overlay noswap edd=on nomodeset noninteractive locales=en_US.UTF-8 keyboard-layouts=us live-getty console=ttyS0,38400n81 live-media=/dev/sdb1 live-media-path=/live toram ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\" ocs_daemonon=\"ssh\" ocs_live_run=\"$OCS_COMMAND\" noeject noprompt"
-APPEND_ARGS="boot=live config union=overlay noswap edd=on nomodeset noninteractive locales=en_US.UTF-8 keyboard-layouts=us live-getty console=ttyS0,38400n81 live-media=/dev/sdb1 live-media-path=/live toram ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\" ocs_daemonon=\"ssh\" ocs_live_run=\"$OCS_COMMAND\""
+# --- Disk and Boot Argument Configuration ---
 
-# If not in interactive mode, add the post-run command to power off the VM.
-if [ "$INTERACTIVE_MODE" -eq 0 ]; then
-    APPEND_ARGS="$APPEND_ARGS ocs_postrun=\"sudo poweroff\""
+# If --append-args-file is used, read its content.
+if [ -n "$APPEND_ARGS_FILE" ]; then
+    if [ ! -f "$APPEND_ARGS_FILE" ]; then
+        echo "Error: Append args file not found at path: $APPEND_ARGS_FILE" >&2
+        print_usage
+    fi
+    # Read the raw content from the file.
+    CUSTOM_APPEND_ARGS=$(cat "$APPEND_ARGS_FILE")
+    # Sanitize the input by removing a single pair of leading/trailing single or double quotes.
+    # This prevents issues if the file content is wrapped in quotes, which would break kernel argument parsing.
+    CUSTOM_APPEND_ARGS=$(echo "$CUSTOM_APPEND_ARGS" | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//')
 fi
-APPEND_ARGS="$APPEND_ARGS noeject noprompt"
 
-# QEMU startup command (build command string)
-# Use eval to execute the command to correctly handle quotes and redirection
-# Fix: Change the double quotes outside the -append parameter to single quotes (') to prevent eval from breaking the internal quote structure.
-QEMU_CMD="qemu-system-x86_64 \
-    -enable-kvm \
-    -m 2048 \
-    -smp 2 \
-    -nographic \
-    -kernel \"$KERNEL_PATH\" \
-    -initrd \"$INITRD_PATH\" \
-    -hda \"$RESTORE_DISK\" \
-    -hdb \"$LIVE_DISK\" \
-    -device virtio-net-pci,netdev=net0 \
-    -netdev user,id=net0,hostfwd=tcp::2222-:22 \
-    -fsdev local,id=hostshare,path=\"$PARTIMAG_PATH\",security_model=mapped-xattr \
-    -device virtio-9p-pci,fsdev=hostshare,mount_tag=hostshare \
-    -append '$APPEND_ARGS' \
-    ${REDIRECTION}"
+# Combine user-specified disks and the live disk into a single array.
+ALL_DISKS=("${DISKS[@]}" "$LIVE_DISK")
+LIVE_DISK_INDEX=$((${#DISKS[@]}))
 
-# Execute QEMU command
-eval $QEMU_CMD
+# Define mappings for QEMU drive letters and guest OS device names.
+DRIVE_LETTERS=('a' 'b' 'c' 'd' 'e' 'f')
+DEVICE_NAMES=('sda' 'sdb' 'sdc' 'sdd' 'sde' 'sdf')
+
+QEMU_DISK_ARGS_ARRAY=()
+LIVE_MEDIA_DEVICE=""
+
+# Build the -hdX arguments for QEMU and identify the device name for the live media.
+for i in "${!ALL_DISKS[@]}"; do
+    if [ $i -lt ${#DRIVE_LETTERS[@]} ]; then
+        drive_letter=${DRIVE_LETTERS[$i]}
+        QEMU_DISK_ARGS_ARRAY+=("-hd${drive_letter}" "${ALL_DISKS[$i]}")
+        
+        if [ $i -eq $LIVE_DISK_INDEX ]; then
+            LIVE_MEDIA_DEVICE="${DEVICE_NAMES[$i]}"
+        fi
+    else
+        echo "Warning: Maximum number of disks (${#DRIVE_LETTERS[@]}) exceeded. Ignoring extra disks."
+        break
+    fi
+done
+
+if [ -z "$LIVE_MEDIA_DEVICE" ]; then
+    echo "Error: Could not determine the device for the live media disk." >&2
+    print_usage
+fi
+
+# Build kernel append arguments.
+if [ -n "$CUSTOM_APPEND_ARGS" ]; then
+    APPEND_ARGS="$CUSTOM_APPEND_ARGS"
+else
+    # Construct the default kernel command line, dynamically setting 'live-media'.
+    APPEND_ARGS="boot=live config union=overlay noswap edd=on nomodeset noninteractive"
+    APPEND_ARGS+=" locales=en_US.UTF-8 keyboard-layouts=us live-getty console=ttyS0,38400n81"
+    APPEND_ARGS+=" live-media=/dev/${LIVE_MEDIA_DEVICE}1 live-media-path=/live toram"
+    APPEND_ARGS+=" ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\""
+    APPEND_ARGS+=" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\""
+    APPEND_ARGS+=" ocs_daemonon=\"ssh\" ocs_live_run=\"$OCS_COMMAND\""
+
+    if [ "$INTERACTIVE_MODE" -eq 0 ]; then
+        APPEND_ARGS+=" ocs_postrun=\"sudo poweroff\""
+    fi
+    APPEND_ARGS+=" noeject noprompt"
+fi
+
+# --- QEMU Execution ---
+
+# Build the QEMU command using a bash array for robustness.
+# This avoids all the quoting issues associated with building a command string and using eval.
+QEMU_ARGS=(
+    "qemu-system-x86_64"
+    "-enable-kvm"
+    "-m" "2048"
+    "-smp" "2"
+    "-nographic"
+    "-kernel" "$KERNEL_PATH"
+    "-initrd" "$INITRD_PATH"
+)
+QEMU_ARGS+=( "${QEMU_DISK_ARGS_ARRAY[@]}" )
+QEMU_ARGS+=(
+    "-device" "virtio-net-pci,netdev=net0"
+    "-netdev" "user,id=net0,hostfwd=tcp::2222-:22"
+    "-fsdev" "local,id=hostshare,path=$PARTIMAG_PATH,security_model=mapped-xattr"
+    "-device" "virtio-9p-pci,fsdev=hostshare,mount_tag=hostshare"
+    "-append" "$APPEND_ARGS"
+)
+
+echo "--- Starting QEMU for CI test ---"
+
+# Determine output redirection and execute the command.
+if [ "$INTERACTIVE_MODE" -eq 0 ]; then
+    echo "Mode: Automated CI mode (output to log file)"
+    echo "All output will be saved to log file: $LOG_FILE"
+    echo "Executing command: ${QEMU_ARGS[*]}"
+    "${QEMU_ARGS[@]}" > "$LOG_FILE" 2>&1
+else
+    echo "Mode: Interactive debug mode (output directly to terminal)"
+    echo "Executing command: ${QEMU_ARGS[*]}"
+    "${QEMU_ARGS[@]}"
+fi
 
 # Check QEMU exit code
 QEMU_EXIT_CODE=$?
