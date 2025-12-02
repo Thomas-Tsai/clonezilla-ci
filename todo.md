@@ -35,11 +35,11 @@ Error: Missing command. Please provide either --cmd or --cmdpath.
 - [x] 7. 發現 partimage 有殘留的 md_script_1764665091_12358  cmd_script_1764665393_8800 , 應該於執行完成之後刪除。
 
 ## clonezilla_zip2qcow.sh 改進事項：
-- [ ] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
-- [ ] 2. 增加--help 參數可以讓使用者查詢使用說明
-- [ ] 3. 參數改為長參數，例如
+- [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
+- [x] 2. 增加--help 參數可以讓使用者查詢使用說明
+- [x] 3. 參數改為長參數，例如
 ./clonezilla_zip2qcow.sh --zip clonezilla_image.zip --output outputdir/ --size 10G --force
-- [ ] 4. 在步驟 Copying Kernel/Initrd files to the target directory，檔案名稱prefix採用clonezilla zip 的base name 來命名，而不是固定用 vmlinuz 與 initrd.img
+- [x] 4. 在步驟 Copying Kernel/Initrd files to the target directory，檔案名稱prefix採用clonezilla zip 的base name 來命名，而不是固定用 vmlinuz 與 initrd.img
 
 ## clonezilla-boot.sh 改進事項：
 - [ ] rename clonezilla-iso-boot.sh 為 clonezilla-boot.sh
