@@ -50,7 +50,7 @@ Error: Missing command. Please provide either --cmd or --cmdpath.
 ## debian-install.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 2. 增加--help 參數可以讓使用者查詢使用說明
-- [ ] 3. 自動下載 debian netinst iso 檔案，當沒有指定 --iso 參數時，自動下載最新的 debian netinst iso 檔案
+- [x] 3. 自動下載 debian netinst iso 檔案，當沒有指定 --iso 參數時，自動下載最新的 debian netinst iso 檔案
 
 ## boot_qemu_image.sh 改進事項：
 - [ ] rename boot-qemu-image.sh 為 boot.sh
