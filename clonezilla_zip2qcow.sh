@@ -168,9 +168,9 @@ if virt-make-fs --format qcow2 --size "$IMAGE_SIZE" --partition --type ext4 "$CL
     echo "Image and boot files successfully created at: $OUTPUT_DIR/"
     echo ""
     echo "Example for qemu_clonezilla_ci_run.sh:"
-    echo "  --live $OUTPUT_IMAGE \"
-    echo "  --kernel $OUTPUT_DIR/${BASE_NAME}-vmlinuz \"
-    echo "  --initrd $OUTPUT_DIR/${BASE_NAME}-initrd.img \"
+    echo "  --live $OUTPUT_IMAGE \\"
+    echo "  --kernel $OUTPUT_DIR/${BASE_NAME}-vmlinuz \\"
+    echo "  --initrd $OUTPUT_DIR/${BASE_NAME}-initrd.img \\"
 else
     echo "--- FAILURE ---"
     echo "ERROR: virt-make-fs failed. Check permissions or libguestfs installation." >&2
