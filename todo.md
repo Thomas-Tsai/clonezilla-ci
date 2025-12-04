@@ -69,9 +69,9 @@ cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/c
 - [x] 參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 執行完成之後，檢查log 檔案是否有 ReStOrE 關鍵字，來確認驗證是否成功
 - [x] 執行完成之後，刪除產生的暫存檔案, 用validate_為 prefix 的檔案
-- [ ] 增加執行timeout 機制，避免無限等待, 等待時間300秒
+- [x] 增加執行timeout 機制，避免無限等待, 等待時間300秒
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
-- [ ] 增加選用參數 --keeplog 來保留log 檔案，預設會刪除log 檔案
+- [x] 增加選用參數 --keeplog 來保留log 檔案，預設會刪除log 檔案
 
 ## dev/cloudinit/prepareiso.sh 改進事項：
 - [x] comment the code in english
