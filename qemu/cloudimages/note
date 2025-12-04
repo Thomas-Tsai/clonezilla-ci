@@ -1,0 +1,14 @@
+Here are the direct download sources for common operating systems:
+Operating System 
+	Download Link	Notes
+Ubuntu	https://cloud-images.ubuntu.com/releases/	Look for files ending in .img (QCOW2 format). Minimal images are also available.
+Debian	https://cdimage.debian.org/images/cloud/	The "Plain VM" or "generic" images are best for local QEMU use.
+Fedora	https://fedoraproject.org/cloud/	Provides a "Cloud Base" image optimized for cloud environments.
+AlmaLinux	https://wiki.almalinux.org/cloud/Generic-cloud-on-local	Offers generic cloud images for testing and development.
+CirrOS	https://docs.openstack.org/image-guide/obtain-images.html	A minimal test image for OpenStack, useful for quick QEMU testing.
+
+custom / special
+
+windows https://cloudbase.it/windows-cloud-images/
+
+
