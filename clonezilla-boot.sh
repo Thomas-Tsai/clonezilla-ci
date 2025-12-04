@@ -160,5 +160,5 @@ qemu-system-x86_64 \
   -fsdev local,id=hostshare,path="$PARTIMAG_PATH",security_model=mapped-xattr \
   -device virtio-9p-pci,fsdev=hostshare,mount_tag=hostshare \
   -nic user,hostfwd=tcp::2222-:22 \
-  -display gtk \
+  -display gtk\
   -serial mon:stdio

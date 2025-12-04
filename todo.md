@@ -56,3 +56,19 @@ Error: Missing command. Please provide either --cmd or --cmdpath.
 - [x] rename boot-qemu-image.sh 為 boot.sh
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 2. 增加--help 參數可以讓使用者查詢使用說明
+
+## validateOS.sh 改進事項：
+validateOS.sh 主要功能是當clonezilla 還原成功之後，驗證作業系統是否能正常啟動。驗證方式是利用cloud init 方式進行驗證
+cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/cloud_init_config/cidata.iso
+當 cloud init 作用之後會變更使用者密碼最後echo 關鍵字 ReStOrE
+程式需要已 auto ci 方式，不提供互動、輸出到log檔, 並檢查關鍵字是否有成功輸出
+
+- [x] 確認/增加參數 --iso 指定 cloud init iso 檔案路徑
+- [x] 確認/增加參數 --disk 指定要驗證的 qcow2 磁碟映像檔案
+- [x] 增加--help 參數可以讓使用者查詢使用說明
+- [x] 參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
+- [x] 執行完成之後，檢查log 檔案是否有 ReStOrE 關鍵字，來確認驗證是否成功
+- [x] 執行完成之後，刪除產生的暫存檔案, 用validate_為 prefix 的檔案
+- [ ] 增加執行timeout 機制，避免無限等待, 等待時間300秒
+- [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
+- [ ] 增加選用參數 --keeplog 來保留log 檔案，預設會刪除log 檔案
