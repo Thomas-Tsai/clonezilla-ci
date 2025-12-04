@@ -29,6 +29,7 @@ eg: ./qemu_clonezilla_ci_run.sh --disk qemu/restore.qcow2 --live isos/clonezilla
 - [x] 增加--help 參數可以讓使用者查詢使用說明
 - [x] 參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
+- [x] 設定參數 CLONE_IMAGE_NAME 來指定 backup / restore 的 image name; 且要同步到 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面; 抑或是以hardcode 常數方式寫死在 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面
 
 ## qemu_clonezilla_ci_run.sh 改進事項：
 qemu_clonezilla_ci_run.sh 需要修改：

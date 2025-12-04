@@ -14,7 +14,7 @@ set -e # Exit immediately if a command exits with a non-zero status.
 # --- Default values ---
 CLONEZILLA_ZIP=""
 TEMPLATE_QCOW=""
-CLONE_IMAGE_NAME="debian-sid" # The image name used in the ocs-sr commands
+CLONE_IMAGE_NAME="debian-sid" # Default image name for the backup/restore process
 PARTIMAG_DIR="./partimag"
 QEMU_DIR="./qemu"
 ISOS_DIR="./isos"
@@ -25,7 +25,7 @@ VALIDATE_ISO="dev/cloudinit/cloud_init_config/cidata.iso"
 
 # Function to display usage information
 print_usage() {
-    echo "Usage: $0 --zip <ClonezillaZip> --tmpl <TemplateQcow>"
+    echo "Usage: $0 --zip <ClonezillaZip> --tmpl <TemplateQcow> [OPTIONS]"
     echo ""
     echo "This script runs a full backup, restore, and validation cycle."
     echo ""
@@ -34,7 +34,8 @@ print_usage() {
     echo "  --tmpl <path>  Path to the source Linux distro QCOW2 template image."
     echo ""
     echo "Optional Arguments:"
-    echo "  -h, --help     Display this help message and exit."
+    echo "  --image-name <name> Name for the Clonezilla image folder. (Default: $CLONE_IMAGE_NAME)"
+    echo "  -h, --help          Display this help message and exit."
 }
 
 # --- Argument Parsing ---
@@ -43,20 +44,24 @@ while [[ "$#" -gt 0 ]]; do
         --zip)
             CLONEZILLA_ZIP="$2"
             shift 2
-            ;;
+            ;; 
         --tmpl)
             TEMPLATE_QCOW="$2"
             shift 2
-            ;;
+            ;; 
+        --image-name)
+            CLONE_IMAGE_NAME="$2"
+            shift 2
+            ;; 
         -h|--help)
             print_usage
             exit 0
-            ;;
+            ;; 
         *)
             echo "ERROR: Unknown argument: $1" >&2
             print_usage
             exit 1
-            ;;
+            ;; 
     esac
 done
 
@@ -87,6 +92,14 @@ done
 
 # --- Main Workflow ---
 
+TEMP_DIR=$(mktemp -d)
+BACKUP_SOURCE_DISK="" # Initialize for trap
+RESTORE_DISK=""       # Initialize for trap
+
+# Cleanup for temporary files and directories
+trap 'echo "--- Cleaning up temporary files and disks ---"; rm -f "$BACKUP_SOURCE_DISK" "$RESTORE_DISK"; rm -rf "$TEMP_DIR";' EXIT
+
+
 echo "--- (Step 1/5) Preparing Clonezilla Live Media ---"
 # The output directory will be named after the zip file, inside ISOS_DIR
 CZ_ZIP_BASENAME=$(basename "$CLONEZILLA_ZIP" .zip)
@@ -115,16 +128,20 @@ echo "Copied template to $BACKUP_SOURCE_DISK"
 echo "--- Source Disk prepared successfully. ---"
 echo
 
-# Cleanup for temporary disks
-trap 'echo "--- Cleaning up temporary disks ---"; rm -f "$BACKUP_SOURCE_DISK" "$RESTORE_DISK";' EXIT
 
 echo "--- (Step 3/5) Backing up the Source Disk ---"
+# Generate a temporary clone script with the specified image name
+CLONE_SCRIPT_PATH="$TEMP_DIR/clone-disk.sh"
+echo "Generating clone script at: $CLONE_SCRIPT_PATH"
+# Read the base command and replace the hardcoded name with the desired one
+sed "s/\"debian-sid\"/\"$CLONE_IMAGE_NAME\"/" "dev/ocscmd/clone-first-disk.sh" > "$CLONE_SCRIPT_PATH"
+
 ./qemu_clonezilla_ci_run.sh \
   --disk "$BACKUP_SOURCE_DISK" \
   --live "$CZ_LIVE_QCOW" \
   --kernel "$CZ_KERNEL" \
   --initrd "$CZ_INITRD" \
-  --cmdpath "dev/ocscmd/clone-first-disk.sh" \
+  --cmdpath "$CLONE_SCRIPT_PATH" \
   --image "$PARTIMAG_DIR"
 echo "--- Backup completed successfully. ---"
 echo
@@ -134,12 +151,17 @@ RESTORE_DISK="$QEMU_DIR/restore.qcow2"
 echo "Creating new 30G disk at $RESTORE_DISK..."
 qemu-img create -f qcow2 "$RESTORE_DISK" "$RESTORE_DISK_SIZE"
 
+# Generate a temporary restore script with the specified image name
+RESTORE_SCRIPT_PATH="$TEMP_DIR/restore-disk.sh"
+echo "Generating restore script at: $RESTORE_SCRIPT_PATH"
+sed "s/\"debian-sid\"/\"$CLONE_IMAGE_NAME\"/" "dev/ocscmd/restore-first-disk.sh" > "$RESTORE_SCRIPT_PATH"
+
 ./qemu_clonezilla_ci_run.sh \
   --disk "$RESTORE_DISK" \
   --live "$CZ_LIVE_QCOW" \
   --kernel "$CZ_KERNEL" \
   --initrd "$CZ_INITRD" \
-  --cmdpath "dev/ocscmd/restore-first-disk.sh" \
+  --cmdpath "$RESTORE_SCRIPT_PATH" \
   --image "$PARTIMAG_DIR"
 echo "--- Restore completed successfully. ---"
 echo
