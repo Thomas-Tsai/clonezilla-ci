@@ -6,6 +6,30 @@ This directory contains scripts and tools for automating Clonezilla operations i
 
 - [x] 整個專案的readme 文件需要補充
 
+## linux-clone-restore.sh 改進事項：
+這個程式主要用來進行linux distro 的clonezilla 備份還原，完全非互動方式一次完成備份、還原、還原檢查
+提供使用者參數：
+1. --zip 指定 clonezilla zip 檔案路徑 
+2. --tmpl 設定 linux distro 參數，例: debian-sid-generic-amd64-daily-20250805-2195.qcow2 需支援 cloud init
+
+主要流程
+1. 使用 clonezilla_zip2qcow.sh 將 clonezilla zip 轉成 qcow2 檔案
+eg: ./clonezilla_zip2qcow.sh --zip isos/clonezilla-live-20251124-resolute-amd64.zip  -o isos/
+2. 備份debian-sid-generic-amd64-daily-20250805-2195.qcow2 到 debian-sid-generic-amd64-daily-20250805-2195.sda.qcow2
+eg: cp qemu/debian-sid-generic-amd64-daily-20250805-2195.qcow2 qemu/debian-sid-generic-amd64-daily-20250805-2195.sda.qcow2
+3. 使用 qemu_clonezilla_ci_run.sh 備份 debian-sid-generic-amd64-daily-20250805-2195.sda.qcow2 到 partimag/ ; 可以直接使用cmdpath  dev/ocscmd/clone-first-disk.sh
+eg: ./qemu_clonezilla_ci_run.sh --disk qemu/debian-sid-generic-amd64-daily-20250805-2195.sda.qcow2 --live isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64.qcow2 --kernel isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-vmlinuz --initrd isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-initrd.img --cmdpath dev/ocscmd/clone-first-disk.sh  --image ./partimag/
+4. 使用 qemu_clonezilla_ci_run.sh 還原 clonezilla qcow2 到 restore.qcow2(需要產生新的30g qcow2) ; 可以直接使用cmdpath  dev/ocscmd/restore-first-disk.sh
+eg: qemu-img create -f qemu/qcow2 restore.qcow2 30G
+eg: ./qemu_clonezilla_ci_run.sh --disk qemu/restore.qcow2 --live isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64.qcow2 --kernel isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-vmlinuz --initrd isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-initrd.img --cmdpath dev/ocscmd/restore-first-disk.sh  --image ./partimag/
+5. 使用 validateOS.sh 驗證 restore.qcow2 是否能正常啟動
+./validateOS.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk qemu/restore.qcow2 --timeout 60 --keeplog
+
+- [x] 整個 script flow 需要開發，完整flow, 參數說明
+- [x] 增加--help 參數可以讓使用者查詢使用說明
+- [x] 參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
+- [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
+
 ## qemu_clonezilla_ci_run.sh 改進事項：
 qemu_clonezilla_ci_run.sh 需要修改：
 - [x] 1. 以長參數與短參數取代目前依照順序的方式取得使用者參數
