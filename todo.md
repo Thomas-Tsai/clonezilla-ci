@@ -72,3 +72,6 @@ cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/c
 - [ ] 增加執行timeout 機制，避免無限等待, 等待時間300秒
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
 - [ ] 增加選用參數 --keeplog 來保留log 檔案，預設會刪除log 檔案
+
+## dev/cloudinit/prepareiso.sh 改進事項：
+- [x] comment the code in english
