@@ -18,6 +18,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
     - [x] 4. 使用 qemu_clonezilla_ci_run.sh 還原 clonezilla qcow2 到 restore.qcow2
     - [x] 5. 驗證 restore.qcow2 是否能正常還原出正確的檔案內容，與備份前的checksum 進行比對
 - [x] 增加參數設定partimag 目錄位置
+- [ ] 增加檔案系統類型支援 ext2, ext3, xfs, btrfs, ntfs, fat32, fat16, fat12, exfat, hfs, hfsplus, ufs, reiserfs, jfs, apfs
 
 ## linux-clone-restore.sh 改進事項：
 這個程式主要用來進行linux distro 的clonezilla 備份還原，完全非互動方式一次完成備份、還原、還原檢查
