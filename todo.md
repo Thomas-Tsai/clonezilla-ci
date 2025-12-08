@@ -7,28 +7,17 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 整個專案的readme 文件需要補充
 
 ## data-clone-restore.sh 改進事項：
-這個程式主要用來進行檔案系統 的 clonezilla 備份還原測試，完全非互動方式一次完成備份前準備、備份、還原、還原檢查
-提供使用者參數：
-1. --zip 指定 clonezilla zip 檔案路徑 
-2. --data 設定 來源檔案、以目錄形式進行備份還原測試
-3. --fs 指定檔案系統參數，例: ext4、ntfs、fat32
-4. --size 指定測試磁碟大小，預設10G
-
-
-主要流程
-1. 使用 clonezilla_zip2qcow.sh 將 clonezilla zip 轉成 qcow2 檔案
-eg: ./clonezilla_zip2qcow.sh --zip isos/clonezilla-live-20251124-resolute-amd64.zip  -o isos/
-2. 備份前準備，將--data 目錄複製到 qcow2 裡面, 需要進行檔案的checksum 記錄供還原時驗證，參照--fs 指定之檔案系統建立磁碟分割與格式化
-3. 使用 qemu_clonezilla_ci_run.sh 備份 qcow2 到 partimag/ ; 可以直接使用cmdpath  dev/ocscmd/clone-data.sh; 或是直接ocs-sr 指令備份
-4. 使用 qemu_clonezilla_ci_run.sh 還原 clonezilla qcow2 到 restore.qcow2(需要產生新的30g qcow2) ; 可以直接使用cmdpath  dev/ocscmd/restore-data.sh; 或是直接ocs-sr 指令還原
-5. 驗證 restore.qcow2 是否能正常還原出正確的檔案內容，與備份前的checksum 進行比對
-
-
-- [x] 完成整個 script flow 需要開發，完整flow, 參數說明
-- [ ] 增加--help 參數可以讓使用者查詢使用說明
-- [ ] 參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
-- [ ] 增加執行結果回傳值，成功回傳0，失敗回傳1
-- [ ] 增加參數設定partimag 目錄位置
+- [x] 整個 script flow 需要開發，完整flow, 參數說明
+- [x] 增加--help 參數可以讓使用者查詢使用說明
+- [x] 參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
+- [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
+- [x] 實作主要流程:
+    - [x] 1. 使用 clonezilla_zip2qcow.sh 將 clonezilla zip 轉成 qcow2 檔案
+    - [x] 2. 備份前準備，將--data 目錄複製到 qcow2 裡面, 需要進行檔案的checksum 記錄供還原時驗證
+    - [x] 3. 使用 qemu_clonezilla_ci_run.sh 備份 qcow2 到 partimag/
+    - [x] 4. 使用 qemu_clonezilla_ci_run.sh 還原 clonezilla qcow2 到 restore.qcow2
+    - [x] 5. 驗證 restore.qcow2 是否能正常還原出正確的檔案內容，與備份前的checksum 進行比對
+- [x] 增加參數設定partimag 目錄位置
 
 ## linux-clone-restore.sh 改進事項：
 這個程式主要用來進行linux distro 的clonezilla 備份還原，完全非互動方式一次完成備份、還原、還原檢查

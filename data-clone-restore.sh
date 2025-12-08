@@ -21,6 +21,7 @@ CLONEZILLA_ZIP=""
 SOURCE_DATA_DIR=""
 FILESYSTEM_TYPE="ext4"
 DISK_SIZE="10G"
+PARTIMAG_LOCATION="" # Default is to use a temporary directory
 
 # --- Helper Functions ---
 
@@ -37,10 +38,11 @@ print_usage() {
     echo "Optional Arguments:"
     echo "  --fs <type>       Filesystem type to use (ext4, ntfs, vfat). (Default: $FILESYSTEM_TYPE)"
     echo "  --size <size>     Size of the source test disk (e.g., '10G'). (Default: $DISK_SIZE)"
+    echo "  --partimag <dir>  Directory to store Clonezilla image backups. (Default: temporary directory)"
     echo "  -h, --help        Display this help message and exit."
     echo ""
     echo "Example:"
-    echo "  $0 --zip isos/clonezilla.zip --data ./my_test_data --fs ext4"
+    echo "  $0 --zip isos/clonezilla.zip --data ./my_test_data --fs ext4 --partimag /mnt/my_backups"
 }
 
 # --- Argument Parsing ---
@@ -49,28 +51,32 @@ while [[ "$#" -gt 0 ]]; do
         --zip)
             CLONEZILLA_ZIP="$2"
             shift 2
-            ;; 
+            ;;
         --data)
             SOURCE_DATA_DIR="$2"
             shift 2
-            ;; 
+            ;;
         --fs)
             FILESYSTEM_TYPE="$2"
             shift 2
-            ;; 
+            ;;
         --size)
             DISK_SIZE="$2"
             shift 2
-            ;; 
+            ;;
+        --partimag)
+            PARTIMAG_LOCATION="$2"
+            shift 2
+            ;;
         -h|--help)
             print_usage
             exit 0
-            ;; 
+            ;;
         *)
             echo "ERROR: Unknown argument: $1" >&2
             print_usage
             exit 1
-            ;; 
+            ;;
     esac
 done
 
@@ -92,6 +98,13 @@ if [ ! -d "$SOURCE_DATA_DIR" ]; then
     exit 1
 fi
 
+if [ -n "$PARTIMAG_LOCATION" ]; then
+    if [ ! -d "$PARTIMAG_LOCATION" ]; then
+        echo "ERROR: User-specified partimag directory not found: $PARTIMAG_LOCATION" >&2
+        exit 1
+    fi
+fi
+
 # Validate filesystem type
 case "$FILESYSTEM_TYPE" in
     ext4|ntfs|vfat)
@@ -99,9 +112,8 @@ case "$FILESYSTEM_TYPE" in
     *)
         echo "ERROR: Unsupported filesystem type '$FILESYSTEM_TYPE'. Supported types are: ext4, ntfs, vfat." >&2
         exit 1
-        ;; 
+        ;;
 esac
-
 # Validate that required tools exist
 for cmd in ./clonezilla_zip2qcow.sh ./qemu_clonezilla_ci_run.sh qemu-img guestfish md5sum; do
     command -v "$cmd" >/dev/null 2>&1 || { echo >&2 "ERROR: Required command '$cmd' not found. Please ensure it is installed and in your PATH."; exit 1; }
@@ -191,8 +203,15 @@ echo ""
 
 # --- Step 3: Backup source disk ---
 echo "INFO: [Step 3/5] Backing up source disk using Clonezilla..."
-PARTIMAG_DIR="$WORK_DIR/partimag"
-mkdir -p "$PARTIMAG_DIR"
+# Determine the partimag directory: use user-specified or create a temporary one.
+if [ -n "$PARTIMAG_LOCATION" ]; then
+    PARTIMAG_DIR="$PARTIMAG_LOCATION"
+    echo "INFO: Using user-specified partimag directory: $PARTIMAG_DIR"
+else
+    PARTIMAG_DIR="$WORK_DIR/partimag"
+    mkdir -p "$PARTIMAG_DIR"
+    echo "INFO: Using temporary partimag directory: $PARTIMAG_DIR"
+fi
 
 CLONE_IMAGE_NAME="dcr-image-$(date +%s)"
 # Use -b and -y for non-interactive batch mode
