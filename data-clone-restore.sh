@@ -181,12 +181,10 @@ cleanup() {
         fi
     fi
 
-    if [ "$KEEP_TEMP_FILES" = "true" ]; then
-        if [ "$exit_code" -ne 0 ]; then
-            echo "ERROR: Script failed with exit code $exit_code. Temporary directory retained for debugging: $WORK_DIR"
-        else
-            echo "INFO: Temporary directory retained as requested by --keep-temp: $WORK_DIR"
-        fi
+    if [ $exit_code -ne 0 ]; then
+        echo "ERROR: Script failed. Temporary directory retained for debugging: $WORK_DIR"
+    elif [ "$KEEP_TEMP_FILES" = "true" ]; then
+        echo "INFO: Temporary directory retained as requested by --keep-temp: $WORK_DIR"
     else
         echo "INFO: Cleaning up temporary directory $WORK_DIR"
         rm -rf "$WORK_DIR"
@@ -243,23 +241,29 @@ EOF
 # Define absolute path for source data for consistency
 _ABS_SOURCE_DATA_DIR=$(realpath "$SOURCE_DATA_DIR")
 
-# Determine the checksum file to use
-if [ -n "$CHECKSUM_FILE_PATH" ] && [ -f "$CHECKSUM_FILE_PATH" ]; then
-    echo "INFO: Using existing checksum file: $CHECKSUM_FILE_PATH"
-    SOURCE_CHECKSUM_FILE="$CHECKSUM_FILE_PATH"
+# Determine the checksum file to use. The final path must be absolute for verification.
+_ABS_CHECKSUM_FILE=""
+if [ -n "$CHECKSUM_FILE_PATH" ]; then
+    _ABS_CHECKSUM_FILE=$(realpath -m "$CHECKSUM_FILE_PATH")
+fi
+
+if [ -n "$_ABS_CHECKSUM_FILE" ] && [ -f "$_ABS_CHECKSUM_FILE" ]; then
+    echo "INFO: Using existing checksum file: $_ABS_CHECKSUM_FILE"
+    SOURCE_CHECKSUM_FILE="$_ABS_CHECKSUM_FILE"
 else
+    # If no file is specified, or it doesn't exist, generate one.
+    if [ -n "$_ABS_CHECKSUM_FILE" ]; then
+        # User specified a file path, but it doesn't exist. We will create it.
+        SOURCE_CHECKSUM_FILE="$_ABS_CHECKSUM_FILE"
+    else
+        # No file specified, use a temporary one.
+        SOURCE_CHECKSUM_FILE="$WORK_DIR/source_checksums.md5"
+    fi
     echo "INFO: Calculating checksums of source data..."
-    SOURCE_CHECKSUM_FILE="$WORK_DIR/source_checksums.md5" # Default temp location
     SOURCE_DATA_DIR_PARENT=$(dirname "$_ABS_SOURCE_DATA_DIR")
     SOURCE_DATA_DIR_BASENAME=$(basename "$_ABS_SOURCE_DATA_DIR")
     (cd "$SOURCE_DATA_DIR_PARENT" && find "$SOURCE_DATA_DIR_BASENAME" -type f -exec md5sum {} + | sort -k 2) > "$SOURCE_CHECKSUM_FILE"
     echo "INFO: Source checksums saved to $SOURCE_CHECKSUM_FILE"
-
-    # If --checksum-file was provided, copy the newly generated one to that path
-    if [ -n "$CHECKSUM_FILE_PATH" ]; then
-        echo "INFO: Saving generated checksums to: $CHECKSUM_FILE_PATH"
-        cp "$SOURCE_CHECKSUM_FILE" "$CHECKSUM_FILE_PATH"
-    fi
 fi
 
 echo "INFO: Copying data to source disk..."

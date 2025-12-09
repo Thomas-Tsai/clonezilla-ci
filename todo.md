@@ -26,6 +26,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
       例如：guestmount -a source.qcow2 -m /dev/sda1 --ro /tmp/XXXX/mnt/ ; md5sum -c ....
 - [x] 指定tmp路徑，預設使用 /tmp/dcr-xxxxxx , 並於完成後刪除; --tmp_path /home/debian/tmp/ 參數指定tmp 路徑
 - [x] 檔案的checksum 記錄供還原時驗證, 希望設計為可以保留checksum 檔案, 以便後續可以用來驗證其他 qcow2 檔案，減少步驟2的時間, 可以設定位置於當前目錄下的 dcr_checksums.txt 檔案
+- [x] 還原失敗時，保留相關檔案，方便debug
 
 ## linux-clone-restore.sh 改進事項：
 這個程式主要用來進行linux distro 的clonezilla 備份還原，完全非互動方式一次完成備份、還原、還原檢查
