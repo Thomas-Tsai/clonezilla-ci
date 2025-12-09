@@ -24,6 +24,7 @@ DISK_SIZE="10G"
 PARTIMAG_LOCATION="" # Default is to use a temporary directory
 KEEP_TEMP_FILES=false # Default is to clean up temp files
 TMP_PATH="" # Default is to let mktemp decide
+CHECKSUM_FILE_PATH="" # Path to external checksum file
 
 # --- Helper Functions ---
 
@@ -43,6 +44,7 @@ print_usage() {
     echo "  --partimag <dir>  Directory to store Clonezilla image backups. (Default: temporary directory)"
     echo "  --keep-temp       Do not delete the temporary working directory on failure, for debugging."
     echo "  --tmp-path <dir>  Specify a base directory for temporary files. (Default: system temporary directory)"
+    echo "  --checksum-file <path> Specify a file to load/save checksums. If exists, load; else, generate and save."
     echo "  -h, --help        Display this help message and exit."
     echo ""
     echo "Example:"
@@ -78,6 +80,10 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --tmp-path)
             TMP_PATH="$2"
+            shift 2
+            ;;
+        --checksum-file)
+            CHECKSUM_FILE_PATH="$2"
             shift 2
             ;;
         -h|--help)
@@ -146,6 +152,9 @@ echo "Clonezilla ZIP: $CLONEZILLA_ZIP"
 echo "Source Data:    $SOURCE_DATA_DIR"
 echo "Filesystem:     $FILESYSTEM_TYPE"
 echo "Disk Size:      $DISK_SIZE"
+if [ -n "$CHECKSUM_FILE_PATH" ]; then
+    echo "Checksum File:  $CHECKSUM_FILE_PATH"
+fi
 echo "---------------------------------"
 
 # --- Main Workflow ---
@@ -234,15 +243,24 @@ EOF
 # Define absolute path for source data for consistency
 _ABS_SOURCE_DATA_DIR=$(realpath "$SOURCE_DATA_DIR")
 
-echo "INFO: Calculating checksums of source data..."
-SOURCE_CHECKSUM_FILE="$WORK_DIR/source_checksums.md5"
-# We 'cd' to the parent of the source directory and use the basename in `find`.
-# This creates checksum paths that include the source directory's name,
-# which matches the structure created by 'guestfish copy-in'.
-SOURCE_DATA_DIR_PARENT=$(dirname "$_ABS_SOURCE_DATA_DIR")
-SOURCE_DATA_DIR_BASENAME=$(basename "$_ABS_SOURCE_DATA_DIR")
-(cd "$SOURCE_DATA_DIR_PARENT" && find "$SOURCE_DATA_DIR_BASENAME" -type f -exec md5sum {} + | sort -k 2) > "$SOURCE_CHECKSUM_FILE"
-echo "INFO: Source checksums saved to $SOURCE_CHECKSUM_FILE"
+# Determine the checksum file to use
+if [ -n "$CHECKSUM_FILE_PATH" ] && [ -f "$CHECKSUM_FILE_PATH" ]; then
+    echo "INFO: Using existing checksum file: $CHECKSUM_FILE_PATH"
+    SOURCE_CHECKSUM_FILE="$CHECKSUM_FILE_PATH"
+else
+    echo "INFO: Calculating checksums of source data..."
+    SOURCE_CHECKSUM_FILE="$WORK_DIR/source_checksums.md5" # Default temp location
+    SOURCE_DATA_DIR_PARENT=$(dirname "$_ABS_SOURCE_DATA_DIR")
+    SOURCE_DATA_DIR_BASENAME=$(basename "$_ABS_SOURCE_DATA_DIR")
+    (cd "$SOURCE_DATA_DIR_PARENT" && find "$SOURCE_DATA_DIR_BASENAME" -type f -exec md5sum {} + | sort -k 2) > "$SOURCE_CHECKSUM_FILE"
+    echo "INFO: Source checksums saved to $SOURCE_CHECKSUM_FILE"
+
+    # If --checksum-file was provided, copy the newly generated one to that path
+    if [ -n "$CHECKSUM_FILE_PATH" ]; then
+        echo "INFO: Saving generated checksums to: $CHECKSUM_FILE_PATH"
+        cp "$SOURCE_CHECKSUM_FILE" "$CHECKSUM_FILE_PATH"
+    fi
+fi
 
 echo "INFO: Copying data to source disk..."
 guestfish --rw -a "$SOURCE_DISK_QCOW2" <<-EOF

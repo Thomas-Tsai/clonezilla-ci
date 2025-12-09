@@ -24,8 +24,8 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] checksum 不要列出所有檔案，只列出有錯誤的部份，所有檔案檢查結果另外存log檔案, 完成, 尚未確認
 - [x] 步驟5 驗證方式不要tar/copy 整個目錄，可以直接mount qcow2 檔案然後進行檔案比對
       例如：guestmount -a source.qcow2 -m /dev/sda1 --ro /tmp/XXXX/mnt/ ; md5sum -c ....
-- [ ] 指定tmp路徑，預設使用 /tmp/dcr-xxxxxx , 並於完成後刪除; --tmp_path /home/debian/tmp/ 參數指定tmp 路徑
-- [ ] 檔案的checksum 記錄供還原時驗證, 希望設計為可以保留checksum 檔案, 以便後續可以用來驗證其他 qcow2 檔案，減少步驟2的時間, 可以設定位置於當前目錄下的 dcr_checksums.txt 檔案
+- [x] 指定tmp路徑，預設使用 /tmp/dcr-xxxxxx , 並於完成後刪除; --tmp_path /home/debian/tmp/ 參數指定tmp 路徑
+- [x] 檔案的checksum 記錄供還原時驗證, 希望設計為可以保留checksum 檔案, 以便後續可以用來驗證其他 qcow2 檔案，減少步驟2的時間, 可以設定位置於當前目錄下的 dcr_checksums.txt 檔案
 
 ## linux-clone-restore.sh 改進事項：
 這個程式主要用來進行linux distro 的clonezilla 備份還原，完全非互動方式一次完成備份、還原、還原檢查
@@ -51,7 +51,7 @@ eg: ./qemu_clonezilla_ci_run.sh --disk qemu/restore.qcow2 --live isos/clonezilla
 - [x] 參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
 - [x] 設定參數 CLONE_IMAGE_NAME 來指定 backup / restore 的 image name; 且要同步到 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面; 抑或是以hardcode 常數方式寫死在 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面
-- [ ] 增加參數 --keep-temp 當失敗時，保留中間產生的所有檔案，方便debug
+- [x] 增加參數 --keep-temp 當失敗時，保留中間產生的所有檔案，方便debug
 
 ## qemu_clonezilla_ci_run.sh 改進事項：
 qemu_clonezilla_ci_run.sh 需要修改：
@@ -122,6 +122,7 @@ cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/c
 - [x] 增加執行timeout 機制，避免無限等待, 等待時間300秒
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
 - [x] 增加選用參數 --keeplog 來保留log 檔案，預設會刪除log 檔案
+- [x] 自動判斷是否 --enable-kvm
 
 ## dev/cloudinit/prepareiso.sh 改進事項：
 - [x] comment the code in english

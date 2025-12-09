@@ -21,6 +21,7 @@ ISOS_DIR="./isos"
 ZIP_DIR="./zip"
 RESTORE_DISK_SIZE="30G"
 VALIDATE_ISO="$ISOS_DIR/cidata.iso"
+KEEP_TEMP_FILES=false # Default is to clean up temp files
 
 # --- Helper Functions ---
 
@@ -36,7 +37,26 @@ print_usage() {
     echo ""
     echo "Optional Arguments:"
     echo "  --image-name <name> Name for the Clonezilla image folder. (Default: $CLONE_IMAGE_NAME)"
+    echo "  --keep-temp         Do not delete the temporary working directory on failure, for debugging."
     echo "  -h, --help          Display this help message and exit."
+}
+
+# Cleanup for temporary files and directories
+cleanup_on_exit() {
+    local exit_code=$?
+    echo "--- Running cleanup ---"
+
+    if [ "$KEEP_TEMP_FILES" = "true" ]; then
+        if [ "$exit_code" -ne 0 ]; then
+            echo "ERROR: Script failed with exit code $exit_code. Temporary directory retained for debugging: $TEMP_DIR"
+        else
+            echo "INFO: Temporary directory retained as requested by --keep-temp: $TEMP_DIR"
+        fi
+    else
+        echo "INFO: Cleaning up temporary files and disks."
+        rm -f "$BACKUP_SOURCE_DISK" "$RESTORE_DISK"
+        rm -rf "$TEMP_DIR"
+    fi
 }
 
 # --- Argument Parsing ---
@@ -45,24 +65,28 @@ while [[ "$#" -gt 0 ]]; do
         --zip)
             CLONEZILLA_ZIP="$2"
             shift 2
-            ;; 
+            ;;
         --tmpl)
             TEMPLATE_QCOW="$2"
             shift 2
-            ;; 
+            ;;
         --image-name)
             CLONE_IMAGE_NAME="$2"
             shift 2
-            ;; 
+            ;;
+        --keep-temp)
+            KEEP_TEMP_FILES=true
+            shift 1
+            ;;
         -h|--help)
             print_usage
             exit 0
-            ;; 
+            ;;
         *)
             echo "ERROR: Unknown argument: $1" >&2
             print_usage
             exit 1
-            ;; 
+            ;;
     esac
 done
 
@@ -97,8 +121,8 @@ TEMP_DIR=$(mktemp -d)
 BACKUP_SOURCE_DISK="" # Initialize for trap
 RESTORE_DISK=""       # Initialize for trap
 
-# Cleanup for temporary files and directories
-trap 'echo "--- Cleaning up temporary files and disks ---"; rm -f "$BACKUP_SOURCE_DISK" "$RESTORE_DISK"; rm -rf "$TEMP_DIR";' EXIT
+# Set the trap to call the cleanup function
+trap cleanup_on_exit EXIT
 
 
 echo "--- (Step 1/5) Preparing Clonezilla Live Media ---"
@@ -107,7 +131,6 @@ CZ_ZIP_BASENAME=$(basename "$CLONEZILLA_ZIP" .zip)
 CZ_LIVE_DIR="$ZIP_DIR/$CZ_ZIP_BASENAME"
 
 ./clonezilla_zip2qcow.sh --zip "$CLONEZILLA_ZIP" -o "$ZIP_DIR" --force
-
 # Define paths to the generated Clonezilla files
 CZ_LIVE_QCOW="$CZ_LIVE_DIR/$CZ_ZIP_BASENAME.qcow2"
 CZ_KERNEL="$CZ_LIVE_DIR/${CZ_ZIP_BASENAME}-vmlinuz"

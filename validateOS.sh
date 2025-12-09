@@ -19,6 +19,17 @@ TIMEOUT_PID=0
 
 # --- Helper Functions ---
 
+# Function to check for KVM availability
+check_kvm_available() {
+    if [ -e "/dev/kvm" ] && [ "$(groups | grep -c kvm)" -gt 0 ]; then
+        echo "INFO: KVM is available and the current user is in the 'kvm' group."
+        return 0 # KVM is available
+    else
+        echo "INFO: KVM is not available or the current user is not in the 'kvm' group. Running without KVM."
+        return 1 # KVM is not available
+    fi
+}
+
 # Function to display usage information
 print_usage() {
     echo "Usage: $0 --iso <CloudInitISO> --disk <QCOW2Image> [OPTIONS]"
@@ -128,17 +139,24 @@ LOG_FILE="validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
     echo "Timeout: ${DEFAULT_TIMEOUT}s"
     echo "---------------------------------------------"
 
-    # --- QEMU Execution with Intelligent Timeout ---
+    # Build QEMU command arguments
+    QEMU_ARGS=(
+        "qemu-system-x86_64"
+        "-m" "4096"
+        "-cpu" "host"
+        "-drive" "file=$DISK_IMAGE,if=virtio,format=qcow2"
+        "-cdrom" "$ISO_PATH"
+        "-nographic"
+        "-boot" "d"
+        "-nic" "user,hostfwd=tcp::2222-:22"
+    )
+
+    if check_kvm_available; then
+        QEMU_ARGS+=("-enable-kvm")
+    fi
+
     # Run QEMU in the background
-    stdbuf -oL qemu-system-x86_64 \
-      -enable-kvm \
-      -m 4096 \
-      -cpu host \
-      -drive file="$DISK_IMAGE",if=virtio,format=qcow2 \
-      -cdrom "$ISO_PATH" \
-      -nographic \
-      -boot d \
-      -nic user,hostfwd=tcp::2222-:22 > "$LOG_FILE" 2>&1 &
+    stdbuf -oL "${QEMU_ARGS[@]}" > "$LOG_FILE" 2>&1 &
     QEMU_PID=$!
     echo "QEMU started in background with PID: $QEMU_PID"
 
