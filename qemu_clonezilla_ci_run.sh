@@ -358,7 +358,8 @@ if [ "$INTERACTIVE_MODE" -eq 0 ]; then
     echo "Mode: Automated CI mode (output to log file)"
     echo "All output will be saved to log file: $LOG_FILE"
     echo "Executing command: ${QEMU_ARGS[*]}"
-    "${QEMU_ARGS[@]}" > "$LOG_FILE" 2>&1
+    echo "Executing command: ${QEMU_ARGS[*]}" > "$LOG_FILE"
+    "${QEMU_ARGS[@]}" >> "$LOG_FILE" 2>&1
 else
     echo "Mode: Interactive debug mode (output directly to terminal)"
     echo "Executing command: ${QEMU_ARGS[*]}"

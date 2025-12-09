@@ -22,6 +22,7 @@ SOURCE_DATA_DIR=""
 FILESYSTEM_TYPE="ext4"
 DISK_SIZE="10G"
 PARTIMAG_LOCATION="" # Default is to use a temporary directory
+KEEP_TEMP_FILES=false # Default is to clean up temp files
 
 # --- Helper Functions ---
 
@@ -36,9 +37,10 @@ print_usage() {
     echo "  --data <dir>      Path to the source directory with data to test."
     echo ""
     echo "Optional Arguments:"
-    echo "  --fs <type>       Filesystem type to use (ext4, ntfs, vfat). (Default: $FILESYSTEM_TYPE)"
+    echo "  --fs <type>       Filesystem type to use (e.g., ext2/34, btrfs, xfs, ntfs, vfat, exfat). (Default: $FILESYSTEM_TYPE)"
     echo "  --size <size>     Size of the source test disk (e.g., '10G'). (Default: $DISK_SIZE)"
     echo "  --partimag <dir>  Directory to store Clonezilla image backups. (Default: temporary directory)"
+    echo "  --keep-temp       Do not delete the temporary working directory on failure, for debugging."
     echo "  -h, --help        Display this help message and exit."
     echo ""
     echo "Example:"
@@ -67,6 +69,10 @@ while [[ "$#" -gt 0 ]]; do
         --partimag)
             PARTIMAG_LOCATION="$2"
             shift 2
+            ;;
+        --keep-temp)
+            KEEP_TEMP_FILES=true
+            shift 1
             ;;
         -h|--help)
             print_usage
@@ -107,16 +113,16 @@ fi
 
 # Validate filesystem type
 case "$FILESYSTEM_TYPE" in
-    ext4|ntfs|vfat)
+    ext2|ext3|ext4|xfs|btrfs|ntfs|vfat|exfat)
         ;;
     *)
-        echo "ERROR: Unsupported filesystem type '$FILESYSTEM_TYPE'. Supported types are: ext4, ntfs, vfat." >&2
+        echo "ERROR: Unsupported filesystem type '$FILESYSTEM_TYPE'. Supported types are: ext2, ext3, ext4, xfs, btrfs, ntfs, vfat, exfat." >&2
         exit 1
         ;;
 esac
 # Validate that required tools exist
-for cmd in ./clonezilla_zip2qcow.sh ./qemu_clonezilla_ci_run.sh qemu-img guestfish md5sum; do
-    command -v "$cmd" >/dev/null 2>&1 || { echo >&2 "ERROR: Required command '$cmd' not found. Please ensure it is installed and in your PATH."; exit 1; }
+for cmd in ./clonezilla_zip2qcow.sh ./qemu_clonezilla_ci_run.sh qemu-img guestfish guestmount guestunmount md5sum; do
+    command -v "$cmd" >/dev/null 2>&1 || { echo >&2 "ERROR: Required command '$cmd' not found. Please ensure it is in your PATH."; exit 1; }
 done
 echo "INFO: All dependencies found."
 echo ""
@@ -132,10 +138,35 @@ echo "---------------------------------"
 # --- Main Workflow ---
 
 # Create a temporary working directory for this test run.
-# The 'trap' command ensures this directory is cleaned up on script exit (success or failure).
 WORK_DIR=$(mktemp -d -t dcr-test-XXXXXXXX)
 echo "INFO: Using temporary working directory: $WORK_DIR"
-trap 'echo "INFO: Cleaning up temporary directory $WORK_DIR"; rm -rf "$WORK_DIR"' EXIT
+
+# The cleanup function is called on EXIT. It checks the exit code and the
+# --keep-temp flag to decide whether to remove the temporary directory.
+cleanup() {
+    exit_code=$?
+
+    # First, handle unmounting if a guestmount was performed
+    MOUNT_POINT="$WORK_DIR/mnt"
+    if [ -d "$MOUNT_POINT" ] && mountpoint -q "$MOUNT_POINT"; then
+        echo "INFO: Attempting to unmount FUSE filesystem at $MOUNT_POINT..."
+        if ! guestunmount "$MOUNT_POINT"; then
+            echo "WARNING: Failed to unmount $MOUNT_POINT. Manual intervention may be required." >&2
+        fi
+    fi
+
+    if [ "$KEEP_TEMP_FILES" = "true" ]; then
+        if [ "$exit_code" -ne 0 ]; then
+            echo "ERROR: Script failed with exit code $exit_code. Temporary directory retained for debugging: $WORK_DIR"
+        else
+            echo "INFO: Temporary directory retained as requested by --keep-temp: $WORK_DIR"
+        fi
+    else
+        echo "INFO: Cleaning up temporary directory $WORK_DIR"
+        rm -rf "$WORK_DIR"
+    fi
+}
+trap cleanup EXIT
 
 # --- Step 1: Convert Clonezilla zip to QCOW2 ---
 echo "INFO: [Step 1/5] Converting Clonezilla ZIP to QCOW2 format..."
@@ -165,9 +196,14 @@ qemu-img create -f qcow2 "$SOURCE_DISK_QCOW2" "$DISK_SIZE"
 echo "INFO: Partitioning and formatting disk with filesystem: $FILESYSTEM_TYPE"
 GUESTFISH_DRIVE="sda" # Use a more standard device name
 case "$FILESYSTEM_TYPE" in
+    ext2) MKFS_COMMAND="mkfs ext2 /dev/${GUESTFISH_DRIVE}1" ;;
+    ext3) MKFS_COMMAND="mkfs ext3 /dev/${GUESTFISH_DRIVE}1" ;;
     ext4) MKFS_COMMAND="mkfs ext4 /dev/${GUESTFISH_DRIVE}1" ;;
-    ntfs) MKFS_COMMAND="mkfs.ntfs -F /dev/${GUESTFISH_DRIVE}1" ;;
-    vfat) MKFS_COMMAND="mkfs.vfat -F 32 /dev/${GUESTFISH_DRIVE}1" ;;
+    xfs) MKFS_COMMAND="mkfs xfs /dev/${GUESTFISH_DRIVE}1" ;;
+    btrfs) MKFS_COMMAND="mkfs btrfs /dev/${GUESTFISH_DRIVE}1" ;;
+    ntfs) MKFS_COMMAND="mkfs ntfs /dev/${GUESTFISH_DRIVE}1" ;;
+    vfat|fat32) MKFS_COMMAND="mkfs vfat /dev/${GUESTFISH_DRIVE}1" ;;
+    exfat) MKFS_COMMAND="mkfs exfat /dev/${GUESTFISH_DRIVE}1" ;;
 esac
 
 # Use guestfish to script disk setup. This runs inside a temporary appliance.
@@ -215,7 +251,7 @@ fi
 
 CLONE_IMAGE_NAME="dcr-image-$(date +%s)"
 # Use -b and -y for non-interactive batch mode
-OCS_COMMAND="sudo /usr/sbin/ocs-sr -b -y -j2 -p poweroff savedisk ${CLONE_IMAGE_NAME} sda"
+OCS_COMMAND="sudo /usr/sbin/ocs-sr -b -q2 -j2 -edio -z9p -i 0 -sfsck -scs -senc -p poweroff  savedisk ${CLONE_IMAGE_NAME} sda"
 
 ./qemu_clonezilla_ci_run.sh \
     --disk "$SOURCE_DISK_QCOW2" \
@@ -257,31 +293,47 @@ echo ""
 
 # --- Step 5: Verify restored data ---
 echo "INFO: [Step 5/5] Verifying restored data..."
-RESTORED_DATA_DIR="$WORK_DIR/restored_data"
-mkdir -p "$RESTORED_DATA_DIR"
+MOUNT_POINT="$WORK_DIR/mnt"
+CHECKSUM_LOG="$WORK_DIR/checksum_verification.log"
+mkdir -p "$MOUNT_POINT"
 
-# Use guestfish to export the restored data back to the host
-echo "INFO: Exporting restored data from disk image..."
-guestfish --ro -a "$RESTORE_DISK_QCOW2" <<!
-    run
-    mount /dev/${GUESTFISH_DRIVE}1 /
-    tar-out / - | (cd ${RESTORED_DATA_DIR} && tar -xf -)
-!
+# Mount the restored disk image read-only
+echo "INFO: Mounting restored disk image..."
+guestmount -a "$RESTORE_DISK_QCOW2" -m "/dev/sda1" --ro "$MOUNT_POINT"
 
 echo "INFO: Comparing source and restored checksums..."
 # Use md5sum -c to check the restored files against the original checksums.
-# We cd into the restored data directory because the paths in the checksum
-# file are relative to the parent of the original source directory.
-if (cd "$RESTORED_DATA_DIR" && md5sum -c "$SOURCE_CHECKSUM_FILE"); then
+# The --quiet flag suppresses 'OK' messages for matching files.
+# The full output (only errors, if any) is saved to a log file.
+# We temporarily disable 'exit on error' to handle the md5sum result manually.
+set +e
+# The paths in the checksum file are relative, and guestmount presents the
+# restored files at the root of the mount point, so we cd there to run the check.
+(cd "$MOUNT_POINT" && md5sum --quiet -c "$SOURCE_CHECKSUM_FILE") &> "$CHECKSUM_LOG"
+result=$?
+set -e
+
+# Unmount the disk image
+echo "INFO: Unmounting restored disk image."
+guestunmount "$MOUNT_POINT"
+
+if [ $result -eq 0 ]; then
     echo ""
     echo "------------------------------------------"
     echo "--- ✅ SUCCESS: All file checksums match. ---"
     echo "------------------------------------------"
+    # Overwrite the log with a success message since there were no errors.
+    echo "All files passed checksum verification." > "$CHECKSUM_LOG"
+    echo "INFO: Full verification report is in $CHECKSUM_LOG"
     exit 0
 else
     echo ""
     echo "-------------------------------------------"
     echo "--- ❌ FAILURE: Checksum mismatch detected! ---"
     echo "-------------------------------------------"
+    # The log file only contains the failed checksum lines, so just cat it.
+    cat "$CHECKSUM_LOG"
+    echo "-------------------------------------------"
+    echo "INFO: Full verification report is in $CHECKSUM_LOG"
     exit 1
 fi
