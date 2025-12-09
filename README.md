@@ -24,6 +24,45 @@ Before using these scripts, ensure the following dependencies are installed on y
 
 Here is a breakdown of the available scripts and their functions.
 
+### `data-clone-restore.sh`
+
+This orchestration script is designed for end-to-end testing of filesystem backup and restoration. It creates a temporary disk image, formats it with a specified filesystem, copies a local data directory into it, backs up the disk using Clonezilla, restores it to a new disk, and finally verifies the integrity of the restored data by comparing checksums.
+
+**Features:**
+- Uses long options (`--zip`, `--data`, `--fs`, `--size`, `--partimag`, `--keep-temp`, `-h`/`--help`).
+- Supports a wide range of filesystems (e.g., ext2/3/4, btrfs, xfs, ntfs, vfat).
+- Calculates MD5 checksums of the source data before backup.
+- Verifies restored data efficiently using `guestmount` to avoid full data extraction.
+- Allows keeping the temporary directory for debugging with `--keep-temp`.
+- Returns 0 for success and 1 for failure.
+
+**Workflow:**
+1.  **Prepare Clonezilla Live Media**: Converts the provided Clonezilla ZIP to QCOW2 format.
+2.  **Prepare Source Disk**: Creates a new QCOW2 disk, partitions and formats it, and copies the source data directory into it.
+3.  **Calculate Checksums**: Generates an MD5 checksum file for all files in the source data.
+4.  **Backup the Source Disk**: Uses Clonezilla to create a backup image of the data disk.
+5.  **Restore to a New Disk**: Creates a new, larger QCOW2 disk and restores the backup onto it.
+6.  **Verify the Restored Disk**: Mounts the restored disk using `guestmount` and verifies the MD5 checksums of the files against the pre-calculated checksum file.
+
+**Usage:**
+```bash
+# Run a full data backup/restore cycle with a directory and ext4 filesystem
+./data-clone-restore.sh \
+  --zip ./isos/clonezilla-live-stable-amd64.zip \
+  --data ./my-important-data/ \
+  --fs ext4
+
+# Run with a different filesystem and keep the temp files for debugging
+./data-clone-restore.sh \
+  --zip ./isos/clonezilla-live-stable-amd64.zip \
+  --data ./my-xfs-data/ \
+  --fs xfs \
+  --keep-temp
+
+# Display help
+./data-clone-restore.sh --help
+```
+
 ### `linux-clone-restore.sh`
 
 This is an orchestration script that automates the full backup, restore, and validation cycle for a Linux distribution. It uses `clonezilla_zip2qcow.sh`, `qemu_clonezilla_ci_run.sh`, and `validateOS.sh` internally.
