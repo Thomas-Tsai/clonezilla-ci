@@ -8,7 +8,7 @@ Before using these scripts, ensure the following dependencies are installed on y
 
 ```bash
 sudo apt update
-sudo apt install qemu-utils qemu-system-x86 guestfs-tools unzip curl wget uuid-runtime genisoimage
+sudo apt install qemu-utils qemu-system-x86 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount
 ```
 
 Here's a breakdown of what each package provides:
