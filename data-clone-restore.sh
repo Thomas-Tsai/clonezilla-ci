@@ -23,6 +23,7 @@ FILESYSTEM_TYPE="ext4"
 DISK_SIZE="10G"
 PARTIMAG_LOCATION="" # Default is to use a temporary directory
 KEEP_TEMP_FILES=false # Default is to clean up temp files
+TMP_PATH="" # Default is to let mktemp decide
 
 # --- Helper Functions ---
 
@@ -41,6 +42,7 @@ print_usage() {
     echo "  --size <size>     Size of the source test disk (e.g., '10G'). (Default: $DISK_SIZE)"
     echo "  --partimag <dir>  Directory to store Clonezilla image backups. (Default: temporary directory)"
     echo "  --keep-temp       Do not delete the temporary working directory on failure, for debugging."
+    echo "  --tmp-path <dir>  Specify a base directory for temporary files. (Default: system temporary directory)"
     echo "  -h, --help        Display this help message and exit."
     echo ""
     echo "Example:"
@@ -73,6 +75,10 @@ while [[ "$#" -gt 0 ]]; do
         --keep-temp)
             KEEP_TEMP_FILES=true
             shift 1
+            ;;
+        --tmp-path)
+            TMP_PATH="$2"
+            shift 2
             ;;
         -h|--help)
             print_usage
@@ -111,6 +117,13 @@ if [ -n "$PARTIMAG_LOCATION" ]; then
     fi
 fi
 
+if [ -n "$TMP_PATH" ]; then
+    if [ ! -d "$TMP_PATH" ]; then
+        echo "ERROR: User-specified temporary path not found: $TMP_PATH" >&2
+        exit 1
+    fi
+fi
+
 # Validate filesystem type
 case "$FILESYSTEM_TYPE" in
     ext2|ext3|ext4|xfs|btrfs|ntfs|vfat|exfat)
@@ -138,7 +151,11 @@ echo "---------------------------------"
 # --- Main Workflow ---
 
 # Create a temporary working directory for this test run.
-WORK_DIR=$(mktemp -d -t dcr-test-XXXXXXXX)
+if [ -n "$TMP_PATH" ]; then
+    WORK_DIR=$(mktemp -d -p "$TMP_PATH" -t dcr-test-XXXXXXXX)
+else
+    WORK_DIR=$(mktemp -d -t dcr-test-XXXXXXXX)
+fi
 echo "INFO: Using temporary working directory: $WORK_DIR"
 
 # The cleanup function is called on EXIT. It checks the exit code and the

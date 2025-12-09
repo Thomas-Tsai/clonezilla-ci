@@ -1,5 +1,5 @@
 # clonezilla ci and gemini cli 開發整理
-default prompt: 這是 clonezilla 準備來開發CI的目錄，裡面討論可以用英文與繁體中文，程式與註解都用英文。大部分用bash script 開發
+default prompt: 這是 clonezilla 準備來開發CI的目錄，裡面討論可以用英文與繁體中文，程式與註解都用英文。大部分用bash script 開發, 請協助我整理目前需要改進的事項，並以checklist 方式列出，完成後不可以打勾，列出完成的項目給開發者驗證。
 
 ## Overview
 This directory contains scripts and tools for automating Clonezilla operations in a Continuous Integration (CI) environment. The main scripts include `qemu_clonezilla_ci_run.sh`, which is used to run Clonezilla in a QEMU virtual machine, and `clonezilla_zip2qcow.sh`, which converts Clonezilla zip images to QCOW2 format for use in QEMU.
@@ -25,6 +25,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 步驟5 驗證方式不要tar/copy 整個目錄，可以直接mount qcow2 檔案然後進行檔案比對
       例如：guestmount -a source.qcow2 -m /dev/sda1 --ro /tmp/XXXX/mnt/ ; md5sum -c ....
 - [ ] 指定tmp路徑，預設使用 /tmp/dcr-xxxxxx , 並於完成後刪除; --tmp_path /home/debian/tmp/ 參數指定tmp 路徑
+- [ ] 檔案的checksum 記錄供還原時驗證, 希望設計為可以保留checksum 檔案, 以便後續可以用來驗證其他 qcow2 檔案，減少步驟2的時間, 可以設定位置於當前目錄下的 dcr_checksums.txt 檔案
 
 ## linux-clone-restore.sh 改進事項：
 這個程式主要用來進行linux distro 的clonezilla 備份還原，完全非互動方式一次完成備份、還原、還原檢查
@@ -50,6 +51,7 @@ eg: ./qemu_clonezilla_ci_run.sh --disk qemu/restore.qcow2 --live isos/clonezilla
 - [x] 參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
 - [x] 設定參數 CLONE_IMAGE_NAME 來指定 backup / restore 的 image name; 且要同步到 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面; 抑或是以hardcode 常數方式寫死在 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面
+- [ ] 增加參數 --keep-temp 當失敗時，保留中間產生的所有檔案，方便debug
 
 ## qemu_clonezilla_ci_run.sh 改進事項：
 qemu_clonezilla_ci_run.sh 需要修改：
@@ -78,8 +80,8 @@ $ ./qemu_clonezilla_ci_run.sh
 Error: Missing command. Please provide either --cmd or --cmdpath.
 - [x] 6. 目前的程式碼沒有檢查參數的有效性，請加上參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 7. 發現 partimage 有殘留的 md_script_1764665091_12358  cmd_script_1764665393_8800 , 應該於執行完成之後刪除。
-- [ ] 自動判斷是否 --enable-kvm
-- [ ] 於完成時間顯示總共花費時間紀錄到log 檔案
+- [x] 自動判斷是否 --enable-kvm
+- [x] 於完成時間顯示總共花費時間紀錄到log 檔案
 
 ## clonezilla_zip2qcow.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
@@ -87,7 +89,7 @@ Error: Missing command. Please provide either --cmd or --cmdpath.
 - [x] 3. 參數改為長參數，例如
 ./clonezilla_zip2qcow.sh --zip clonezilla_image.zip --output outputdir/ --size 10G --force
 - [x] 4. 在步驟 Copying Kernel/Initrd files to the target directory，檔案名稱prefix採用clonezilla zip 的base name 來命名，而不是固定用 vmlinuz 與 initrd.img
-- [ ] 自動下載最新的zip 檔案，當沒有指定 --zip 參數時，自動下載最新的 clonezilla zip 檔案，預設下載stable amd64 版本
+- [x] 自動下載最新的zip 檔案，當沒有指定 --zip 參數時，自動下載最新的 clonezilla zip 檔案，預設下載stable amd64 版本
 
 ## clonezilla-boot.sh 改進事項：
 - [x] rename clonezilla-iso-boot.sh 為 clonezilla-boot.sh

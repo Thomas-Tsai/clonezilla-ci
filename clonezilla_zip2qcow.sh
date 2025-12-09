@@ -20,6 +20,8 @@ FORCE_OVERWRITE=0
 CLONEZILLA_ZIP=""
 OUTPUT_BASE_DIR="."
 IMAGE_SIZE="2G" # Default image size
+CLONEZILLA_LIVE_STABLE_URL="http://free.nchc.org.tw/clonezilla-live/stable/"
+DEFAULT_DOWNLOAD_DIR="zip"
 
 # --- Helper Functions ---
 
@@ -46,6 +48,8 @@ print_usage() {
 # --- Prerequisite Check ---
 command -v unzip >/dev/null 2>&1 || { echo >&2 "ERROR: The 'unzip' command is required. Please install it."; exit 1; }
 command -v virt-make-fs >/dev/null 2>&1 || { echo >&2 "ERROR: The 'virt-make-fs' command (from libguestfs-tools) is required. Please install it."; exit 1; }
+command -v curl >/dev/null 2>&1 || { echo >&2 "ERROR: The 'curl' command is required. Please install it."; exit 1; }
+command -v wget >/dev/null 2>&1 || { echo >&2 "ERROR: The 'wget' command is required. Please install it."; exit 1; }
 
 # --- Argument Parsing ---
 while [[ "$#" -gt 0 ]]; do
@@ -79,16 +83,45 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 # --- Argument Validation ---
+
+# Auto-download Clonezilla Live ZIP if not provided
 if [[ -z "$CLONEZILLA_ZIP" ]]; then
-    echo "ERROR: The --zip argument is required." >&2
-    print_usage
-    exit 1
+    echo "The --zip argument was not provided. Attempting to auto-download the latest stable AMD64 Clonezilla Live ZIP."
+
+    mkdir -p "$DEFAULT_DOWNLOAD_DIR" || { echo "ERROR: Could not create download directory: $DEFAULT_DOWNLOAD_DIR" >&2; exit 1; }
+
+    echo "Fetching latest Clonezilla Live stable AMD64 ZIP from $CLONEZILLA_LIVE_STABLE_URL"
+    LATEST_ZIP_FILENAME=$(curl -s "$CLONEZILLA_LIVE_STABLE_URL" | grep -oP 'clonezilla-live-\d+\.\d+\.\d+-\d+-amd64\.zip' | head -n 1)
+
+    if [[ -z "$LATEST_ZIP_FILENAME" ]]; then
+        echo "ERROR: Could not find the latest Clonezilla Live ZIP filename from $CLONEZILLA_LIVE_STABLE_URL" >&2
+        exit 1
+    fi
+
+    DOWNLOAD_URL="${CLONEZILLA_LIVE_STABLE_URL}${LATEST_ZIP_FILENAME}"
+    DEST_ZIP_PATH="${DEFAULT_DOWNLOAD_DIR}/${LATEST_ZIP_FILENAME}"
+
+    if [ -f "$DEST_ZIP_PATH" ]; then
+        echo "Latest ZIP file already exists: $DEST_ZIP_PATH. Skipping download."
+        CLONEZILLA_ZIP="$DEST_ZIP_PATH"
+    else
+        echo "Downloading $DOWNLOAD_URL to $DEST_ZIP_PATH"
+        if ! wget -q --show-progress -O "$DEST_ZIP_PATH" "$DOWNLOAD_URL"; then
+            echo "ERROR: Failed to download Clonezilla Live ZIP from $DOWNLOAD_URL" >&2
+            rm -f "$DEST_ZIP_PATH" # Clean up partial download
+            exit 1
+        fi
+        CLONEZILLA_ZIP="$DEST_ZIP_PATH"
+        echo "Download complete: $CLONEZILLA_ZIP"
+    fi
 fi
 
 if [ ! -f "$CLONEZILLA_ZIP" ]; then
     echo "ERROR: Could not find the specified ZIP file: $CLONEZILLA_ZIP" >&2
+    print_usage
     exit 1
 fi
+
 
 if [ ! -d "$OUTPUT_BASE_DIR" ]; then
     echo "ERROR: The output directory does not exist: $OUTPUT_BASE_DIR" >&2

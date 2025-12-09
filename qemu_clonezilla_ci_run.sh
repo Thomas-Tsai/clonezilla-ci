@@ -5,29 +5,56 @@
 # This script starts QEMU in console mode to run automated Clonezilla tasks and powers off on completion.
 # ----------------------------------------------------------------------
 
+# Record start time
+START_TIME=$(date +%s)
+
+# Function to check for KVM availability
+check_kvm_available() {
+    if [ -e "/dev/kvm" ] && [ "$(groups | grep -c kvm)" -gt 0 ]; then
+        echo "INFO: KVM is available and the current user is in the 'kvm' group."
+        return 0 # KVM is available
+    else
+        echo "INFO: KVM is not available or the current user is not in the 'kvm' group. Running without KVM."
+        return 1 # KVM is not available
+    fi
+}
+
 # Function to print usage information
 print_usage() {
-    echo "Usage: $0 [Options]"
+    echo "Usage: $0 [OPTIONS]"
+    echo "Run a fully automated, non-interactive Clonezilla task in a QEMU VM."
     echo ""
-    echo "Required Options:"
-    echo "  --disk <DiskImage>     : Path to a disk image. Can be specified multiple times."
-    echo "  --live <LiveDisk>        : Path to the Clonezilla live medium (QCOW2)."
-    echo "  --kernel <KernelPath>    : Path to the vmlinuz kernel file."
-    echo "  --initrd <InitrdPath>    : Path to the initrd.img file."
-    echo "  --cmd \"<OCS_Command>\"    : The OCS command to execute inside Clonezilla."
-    echo "  --cmdpath <ScriptPath> : Path to a script file to execute inside Clonezilla."
+    echo "Options:"
+    echo "  --disk <path>           Path to a virtual disk image (.qcow2). Can be specified multiple times."
+    echo "  --live <path>           Path to the Clonezilla live QCOW2 media."
+    echo "  --kernel <path>         Path to the kernel file (e.g., vmlinuz)."
+    echo "  --initrd <path>         Path to the initrd file."
+    echo "  --image <path>          Path to the shared directory for Clonezilla images (default: ./partimag)."
+    echo "  --cmd <command>         Command string to execute inside Clonezilla (e.g., 'sudo ocs-sr ...')."
+    echo "  --cmdpath <path>        Path to a script file to execute inside Clonezilla."
+    echo "  --append-args <args>    A string of custom kernel append arguments to override the default."
+    echo "  --append-args-file <path> Path to a file containing custom kernel append arguments."
+    echo "  -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal)."
+    echo "  -h, --help              Display this help message and exit."
     echo ""
-    echo "Optional Options:"
-    echo "  -i, --interactive        : Enable interactive mode (QEMU output to terminal)."
-    echo "  --image <ImagePath>      : Path to the directory for shared resources (default: './partimag')."
-    echo "  --append-args \"<Args>\"   : A complete string to override kernel boot parameters."
-    echo "  --append-args-file <File> : Path to a file containing kernel boot parameters."
-    echo "  -h, --help               : Display this help message and exit."
+    echo "Example (Backup):"
+    echo "  $0 \\"
+    echo "    --disk ./qemu/source.qcow2 \\"
+    echo "    --live ./isos/clonezilla.qcow2 \\"
+    echo "    --kernel ./isos/vmlinuz \\"
+    echo "    --initrd ./isos/initrd.img \\"
+    echo "    --cmdpath ./dev/ocscmd/clone-first-disk.sh \\"
+    echo "    --image ./partimag"
     echo ""
-    echo "Example:"
-    echo "$0 --disk r.qcow2 --live live.qcow2 --kernel vmlinuz --initrd initrd.img --cmd \"pwd\" --image \"./partimag\""
-    echo "$0 --disk r.qcow2 --live live.qcow2 --kernel vmlinuz --initrd initrd.img --cmdpath \"./myscript.sh\" --image \"./partimag\""
-    exit 0
+    echo "Example (Restore):"
+    echo "  $0 \\"
+    echo "    --disk ./qemu/restore.qcow2 \\"
+    echo "    --live ./isos/clonezilla.qcow2 \\"
+    echo "    --kernel ./isos/vmlinuz \\"
+    echo "    --initrd ./isos/initrd.img \\"
+    echo "    --cmd 'sudo /usr/sbin/ocs-sr -g auto -e1 auto -e2 -c -r -j2 -p poweroff restoredisk my-img-name sda' \\"
+    echo "    --image ./partimag"
+    exit 1
 }
 
 # Cleanup function to remove temporary files and directories
@@ -36,6 +63,16 @@ cleanup() {
     if [ -n "$HOST_SCRIPT_DIR" ] && [ -d "$HOST_SCRIPT_DIR" ]; then
         echo "Removing temporary script directory: $HOST_SCRIPT_DIR"
         rm -rf "$HOST_SCRIPT_DIR"
+    fi
+
+    END_TIME=$(date +%s)
+    DURATION=$((END_TIME - START_TIME))
+
+    if [ "$INTERACTIVE_MODE" -eq 0 ]; then
+        echo "Total execution time: ${DURATION} seconds" >> "$LOG_FILE"
+        echo "INFO: Total execution time: ${DURATION} seconds (logged to $LOG_FILE)"
+    else
+        echo "INFO: Total execution time: ${DURATION} seconds"
     fi
 }
 
@@ -102,7 +139,7 @@ while [[ "$#" -gt 0 ]]; do
                 shift # past value
             else
                 echo "Error: --initrd requires a value." >&2
-                print 1
+                print_usage
             fi
             ;;
         --cmd)
@@ -335,13 +372,17 @@ fi
 # This avoids all the quoting issues associated with building a command string and using eval.
 QEMU_ARGS=(
     "qemu-system-x86_64"
-    "-enable-kvm"
     "-m" "2048"
     "-smp" "2"
     "-nographic"
     "-kernel" "$KERNEL_PATH"
     "-initrd" "$INITRD_PATH"
 )
+
+# Conditionally add -enable-kvm if available
+if check_kvm_available; then
+    QEMU_ARGS+=("-enable-kvm")
+fi
 QEMU_ARGS+=( "${QEMU_DISK_ARGS_ARRAY[@]}" )
 QEMU_ARGS+=(
     "-device" "virtio-net-pci,netdev=net0"
