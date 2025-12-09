@@ -4,18 +4,29 @@ This project provides a suite of bash scripts to automate the use of Clonezilla 
 
 ## Prerequisites
 
-Before using these scripts, ensure the following dependencies are installed on your system:
-- **QEMU/KVM**: `qemu-system-x86_64` must be installed and configured. KVM is recommended for performance.
-- **libguestfs-tools**: The `virt-make-fs` command is required by the `clonezilla_zip2qcow.sh` script.
-- **unzip**: Required for extracting Clonezilla live distributions.
-- **curl**, **wget**: Required for auto-download features in `clonezilla-boot.sh` and `debian-install.sh`.
-- **genisoimage** (or `mkisofs`): Required by `dev/cloudinit/prepareiso.sh` to create cloud-init ISOs.
+Before using these scripts, ensure the following dependencies are installed on your Debian-based system:
+
+```bash
+sudo apt update
+sudo apt install qemu-utils qemu-system-x86 guestfs-tools unzip curl wget uuid-runtime genisoimage
+```
+
+Here's a breakdown of what each package provides:
+- **`qemu-utils`**: Provides `qemu-img` for disk image manipulation.
+- **`qemu-system-x86`**: Provides `qemu-system-x86_64` for QEMU virtual machine emulation.
+- **`guestfs-tools`**: Provides `guestfish`, `guestmount`, `guestunmount`, and `virt-make-fs` for guest filesystem access and manipulation.
+- **`unzip`**: For extracting `.zip` archives.
+- **`curl`**: For transferring data with URLs.
+- **`wget`**: For retrieving files from the web.
+- **`uuid-runtime`**: Provides `uuidgen` for generating unique identifiers.
+- **`genisoimage`**: For creating ISO-9660 filesystem images.
 
 ## Directory Structure
 
 - `isos/`: Place your downloaded ISO files here (e.g., Clonezilla, Debian). This is also the default download location for auto-downloaded ISOs.
 - `qemu/`: Stores QEMU disk images (`.qcow2`), such as the Debian base image and restoration targets.
 - `partimag/`: Default shared directory for Clonezilla to find and store disk images. This is shared into the VM via 9P.
+- `zip/`: Stores Clonezilla Live ZIP distributions.
 - `dev/`: Contains development notes, logs, and helper scripts.
   - `dev/cloudinit/`: Contains scripts for cloud-init ISO preparation.
   - `dev/ocscmd/`: Contains Clonezilla `ocs-sr` command scripts used by orchestration.
