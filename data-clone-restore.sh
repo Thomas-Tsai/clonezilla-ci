@@ -44,7 +44,7 @@ print_usage() {
     echo "  -h, --help        Display this help message and exit."
     echo ""
     echo "Example:"
-    echo "  $0 --zip isos/clonezilla.zip --data ./my_test_data --fs ext4 --partimag /mnt/my_backups"
+    echo "  $0 --zip zip/clonezilla.zip --data ./my_test_data --fs ext4 --partimag /mnt/my_backups"
 }
 
 # --- Argument Parsing ---

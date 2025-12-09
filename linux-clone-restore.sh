@@ -18,8 +18,9 @@ CLONE_IMAGE_NAME="debian-sid" # Default image name for the backup/restore proces
 PARTIMAG_DIR="./partimag"
 QEMU_DIR="./qemu"
 ISOS_DIR="./isos"
+ZIP_DIR="./zip"
 RESTORE_DISK_SIZE="30G"
-VALIDATE_ISO="dev/cloudinit/cloud_init_config/cidata.iso"
+VALIDATE_ISO="$ISOS_DIR/cidata.iso"
 
 # --- Helper Functions ---
 
@@ -101,11 +102,11 @@ trap 'echo "--- Cleaning up temporary files and disks ---"; rm -f "$BACKUP_SOURC
 
 
 echo "--- (Step 1/5) Preparing Clonezilla Live Media ---"
-# The output directory will be named after the zip file, inside ISOS_DIR
+# The output directory will be named after the zip file, inside ZIP_DIR
 CZ_ZIP_BASENAME=$(basename "$CLONEZILLA_ZIP" .zip)
-CZ_LIVE_DIR="$ISOS_DIR/$CZ_ZIP_BASENAME"
+CZ_LIVE_DIR="$ZIP_DIR/$CZ_ZIP_BASENAME"
 
-./clonezilla_zip2qcow.sh --zip "$CLONEZILLA_ZIP" -o "$ISOS_DIR" --force
+./clonezilla_zip2qcow.sh --zip "$CLONEZILLA_ZIP" -o "$ZIP_DIR" --force
 
 # Define paths to the generated Clonezilla files
 CZ_LIVE_QCOW="$CZ_LIVE_DIR/$CZ_ZIP_BASENAME.qcow2"

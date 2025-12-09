@@ -36,7 +36,7 @@ print_usage() {
     echo "  -h, --help      Display this help message and exit."
     echo ""
     echo "Example:"
-    echo "  $0 --iso dev/cloudinit/cloud_init_config/cidata.iso --disk ./qemu/restore.qcow2 --timeout 600 --keeplog"
+    echo "  $0 --iso isos/cidata.iso --disk ./qemu/restore.qcow2 --timeout 600 --keeplog"
 }
 
 # Cleanup function

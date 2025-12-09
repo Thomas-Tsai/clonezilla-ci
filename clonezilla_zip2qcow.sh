@@ -40,7 +40,7 @@ print_usage() {
     echo "  -h, --help          Display this help message and exit."
     echo ""
     echo "Example:"
-    echo "  $0 --zip ./isos/clonezilla-live-3.1.2-9-amd64.zip --output ./isos/ --force"
+    echo "  $0 --zip ./zip/clonezilla-live-3.1.2-9-amd64.zip --output ./zip/ --force"
 }
 
 # --- Prerequisite Check ---

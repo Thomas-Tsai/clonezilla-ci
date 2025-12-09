@@ -1,2 +1,3 @@
 wget https://free.nchc.org.tw/debian-cd/current/amd64/iso-cd/debian-13.2.0-amd64-netinst.iso
 wget https://free.nchc.org.tw/clonezilla-live/stable/clonezilla-live-3.3.0-33-amd64.iso
+create ci*.iso by dev/cloudinit/prepareiso_debug.sh  prepareiso.sh
