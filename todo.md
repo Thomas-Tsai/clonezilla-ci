@@ -13,8 +13,8 @@ This directory contains scripts and tools for automating Clonezilla operations i
     - [x] 作業系統測試，利用 linux-clone-restore.sh 以不同的 linux distro 進行 clonezilla 備份還原測試 (done)
     - [x] 檔案系統測試，利用 data-clone-restore.sh 以不同的檔案系統類型進行 clonezilla 備份還原測試 (done)
     - [x] zip檔不要寫死在程式碼裡面，可以在檔案前面進行定義 也可以用參數帶入 (done)
-    - [ ] 每一個測試的log 檔案要分開存放到 /log/XXX，方便debug (done)
-
+    - [x] 每一個測試的log 檔案要分開存放到 /log/XXX，方便debug (done)
+    - [ ] 我加了SHUNIT_TIMER=1 # Enable test timing 希望可以在log 裡面看到每一個測試花費的時間, 但目前沒有看到相關資訊, 需要修正
 
 ## data-clone-restore.sh 改進事項：
 - [x] 整個 script flow 需要開發，完整flow, 參數說明
@@ -94,6 +94,13 @@ Error: Missing command. Please provide either --cmd or --cmdpath.
 - [x] 自動判斷是否 --enable-kvm
 - [x] 於完成時間顯示總共花費時間紀錄到log 檔案
 - [x] 增加參數設定log目錄，預設為當前目錄下的 logs/ 目錄 (done)
+- [ ] 增加zip參數，呼叫 clonezilla_zip2qcow.sh 自動轉換zip 為 qcow2; 參數範例 --zip path/to/clonezilla.zip --output zip/ --size 2G
+      解壓縮之後會產生需要的檔案 vmlinux initrd.img clonezilla-live-xxxx.qcow2 就是 
+      clonezilla-live-xxxx.qcow2,  --live <path>           Path to the Clonezilla live QCOW2 media.
+      vmlinux,                     --kernel <path>         Path to the kernel file (e.g., vmlinuz).
+      initrd.img,                  --initrd <path>         Path to the initrd file.
+      且不要重複進行解壓縮，如果三個檔案都已經存在，就跳過這個步驟
+      如果只有部份檔案，就還是需要使用 clonezilla_zip2qcow.sh 來解壓縮 with --force 參數來強制覆蓋
 
 ## clonezilla_zip2qcow.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
