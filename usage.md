@@ -1,60 +1,244 @@
-# start.sh - Clonezilla CI Test Runner
+# Clonezilla CI Automation Tools
 
-`start.sh` is a shell script that automates the process of running the Clonezilla CI test suite. It uses the `shunit2` testing framework to run a series of tests that validate the functionality of Clonezilla.
+This project provides a suite of bash scripts to automate the use of Clonezilla within a QEMU virtual environment. It is designed to facilitate Continuous Integration (CI) workflows, such as automated disk imaging, restoration, and testing.
 
-## Usage
+## Prerequisites
 
-To run the test suite, simply execute the `start.sh` script from the root of the repository:
-
-```bash
-./start.sh
-```
-
-You can specify a different Clonezilla ZIP file using the `--zip` option:
+Before using these scripts, ensure the following dependencies are installed on your Debian-based system:
 
 ```bash
-./start.sh --zip /path/to/your/clonezilla.zip
+sudo apt update
+sudo apt install qemu-utils qemu-system-x86 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount
 ```
 
-The script will automatically detect the required dependencies and run the tests. The results of the tests will be displayed on the console. Detailed logs for each test are stored in the `./log` directory.
+Here's a breakdown of what each package provides:
+- **`qemu-utils`**: Provides `qemu-img` for disk image manipulation.
+- **`qemu-system-x86`**: Provides `qemu-system-x86_64` for QEMU virtual machine emulation.
+- **`guestfs-tools`**: Provides `guestfish`, `guestmount`, `guestunmount`, and `virt-make-fs` for guest filesystem access and manipulation.
+- **`unzip`**: For extracting `.zip` archives.
+- **`curl`**: For transferring data with URLs.
+- **`wget`**: For retrieving files from the web.
+- **`uuid-runtime`**: Provides `uuidgen` for generating unique identifiers.
+- **`genisoimage`**: For creating ISO-9660 filesystem images.
 
-## Tests
+## Directory Structure
 
-The test suite includes the following tests:
+- `isos/`: Place your downloaded ISO files here (e.g., Clonezilla, Debian). This is also the default download location for auto-downloaded ISOs.
+- `qemu/`: Stores QEMU disk images (`.qcow2`), such as the Debian base image and restoration targets.
+- `partimag/`: Default shared directory for Clonezilla to find and store disk images. This is shared into the VM via 9P.
+- `zip/`: Stores Clonezilla Live ZIP distributions.
+- `dev/`: Contains development notes, logs, and helper scripts.
+  - `dev/cloudinit/`: Contains scripts for cloud-init ISO preparation.
+  - `dev/ocscmd/`: Contains Clonezilla `ocs-sr` command scripts used by orchestration.
 
-### Operating System Clone/Restore Test
+## Scripts
 
-This test verifies that Clonezilla can successfully clone and restore a Linux distribution. It uses the `linux-clone-restore.sh` script to perform the following steps:
+Here is a breakdown of the available scripts and their functions.
 
-1.  Create a QCOW2 image from a a Clonezilla Live ZIP file.
-2.  Clone a Linux distribution to the QCOW2 image.
-3.  Restore the cloned image to a new QCOW2 image.
-4.  Verify that the restored image is bootable.
+### `data-clone-restore.sh`
 
-### Filesystem Clone/Restore Test
+This orchestration script is designed for end-to-end testing of filesystem backup and restoration. It creates a temporary disk image, formats it with a specified filesystem, copies a local data directory into it, backs up the disk using Clonezilla, restores it to a new disk, and finally verifies the integrity of the restored data by comparing checksums.
 
-This test verifies that Clonezilla can successfully clone and restore various filesystems. It uses the `data-clone-restore.sh` script to perform the following steps for each filesystem:
+**Features:**
+- Uses long options (`--zip`, `--data`, `--fs`, `--size`, `--partimag`, `--keep-temp`, `-h`/`--help`).
+- Supports a wide range of filesystems (e.g., ext2/3/4, btrfs, xfs, ntfs, vfat).
+- Calculates MD5 checksums of the source data before backup.
+- Verifies restored data efficiently using `guestmount` to avoid full data extraction.
+- Allows keeping the temporary directory for debugging with `--keep-temp`.
+- Returns 0 for success and 1 for failure.
 
-1.  Create a QCOW2 image with the specified filesystem.
-2.  Copy a set of test data to the QCOW2 image.
-3.  Clone the QCOW2 image.
-4.  Restore the cloned image to a new QCOW2 image.
-5.  Verify that the restored data is identical to the original data.
+**Workflow:**
+1.  **Prepare Clonezilla Live Media**: Converts the provided Clonezilla ZIP to QCOW2 format.
+2.  **Prepare Source Disk**: Creates a new QCOW2 disk, partitions and formats it, and copies the source data directory into it.
+3.  **Calculate Checksums**: Generates an MD5 checksum file for all files in the source data.
+4.  **Backup the Source Disk**: Uses Clonezilla to create a backup image of the data disk.
+5.  **Restore to a New Disk**: Creates a new, larger QCOW2 disk and restores the backup onto it.
+6.  **Verify the Restored Disk**: Mounts the restored disk using `guestmount` and verifies the MD5 checksums of the files against the pre-calculated checksum file.
 
-## Dependencies
+**Usage:**
+```bash
+# Run a full data backup/restore cycle with a directory and ext4 filesystem
+./data-clone-restore.sh \
+  --zip ./isos/clonezilla-live-stable-amd64.zip \
+  --data ./my-important-data/ \
+  --fs ext4
 
-The `start.sh` script requires the following dependencies:
+# Run with a different filesystem and keep the temp files for debugging
+./data-clone-restore.sh \
+  --zip ./isos/clonezilla-live-stable-amd64.zip \
+  --data ./my-xfs-data/ \
+  --fs xfs \
+  --keep-temp
 
-*   `shunit2`
-*   `qemu`
-*   `guestfish`
+# Display help
+./data-clone-restore.sh --help
+```
 
-Please make sure that these dependencies are installed before running the test suite.
+### `linux-clone-restore.sh`
 
-## Author
+This is an orchestration script that automates the full backup, restore, and validation cycle for a Linux distribution. It uses `clonezilla_zip2qcow.sh`, `qemu_clonezilla_ci_run.sh`, and `validateOS.sh` internally.
 
-This script was created by the Gemini CLI.
+**Features:**
+- Uses long options (`--zip`, `--tmpl`, `--image-name`, `-h`/`--help`).
+- Validates argument existence for input files.
+- Makes the Clonezilla image name configurable via `--image-name`.
+- Generates temporary `ocs-sr` command scripts to dynamically set the image name.
+- Returns 0 for success and 1 for failure.
 
-## License
+**Workflow:**
+1.  **Prepare Clonezilla Live Media**: Converts the provided Clonezilla ZIP to QCOW2 format.
+2.  **Prepare Source Disk**: Copies the template QCOW2 image to be used as the source for backup.
+3.  **Backup the Source Disk**: Uses Clonezilla to create a backup image of the source disk.
+4.  **Restore to a New Disk**: Creates a new QCOW2 disk and restores the backup onto it.
+5.  **Validate the Restored Disk**: Boots the restored disk with a cloud-init ISO to verify functionality.
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+**Usage:**
+```bash
+# Run a full cycle with default image name
+./linux-clone-restore.sh \
+  --zip ./isos/clonezilla-live-20251124-resolute-amd64.zip \
+  --tmpl ./qemu/debian-sid-generic-amd64-daily-20250805-2195.qcow2
+
+# Run a full cycle with a custom image name
+./linux-clone-restore.sh \
+  --zip ./isos/clonezilla-live-20251124-resolute-amd64.zip \
+  --tmpl ./qemu/debian-sid-generic-amd64-daily-20250805-2195.qcow2 \
+  --image-name "my-custom-image"
+
+# Display help
+./linux-clone-restore.sh --help
+```
+
+### `validateOS.sh`
+
+This script boots a restored QCOW2 image with a cloud-init ISO to verify that the OS starts and runs a cloud-init script successfully. It runs non-interactively and checks for a success keyword in the output log.
+
+**Features:**
+- Uses long options (`--iso`, `--disk`, `--timeout`, `--keeplog`, `-h`/`--help`).
+- Validates argument existence.
+- Implements an intelligent timeout mechanism using background processes and `wait -n`.
+- Allows keeping log files for debugging with `--keeplog`.
+- Returns 0 for success and 1 for failure.
+
+**Usage:**
+```bash
+# Validate a restored disk image with a cloud-init ISO
+./validateOS.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk ./qemu/restore.qcow2
+
+# Validate with a longer timeout and keep the log file
+./validateOS.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk ./qemu/restore.qcow2 --timeout 600 --keeplog
+
+# Display help
+./validateOS.sh --help
+```
+
+### `qemu_clonezilla_ci_run.sh`
+
+This is the primary script for running fully automated, non-interactive Clonezilla tasks. It boots a Clonezilla "live" environment directly from kernel and initrd files, mounts a shared directory for images, and executes a specified command.
+
+**Features:**
+- Boots a QCOW2-based Clonezilla live medium.
+- Supports multiple virtual hard disks.
+- Executes commands or shell scripts within the running Clonezilla environment.
+- Shares a local directory (`partimag/` by default) into the VM for Clonezilla images.
+- Can be run in non-interactive (for CI) or interactive modes (for debugging).
+- Supports overriding kernel boot parameters.
+
+**Usage:**
+```bash
+# Example: Run a command to restore a disk
+./qemu_clonezilla_ci_run.sh \
+  --disk qemu/restore.qcow2 \
+  --live isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64.qcow2 \
+  --kernel isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-vmlinuz \
+  --initrd isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-initrd.img \
+  --cmd "sudo /usr/sbin/ocs-sr -g auto -p poweroff restoredisk my-image sda" \
+  --image ./partimag
+
+# Example: Run a local script inside Clonezilla
+./qemu_clonezilla_ci_run.sh \
+  --disk qemu/restore.qcow2 \
+  --live isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64.qcow2 \
+  --kernel isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-vmlinuz \
+  --initrd isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-initrd.img \
+  --cmdpath ./dev/ocscmd/clone-first-disk.sh \
+  --image ./partimag
+```
+
+### `clonezilla_zip2qcow.sh`
+
+This utility converts an official Clonezilla live ZIP distribution into a QCOW2 disk image, and extracts the kernel and initrd files. It uses long options for clarity, provides a help message, validates arguments, and names output files based on the ZIP\'s base name.
+
+**Usage:**
+```bash
+# Basic usage, outputs to a directory named after the zip in the current folder
+./clonezilla_zip2qcow.sh --zip ./isos/clonezilla-live-3.1.2-9-amd64.zip
+
+# Specify output directory and force overwrite
+./clonezilla_zip2qcow.sh --zip ./isos/clonezilla-live-3.1.2-9-amd64.zip --output ./isos/ --force
+
+# Display help
+./clonezilla_zip2qcow.sh --help
+```
+
+### `clonezilla-boot.sh`
+
+This script boots a QEMU VM from a Clonezilla Live ISO. If `--iso` is not provided, it attempts to automatically download the latest stable AMD64 version from SourceForge. It attaches a disk image and a shared directory (`partimag/`) for manual operations.
+
+**Features:**
+- Uses long options (`--iso`, `--disk`, `--partimag`, `-h`/`--help`).
+- Validates argument existence.
+- **Auto-downloads** the latest stable AMD64 Clonezilla Live ISO if `--iso` is omitted.
+
+**Usage:**
+```bash
+# Boot with auto-downloaded Clonezilla ISO and default disk
+./clonezilla-boot.sh --disk ./qemu/my-disk.qcow2
+
+# Boot with a specific ISO and disk image
+./clonezilla-boot.sh --iso ./isos/my-clonezilla.iso --disk ./qemu/my-disk.qcow2
+
+# Display help
+./clonezilla-boot.sh --help
+```
+
+### `boot.sh` (Formerly `boot_qemu_image.sh`)
+
+A simple script to quickly boot a QEMU virtual machine from a specified QCOW2 disk image.
+
+**Features:**
+- Uses long options (`--disk`, `-m`/`--mem`, `--smp`, `-h`/`--help`).
+- Validates argument existence.
+
+**Usage:**
+```bash
+# Boot the default debian image
+./boot.sh
+
+# Boot a specific image with 2GB RAM
+./boot.sh --disk ./qemu/my-other-disk.qcow2 -m 2048
+
+# Display help
+./boot.sh --help
+```
+
+### `debian-install.sh`
+
+This script starts a QEMU VM to install Debian from a netinst ISO onto a QCOW2 disk image. If `--iso` is not provided, it attempts to automatically download the latest stable AMD64 netinst ISO from Debian\'s official mirrors.
+
+**Features:**
+- Uses long options (`--iso`, `--disk`, `-m`/`--mem`, `--smp`, `-h`/`--help`).
+- Validates argument existence.
+- **Auto-downloads** the latest stable AMD64 Debian netinst ISO if `--iso` is omitted.
+
+**Usage:**
+```bash
+# Install Debian with auto-downloaded ISO onto a new disk image
+./debian-install.sh --disk ./qemu/new-debian.qcow2
+
+# Install Debian with a specific ISO, 2GB RAM, and 4 CPU cores
+./debian-install.sh --iso ./isos/debian-testing.iso --disk ./qemu/testing.qcow2 -m 2048 --smp 4
+
+# Display help
+./debian-install.sh --help
+```
