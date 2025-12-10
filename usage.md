@@ -134,35 +134,51 @@ This script boots a restored QCOW2 image with a cloud-init ISO to verify that th
 
 ### `qemu_clonezilla_ci_run.sh`
 
-This is the primary script for running fully automated, non-interactive Clonezilla tasks. It boots a Clonezilla "live" environment directly from kernel and initrd files, mounts a shared directory for images, and executes a specified command.
-
-**Features:**
-- Boots a QCOW2-based Clonezilla live medium.
-- Supports multiple virtual hard disks.
-- Executes commands or shell scripts within the running Clonezilla environment.
-- Shares a local directory (`partimag/` by default) into the VM for Clonezilla images.
-- Can be run in non-interactive (for CI) or interactive modes (for debugging).
-- Supports overriding kernel boot parameters.
+This is the primary script for running fully automated, non-interactive Clonezilla tasks. It can prepare boot media directly from a Clonezilla ZIP file or use pre-extracted files. It boots a Clonezilla "live" environment, mounts a shared directory for images, and executes a specified command.
 
 **Usage:**
-```bash
-# Example: Run a command to restore a disk
-./qemu_clonezilla_ci_run.sh \
-  --disk qemu/restore.qcow2 \
-  --live isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64.qcow2 \
-  --kernel isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-vmlinuz \
-  --initrd isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-initrd.img \
-  --cmd "sudo /usr/sbin/ocs-sr -g auto -p poweroff restoredisk my-image sda" \
-  --image ./partimag
+```
+Usage: ./qemu_clonezilla_ci_run.sh [OPTIONS]
+Run a fully automated, non-interactive Clonezilla task in a QEMU VM.
 
-# Example: Run a local script inside Clonezilla
-./qemu_clonezilla_ci_run.sh \
-  --disk qemu/restore.qcow2 \
-  --live isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64.qcow2 \
-  --kernel isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-vmlinuz \
-  --initrd isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-initrd.img \
-  --cmdpath ./dev/ocscmd/clone-first-disk.sh \
-  --image ./partimag
+Boot Media Options (choose one method):
+  1. From ZIP (recommended):
+     --zip <path>              Path to the Clonezilla live ZIP file. Automates the next 4 options.
+     --zip-output <dir>      Directory to store the extracted QCOW2, kernel, and initrd. (Default: ./zip)
+     --zip-size <size>         Size of the live QCOW2 image to create. (Default: 2G)
+     --zip-force               Force re-extraction of the ZIP file if output files already exist.
+
+  2. From extracted files:
+     --live <path>             Path to the Clonezilla live QCOW2 media.
+     --kernel <path>           Path to the kernel file (e.g., vmlinuz).
+     --initrd <path>           Path to the initrd file.
+
+VM and Task Options:
+  --disk <path>           Path to a virtual disk image (.qcow2). Can be specified multiple times.
+  --image <path>          Path to the shared directory for Clonezilla images (default: ./partimag).
+  --cmd <command>         Command string to execute inside Clonezilla (e.g., 'sudo ocs-sr ...').
+  --cmdpath <path>        Path to a script file to execute inside Clonezilla.
+  --append-args <args>    A string of custom kernel append arguments to override the default.
+  --append-args-file <path> Path to a file containing custom kernel append arguments.
+  --log-dir <path>        Directory to store log files (default: ./logs).
+  -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal).
+  -h, --help              Display this help message and exit.
+
+Example (Backup with ZIP):
+  ./qemu_clonezilla_ci_run.sh \
+    --disk ./qemu/source.qcow2 \
+    --zip ./zip/clonezilla-live-3.1.2-9-amd64.zip \
+    --cmdpath ./dev/ocscmd/clone-first-disk.sh \
+    --image ./partimag
+
+Example (Restore with extracted files):
+  ./qemu_clonezilla_ci_run.sh \
+    --disk ./qemu/restore.qcow2 \
+    --live ./isos/clonezilla.qcow2 \
+    --kernel ./isos/vmlinuz \
+    --initrd ./isos/initrd.img \
+    --cmd 'sudo /usr/sbin/ocs-sr -g auto -e1 auto -e2 -c -r -j2 -p poweroff restoredisk my-img-name sda' \
+    --image ./partimag
 ```
 
 ### `clonezilla_zip2qcow.sh`

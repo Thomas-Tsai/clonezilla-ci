@@ -24,11 +24,20 @@ print_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Run a fully automated, non-interactive Clonezilla task in a QEMU VM."
     echo ""
-    echo "Options:"
+    echo "Boot Media Options (choose one method):"
+    echo "  1. From ZIP (recommended):"
+    echo "     --zip <path>              Path to the Clonezilla live ZIP file. Automates the next 4 options."
+    echo "     --zip-output <dir>      Directory to store the extracted QCOW2, kernel, and initrd. (Default: ./zip)"
+    echo "     --zip-size <size>         Size of the live QCOW2 image to create. (Default: 2G)"
+    echo "     --zip-force               Force re-extraction of the ZIP file if output files already exist."
+    echo ""
+    echo "  2. From extracted files:"
+    echo "     --live <path>             Path to the Clonezilla live QCOW2 media."
+    echo "     --kernel <path>           Path to the kernel file (e.g., vmlinuz)."
+    echo "     --initrd <path>           Path to the initrd file."
+    echo ""
+    echo "VM and Task Options:"
     echo "  --disk <path>           Path to a virtual disk image (.qcow2). Can be specified multiple times."
-    echo "  --live <path>           Path to the Clonezilla live QCOW2 media."
-    echo "  --kernel <path>         Path to the kernel file (e.g., vmlinuz)."
-    echo "  --initrd <path>         Path to the initrd file."
     echo "  --image <path>          Path to the shared directory for Clonezilla images (default: ./partimag)."
     echo "  --cmd <command>         Command string to execute inside Clonezilla (e.g., 'sudo ocs-sr ...')."
     echo "  --cmdpath <path>        Path to a script file to execute inside Clonezilla."
@@ -38,16 +47,14 @@ print_usage() {
     echo "  -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal)."
     echo "  -h, --help              Display this help message and exit."
     echo ""
-    echo "Example (Backup):"
+    echo "Example (Backup with ZIP):"
     echo "  $0 \\"
     echo "    --disk ./qemu/source.qcow2 \\"
-    echo "    --live ./isos/clonezilla.qcow2 \\"
-    echo "    --kernel ./isos/vmlinuz \\"
-    echo "    --initrd ./isos/initrd.img \\"
+    echo "    --zip ./zip/clonezilla-live-3.1.2-9-amd64.zip \\"
     echo "    --cmdpath ./dev/ocscmd/clone-first-disk.sh \\"
     echo "    --image ./partimag"
     echo ""
-    echo "Example (Restore):"
+    echo "Example (Restore with extracted files):"
     echo "  $0 \\"
     echo "    --disk ./qemu/restore.qcow2 \\"
     echo "    --live ./isos/clonezilla.qcow2 \\"
@@ -94,6 +101,10 @@ CUSTOM_APPEND_ARGS=""
 APPEND_ARGS_FILE=""
 HOST_SCRIPT_DIR="" # Ensure variable is declared for the trap
 LOG_FILE="" # Initialize LOG_FILE
+CLONEZILLA_ZIP=""
+ZIP_OUTPUT_DIR="./zip"
+ZIP_IMAGE_SIZE="2G"
+ZIP_FORCE=0
 
 # Argument parsing
 while [[ "$#" -gt 0 ]]; do
@@ -108,18 +119,47 @@ while [[ "$#" -gt 0 ]]; do
         --disk)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 DISKS+=("$2")
-                shift # past argument
-                shift # past value
+                shift 2
             else
                 echo "Error: --disk requires a value." >&2
                 print_usage
             fi
             ;;
+        --zip)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                CLONEZILLA_ZIP="$2"
+                shift 2
+            else
+                echo "Error: --zip requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --zip-output)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                ZIP_OUTPUT_DIR="$2"
+                shift 2
+            else
+                echo "Error: --zip-output requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --zip-size)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                ZIP_IMAGE_SIZE="$2"
+                shift 2
+            else
+                echo "Error: --zip-size requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --zip-force)
+            ZIP_FORCE=1
+            shift 1
+            ;;
         --live)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 LIVE_DISK="$2"
-                shift # past argument
-                shift # past value
+                shift 2
             else
                 echo "Error: --live requires a value." >&2
                 print_usage
@@ -128,8 +168,7 @@ while [[ "$#" -gt 0 ]]; do
         --kernel)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 KERNEL_PATH="$2"
-                shift # past argument
-                shift # past value
+                shift 2
             else
                 echo "Error: --kernel requires a value." >&2
                 print_usage
@@ -138,8 +177,7 @@ while [[ "$#" -gt 0 ]]; do
         --initrd)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 INITRD_PATH="$2"
-                shift # past argument
-                shift # past value
+                shift 2
             else
                 echo "Error: --initrd requires a value." >&2
                 print_usage
@@ -148,8 +186,7 @@ while [[ "$#" -gt 0 ]]; do
         --cmd)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 OCS_COMMAND="$2"
-                shift # past argument
-                shift # past value
+                shift 2
             else
                 echo "Error: --cmd requires a value." >&2
                 print_usage
@@ -158,8 +195,7 @@ while [[ "$#" -gt 0 ]]; do
         --cmdpath)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 CMDPATH="$2"
-                shift # past argument
-                shift # past value
+                shift 2
             else
                 echo "Error: --cmdpath requires a value." >&2
                 print_usage
@@ -168,8 +204,7 @@ while [[ "$#" -gt 0 ]]; do
         --image)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 PARTIMAG_PATH="$2"
-                shift # past argument
-                shift # past value
+                shift 2
             else
                 echo "Error: --image requires a value." >&2
                 print_usage
@@ -178,8 +213,7 @@ while [[ "$#" -gt 0 ]]; do
         --append-args)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 CUSTOM_APPEND_ARGS="$2"
-                shift # past argument
-                shift # past value
+                shift 2
             else
                 echo "Error: --append-args requires a value." >&2
                 print_usage
@@ -188,8 +222,7 @@ while [[ "$#" -gt 0 ]]; do
         --append-args-file)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 APPEND_ARGS_FILE="$2"
-                shift # past argument
-                shift # past value
+                shift 2
             else
                 echo "Error: --append-args-file requires a value." >&2
                 print_usage
@@ -211,6 +244,55 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
+# --- Automatic ZIP Extraction ---
+if [ -n "$CLONEZILLA_ZIP" ]; then
+    # Validate that mutually exclusive boot options are not used
+    if [[ -n "$LIVE_DISK" || -n "$KERNEL_PATH" || -n "$INITRD_PATH" ]]; then
+        echo "Error: --zip cannot be used with --live, --kernel, or --initrd." >&2
+        print_usage
+    fi
+
+    # Check for the conversion script
+    CONVERSION_SCRIPT="./clonezilla_zip2qcow.sh"
+    if [ ! -x "$CONVERSION_SCRIPT" ]; then
+        echo "Error: Conversion script not found or not executable: $CONVERSION_SCRIPT" >&2
+        exit 1
+    fi
+
+    echo "--- Preparing boot media from ZIP ---"
+    
+    # Derive output paths from the zip name
+    ZIP_BASENAME=$(basename "$CLONEZILLA_ZIP" .zip)
+    OUTPUT_SUBDIR="$ZIP_OUTPUT_DIR/$ZIP_BASENAME"
+    
+    # Set the expected final paths for the boot files
+    LIVE_DISK="$OUTPUT_SUBDIR/$ZIP_BASENAME.qcow2"
+    KERNEL_PATH="$OUTPUT_SUBDIR/${ZIP_BASENAME}-vmlinuz"
+    INITRD_PATH="$OUTPUT_SUBDIR/${ZIP_BASENAME}-initrd.img"
+
+    # Check if all files exist or if --zip-force is used
+    if [ "$ZIP_FORCE" -eq 1 ] || [ ! -f "$LIVE_DISK" ] || [ ! -f "$KERNEL_PATH" ] || [ ! -f "$INITRD_PATH" ]; then
+        echo "Extracting Clonezilla ZIP. This may take a moment..."
+        
+        # Build the command
+        CONVERT_CMD=("$CONVERSION_SCRIPT" --zip "$CLONEZILLA_ZIP" --output "$ZIP_OUTPUT_DIR" --size "$ZIP_IMAGE_SIZE")
+        if [ "$ZIP_FORCE" -eq 1 ]; then
+            CONVERT_CMD+=("--force")
+        fi
+        
+        # Execute the command
+        if ! "${CONVERT_CMD[@]}"; then
+            echo "Error: Failed to process Clonezilla ZIP file. See output above." >&2
+            exit 1
+        fi
+        echo "Extraction complete."
+    else
+        echo "Required boot files already exist. Skipping extraction."
+    fi
+    echo "-----------------------------------"
+fi
+
+
 # --- Argument Validation ---
 
 # Ensure either --cmd or --cmdpath is provided, but not both.
@@ -231,7 +313,8 @@ fi
 
 # Validation for other required arguments
 if [[ ${#DISKS[@]} -eq 0 || -z "$LIVE_DISK" || -z "$KERNEL_PATH" || -z "$INITRD_PATH" ]]; then
-    echo "Error: Missing one or more required arguments: --disk, --live, --kernel, --initrd." >&2
+    echo "Error: Missing one or more required arguments." >&2
+    echo "Please provide --disk and boot media (e.g., --zip, or --live/--kernel/--initrd)." >&2
     print_usage
 fi
 
