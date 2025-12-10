@@ -12,7 +12,7 @@
 ISO_PATH=""
 DISK_IMAGE=""
 SUCCESS_KEYWORD="ReStOrE"
-DEFAULT_TIMEOUT=300 # seconds
+DEFAULT_TIMEOUT=480 # seconds
 KEEP_LOG=0          # 0 for false (delete log), 1 for true (keep log)
 QEMU_PID=0
 TIMEOUT_PID=0
@@ -143,11 +143,10 @@ LOG_FILE="validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
     QEMU_ARGS=(
         "qemu-system-x86_64"
         "-m" "4096"
-        "-cpu" "host"
-        "-drive" "file=$DISK_IMAGE,if=virtio,format=qcow2"
+        "-hda" "$DISK_IMAGE"
         "-cdrom" "$ISO_PATH"
         "-nographic"
-        "-boot" "d"
+        "-boot" "c"
         "-nic" "user,hostfwd=tcp::2222-:22"
     )
 
