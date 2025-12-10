@@ -34,6 +34,7 @@ print_usage() {
     echo "  --cmdpath <path>        Path to a script file to execute inside Clonezilla."
     echo "  --append-args <args>    A string of custom kernel append arguments to override the default."
     echo "  --append-args-file <path> Path to a file containing custom kernel append arguments."
+    echo "  --log-dir <path>        Directory to store log files (default: ./logs)."
     echo "  -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal)."
     echo "  -h, --help              Display this help message and exit."
     echo ""
@@ -82,6 +83,7 @@ trap cleanup EXIT
 # Default values
 INTERACTIVE_MODE=0
 PARTIMAG_PATH="./partimag"
+LOG_DIR="./logs" # New default log directory
 DISKS=()
 LIVE_DISK=""
 KERNEL_PATH=""
@@ -91,6 +93,7 @@ CMDPATH=""
 CUSTOM_APPEND_ARGS=""
 APPEND_ARGS_FILE=""
 HOST_SCRIPT_DIR="" # Ensure variable is declared for the trap
+LOG_FILE="" # Initialize LOG_FILE
 
 # Argument parsing
 while [[ "$#" -gt 0 ]]; do
@@ -192,6 +195,15 @@ while [[ "$#" -gt 0 ]]; do
                 print_usage
             fi
             ;;
+        --log-dir)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                LOG_DIR="$2"
+                shift 2
+            else
+                echo "Error: --log-dir requires a value." >&2
+                print_usage
+            fi
+            ;;
         *)
             echo "Error: Unknown option or missing value for $1" >&2
             print_usage
@@ -259,7 +271,8 @@ fi
 
 # Set log file name (only needed in non-interactive mode)
 if [ "$INTERACTIVE_MODE" -eq 0 ]; then
-    LOG_FILE="./clonezilla_ci_$(date +%Y%m%d_%H%M%S).log"
+    mkdir -p "$LOG_DIR" # Ensure log directory exists
+    LOG_FILE="$LOG_DIR/clonezilla_ci_$(date +%Y%m%d_%H%M%S).log"
 fi
 
 # Check if files exist

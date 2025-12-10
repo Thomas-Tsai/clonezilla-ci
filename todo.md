@@ -6,6 +6,16 @@ This directory contains scripts and tools for automating Clonezilla operations i
 
 - [x] 整個專案的readme 文件需要補充
 
+## start.sh 改進事項：
+開發一個 start.sh 腳本，這個腳本主要用來啟動一個完整的 clonezilla ci 流程, 使用 shunit2 來進行單元測試, 並且產生測試報告
+- [x] check shunit2 並提示安裝 (done)
+- [x] 實做單元測試，主要包含兩種類型 (done)
+    - [x] 作業系統測試，利用 linux-clone-restore.sh 以不同的 linux distro 進行 clonezilla 備份還原測試 (done)
+    - [x] 檔案系統測試，利用 data-clone-restore.sh 以不同的檔案系統類型進行 clonezilla 備份還原測試 (done)
+    - [x] zip檔不要寫死在程式碼裡面，可以在檔案前面進行定義 也可以用參數帶入 (done)
+    - [ ] 每一個測試的log 檔案要分開存放到 /log/XXX，方便debug (done)
+
+
 ## data-clone-restore.sh 改進事項：
 - [x] 整個 script flow 需要開發，完整flow, 參數說明
 - [x] 增加--help 參數可以讓使用者查詢使用說明
@@ -83,6 +93,7 @@ Error: Missing command. Please provide either --cmd or --cmdpath.
 - [x] 7. 發現 partimage 有殘留的 md_script_1764665091_12358  cmd_script_1764665393_8800 , 應該於執行完成之後刪除。
 - [x] 自動判斷是否 --enable-kvm
 - [x] 於完成時間顯示總共花費時間紀錄到log 檔案
+- [x] 增加參數設定log目錄，預設為當前目錄下的 logs/ 目錄 (done)
 
 ## clonezilla_zip2qcow.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
