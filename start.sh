@@ -113,15 +113,42 @@ test_debian_sid_clone_restore() {
     run_os_clone_restore "qemu/cloudimages/debian-sid-amd64.qcow2"
 }
 
+# Test for fedora system clone and restore
+test_fedora_clone_restore() {
+    run_os_clone_restore "qemu/cloudimages/fedora-43.qcow2"
+}
+
 # Test for exfat file system clone and restore
 test_exfat_clone_restore() {
     run_fs_clone_restore "exfat"
+}
+
+# Test for ntfs file system clone and restore
+test_ntfs_clone_restore() {
+    run_fs_clone_restore "ntfs"
+}
+
+
+# Test for vfat file system clone and restore
+test_vfat_clone_restore() {
+    run_fs_clone_restore "vfat"
 }
 
 # Test for ext4 file system clone and restore
 test_ext4_clone_restore() {
     run_fs_clone_restore "ext4"
 }
+
+# Test for xfs file system clone and restore
+test_xfs_clone_restore() {
+    run_fs_clone_restore "xfs"
+}
+
+# Test for btrfs file system clone and restore
+test_btrfs_clone_restore() {
+    run_fs_clone_restore "btrfs"
+}
+
 
 # Load shunit2
 . shunit2
