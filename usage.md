@@ -8,7 +8,7 @@ Before using these scripts, ensure the following dependencies are installed on y
 
 ```bash
 sudo apt update
-sudo apt install qemu-utils qemu-system-x86 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount
+sudo apt install qemu-utils qemu-system-x86 qemu-system-arm qemu-efi-aarch64 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount
 ```
 
 Here's a breakdown of what each package provides:
@@ -160,6 +160,7 @@ VM and Task Options:
   --cmdpath <path>        Path to a script file to execute inside Clonezilla.
   --append-args <args>    A string of custom kernel append arguments to override the default.
   --append-args-file <path> Path to a file containing custom kernel append arguments.
+  --qemu-args <args>      A string of extra arguments to pass to the QEMU command. Can be specified multiple times.
   --log-dir <path>        Directory to store log files (default: ./logs).
   -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal).
   -h, --help              Display this help message and exit.
@@ -199,20 +200,24 @@ This utility converts an official Clonezilla live ZIP distribution into a QCOW2 
 
 ### `clonezilla-boot.sh`
 
-This script boots a QEMU VM from a Clonezilla Live ISO. If `--iso` is not provided, it attempts to automatically download the latest stable AMD64 version from SourceForge. It attaches a disk image and a shared directory (`partimag/`) for manual operations.
+This script boots a QEMU VM from Clonezilla media for interactive use. It can boot from a ZIP file or an ISO. If no boot media is specified, it attempts to automatically download the latest stable ZIP for the chosen architecture. The user disk is optional.
 
 **Features:**
-- Uses long options (`--iso`, `--disk`, `--partimag`, `-h`/`--help`).
-- Validates argument existence.
-- **Auto-downloads** the latest stable AMD64 Clonezilla Live ISO if `--iso` is omitted.
+- Boot from ISO (`--iso`) or ZIP (`--zip`).
+- **Auto-downloads** the latest stable Clonezilla Live ZIP if no media is provided.
+- Attaching a user disk with `--disk` is optional.
+- Forwards port 2222 to the VM's port 22.
 
 **Usage:**
 ```bash
-# Boot with auto-downloaded Clonezilla ISO and default disk
+# Boot with auto-downloaded Clonezilla ZIP and attach a disk
 ./clonezilla-boot.sh --disk ./qemu/my-disk.qcow2
 
-# Boot with a specific ISO and disk image
-./clonezilla-boot.sh --iso ./isos/my-clonezilla.iso --disk ./qemu/my-disk.qcow2
+# Boot from a specific ISO without attaching any extra disk
+./clonezilla-boot.sh --iso ./isos/my-clonezilla.iso
+
+# Boot from a specific ZIP file
+./clonezilla-boot.sh --zip ./zip/clonezilla-live-stable-amd64.zip
 
 # Display help
 ./clonezilla-boot.sh --help

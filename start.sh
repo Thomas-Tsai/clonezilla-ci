@@ -10,23 +10,23 @@
 
 # --- Configurable variables ---
 SHUNIT_TIMER=1 # Enable test timing
-CLONEZILLA_ZIP="zip/clonezilla-live-20251124-resolute-amd64.zip"
+CLONEZILLA_ZIP=""
+ARCH="amd64"
 LOG_DIR="./logs"
+MAIN_LOG_FILE="${LOG_DIR}/start_sh_main_$(date +%Y%m%d_%H%M%S).log"
 testData="dev/testData"
 START_TIME=$(date +%s)
-ARCH="amd64"
-ZIP_WAS_SET=0
+
+# --- Setup Logging ---
+mkdir -p "$LOG_DIR"
+exec &> >(tee -a "$MAIN_LOG_FILE")
+
 
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --zip)
             CLONEZILLA_ZIP="$2"
-            ZIP_WAS_SET=1
-            shift 2
-            ;;
-        --arch)
-            ARCH="$2"
             shift 2
             ;;
         *)
@@ -35,10 +35,6 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
-
-if [ "$ZIP_WAS_SET" -eq 0 ]; then
-    CLONEZILLA_ZIP="zip/clonezilla-live-20251124-resolute-${ARCH}.zip"
-fi
 
 
 # Check for shunit2
@@ -109,17 +105,12 @@ run_fs_clone_restore() {
 
 # Test for ubuntu system clone and restore
 test_ubuntu_clone_restore() {
-    run_os_clone_restore "qemu/cloudimages/ubuntu-24.04.qcow2"
+    run_os_clone_restore "qemu/cloudimages/ubuntu-24.04-amd64.qcow2"
 }
 
 # Test for debian sid system clone and restore
 test_debian_sid_clone_restore() {
-    local image_path="qemu/cloudimages/debian-sid-daily-${ARCH}.qcow2"
-    if [ ! -f "$image_path" ]; then
-        echo "Skipping Debian SID test for $ARCH, image not found: $image_path"
-        return
-    fi
-    run_os_clone_restore "$image_path"
+    run_os_clone_restore "qemu/cloudimages/debian-sid-amd64.qcow2"
 }
 
 # Test for exfat file system clone and restore

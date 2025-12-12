@@ -43,6 +43,7 @@ print_usage() {
     echo "  --cmdpath <path>        Path to a script file to execute inside Clonezilla."
     echo "  --append-args <args>    A string of custom kernel append arguments to override the default."
     echo "  --append-args-file <path> Path to a file containing custom kernel append arguments."
+    echo "  --qemu-args <args>      A string of extra arguments to pass to the QEMU command. Can be specified multiple times."
     echo "  --log-dir <path>        Directory to store log files (default: ./logs)."
     echo "  --arch <arch>           Target architecture (amd64, arm64, riscv64). Default: amd64."
     echo "  -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal)."
@@ -108,10 +109,23 @@ ZIP_IMAGE_SIZE="2G"
 ZIP_FORCE=0
 ARCH="amd64"
 ARCH_WAS_SET=0
+EXTRA_QEMU_ARGS=()
 
 # Argument parsing
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --qemu-args)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                # Read the space-separated string into a temporary array
+                read -r -a temp_args <<< "$2"
+                # Append the elements of the temporary array to the main extra args array
+                EXTRA_QEMU_ARGS+=( "${temp_args[@]}" )
+                shift 2
+            else
+                echo "Error: --qemu-args requires a value." >&2
+                print_usage
+            fi
+            ;;
         --arch)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 ARCH="$2"
@@ -577,6 +591,11 @@ else
     fi
 fi
 QEMU_ARGS+=( "${QEMU_DISK_ARGS_ARRAY[@]}" )
+# Append any extra user-defined QEMU arguments
+if [ ${#EXTRA_QEMU_ARGS[@]} -gt 0 ]; then
+    QEMU_ARGS+=( "${EXTRA_QEMU_ARGS[@]}" )
+fi
+
 QEMU_ARGS+=(
     "-device" "virtio-net-pci,netdev=net0"
     "-netdev" "user,id=net0,hostfwd=tcp::2222-:22"

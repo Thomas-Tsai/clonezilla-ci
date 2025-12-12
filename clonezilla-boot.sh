@@ -12,11 +12,15 @@ command -v curl >/dev/null 2>&1 || { echo >&2 "ERROR: 'curl' is required for aut
 command -v wget >/dev/null 2>&1 || { echo >&2 "ERROR: 'wget' is required for auto-downloading. Please install it."; exit 1; }
 
 # --- Default values ---
-ISO_PATH="" # Now defaults to empty, will be set by logic
-DISK_IMAGE="qemu/debian.qcow2"
+ISO_PATH=""
+DISK_IMAGE="" # Optional
 PARTIMAG_PATH="partimag"
 DOWNLOAD_DIR="isos"
 ARCH="amd64"
+CLONEZILLA_ZIP=""
+ZIP_OUTPUT_DIR="zip"
+ZIP_IMAGE_SIZE="2G"
+ZIP_FORCE=0
 
 # --- Helper Functions ---
 
@@ -24,203 +28,229 @@ ARCH="amd64"
 print_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "This script boots a QEMU VM from a Clonezilla ISO. If --iso is not provided,"
-    echo "it will attempt to download the latest stable version for the specified architecture."
+    echo "This script boots a QEMU VM from Clonezilla media for interactive use."
+    echo "You can boot from an ISO or a ZIP file. If neither is provided, it will"
+    echo "attempt to download the latest stable Clonezilla ZIP for the specified architecture."
     echo ""
-    echo "Optional Arguments:"
-    echo "  --iso <path>      Path to the Clonezilla Live ISO file. If omitted, downloads the latest."
-    echo "  --disk <path>     Path to the QCOW2 disk image to attach. (Default: $DISK_IMAGE)"
-    echo "  --partimag <path> Path to the shared directory for Clonezilla images. (Default: $PARTIMAG_PATH)"
-    echo "  --arch <arch>     Target architecture (amd64, arm64). Default: amd64."
-    echo "  -h, --help        Display this help message and exit."
+    echo "Boot Media Options (choose one):"
+    echo "  --iso <path>          Path to the Clonezilla Live ISO file."
+    echo "  --zip <path>          Path to the Clonezilla live ZIP file."
     echo ""
-    echo "Example:"
-    echo "  $0 --disk ./qemu/my-disk.qcow2  # Auto-downloads Clonezilla"
-    echo "  $0 --iso ./isos/my-clonezilla.iso --disk ./qemu/my-disk.qcow2"
+    echo "VM and Other Options:"
+    echo "  --disk <path>         Path to a QCOW2 disk image to attach (optional)."
+    echo "  --partimag <path>     Path to the shared directory for Clonezilla images. (Default: $PARTIMAG_PATH)"
+    echo "  --arch <arch>         Target architecture (amd64, arm64, riscv64). Default: amd64."
+    echo "  -h, --help            Display this help message and exit."
+    echo ""
+    echo "Zip Extraction Options (used with --zip or auto-download):"
+    echo "  --zip-output <dir>    Directory to store extracted files. (Default: $ZIP_OUTPUT_DIR)"
+    echo "  --zip-size <size>     Size of the live QCOW2 image to create. (Default: $ZIP_IMAGE_SIZE)"
+    echo "  --zip-force           Force re-extraction of the ZIP file."
+    echo ""
+    echo "Examples:"
+    echo "  # Boot with auto-downloaded Clonezilla ZIP and attach a disk"
+    echo "  $0 --disk ./qemu/my-disk.qcow2"
+    echo ""
+    echo "  # Boot from a specific ISO without any extra disk"
+    echo "  $0 --iso ./isos/my-clonezilla.iso"
+    echo ""
+    echo "  # Boot from a specific ZIP"
+    echo "  $0 --zip ./zip/my-clonezilla.zip"
 }
 
-# Function to download the latest Clonezilla stable ISO for the specified architecture
-download_latest_clonezilla() {
-    echo "--- Auto-downloading latest Clonezilla ($ARCH) ---"
+
+# Function to download the latest Clonezilla stable ZIP for the specified architecture
+download_latest_clonezilla_zip() {
+    echo "--- Auto-downloading latest Clonezilla ZIP ($ARCH) ---"
     
-    # URL of the stable directory on SourceForge
     local stable_url="https://sourceforge.net/projects/clonezilla/files/clonezilla_live_stable/"
-    
     echo "1. Finding the latest version from SourceForge..."
     
-    # Fetch the directory listing and find the latest version folder (numeric, e.g., "3.1.2-9")
-    # We look for links pointing to directories, sort them by version, and take the last one.
     local latest_version
     latest_version=$(curl -sL "$stable_url" | grep -oP 'href="/projects/clonezilla/files/clonezilla_live_stable/\K[0-9.-]+(?=/")' | sort -V | tail -n 1)
     
     if [ -z "$latest_version" ]; then
         echo "ERROR: Could not determine the latest version from SourceForge." >&2
-        echo "Please specify an ISO manually using the --iso flag." >&2
         exit 1
     fi
-    
     echo "Latest version found: $latest_version"
     
-    local iso_filename="clonezilla-live-${latest_version}-${ARCH}.iso"
-    local download_url="${stable_url}${latest_version}/${iso_filename}/download"
-    local target_iso_path="${DOWNLOAD_DIR}/${iso_filename}"
+    local zip_filename="clonezilla-live-${latest_version}-${ARCH}.zip"
+    local download_url="${stable_url}${latest_version}/${zip_filename}/download"
+    local target_zip_path="${DOWNLOAD_DIR}/${zip_filename}"
     
-    # Check if the ISO already exists
-    if [ -f "$target_iso_path" ]; then
-        echo "2. ISO file already exists: $target_iso_path. Skipping download."
-        ISO_PATH="$target_iso_path"
+    if [ -f "$target_zip_path" ]; then
+        echo "2. ZIP file already exists: $target_zip_path. Skipping download."
+        CLONEZILLA_ZIP="$target_zip_path"
         return 0
     fi
     
-    echo "2. Downloading ISO: $iso_filename"
-    
-    # Create the download directory if it doesn't exist
+    echo "2. Downloading ZIP: $zip_filename"
     mkdir -p "$DOWNLOAD_DIR"
-    
-    # Use wget to download, with resume capability
-    wget --show-progress -c -O "$target_iso_path" "$download_url"
+    wget --show-progress -c -O "$target_zip_path" "$download_url"
     
     if [ $? -ne 0 ]; then
-        echo "ERROR: Download failed. Please try again or specify an ISO manually." >&2
-        rm -f "$target_iso_path" # Clean up partial file
+        echo "ERROR: Download failed. Please try again or specify a file manually." >&2
+        rm -f "$target_zip_path"
         exit 1
     fi
     
-    echo "Download complete: $target_iso_path"
-    ISO_PATH="$target_iso_path"
+    echo "Download complete: $target_zip_path"
+    CLONEZILLA_ZIP="$target_zip_path"
 }
 
 
 # --- Argument Parsing ---
-# We need to parse --iso first to see if we need to download
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
-        --arch)
-            ARCH="$2"
-            shift 2
-            ;;
-        --iso)
-            ISO_PATH="$2"
-            shift 2
-            ;;
-        --disk)
-            DISK_IMAGE="$2"
-            shift 2
-            ;;
-        --partimag)
-            PARTIMAG_PATH="$2"
-            shift 2
-            ;;
-        -h|--help)
-            print_usage
-            exit 0
-            ;;
-        *)
-            echo "ERROR: Unknown argument: $1" >&2
-            print_usage
-            exit 1
-            ;;
+        --arch) ARCH="$2"; shift 2 ;;
+        --iso) ISO_PATH="$2"; shift 2 ;;
+        --zip) CLONEZILLA_ZIP="$2"; shift 2 ;;
+        --zip-output) ZIP_OUTPUT_DIR="$2"; shift 2 ;;
+        --zip-size) ZIP_IMAGE_SIZE="$2"; shift 2 ;;
+        --zip-force) ZIP_FORCE=1; shift 1 ;;
+        --disk) DISK_IMAGE="$2"; shift 2 ;;
+        --partimag) PARTIMAG_PATH="$2"; shift 2 ;;
+        -h|--help) print_usage; exit 0 ;;
+        *) echo "ERROR: Unknown argument: $1" >&2; print_usage; exit 1 ;;
     esac
 done
 
-# --- Main Logic ---
+# --- Main Logic and Validation ---
 
-# If no ISO was provided, trigger the download
-if [ -z "$ISO_PATH" ]; then
-    download_latest_clonezilla
+if [[ -n "$ISO_PATH" && -n "$CLONEZILLA_ZIP" ]]; then
+    echo "ERROR: --iso and --zip cannot be used together. Please choose one." >&2
+    exit 1
+fi
+
+# If no boot media was provided, trigger the download
+if [[ -z "$ISO_PATH" && -z "$CLONEZILLA_ZIP" ]]; then
+    download_latest_clonezilla_zip
+fi
+
+# --- Automatic ZIP Extraction ---
+if [ -n "$CLONEZILLA_ZIP" ]; then
+    CONVERSION_SCRIPT="./clonezilla-zip2qcow.sh"
+    if [ ! -x "$CONVERSION_SCRIPT" ]; then
+        echo "Error: Conversion script not found or not executable: $CONVERSION_SCRIPT" >&2
+        exit 1
+    fi
+
+    echo "--- Preparing boot media from ZIP ---"
+    ZIP_BASENAME=$(basename "$CLONEZILLA_ZIP" .zip)
+    OUTPUT_SUBDIR="$ZIP_OUTPUT_DIR/$ZIP_BASENAME"
+    
+    LIVE_DISK="$OUTPUT_SUBDIR/$ZIP_BASENAME.qcow2"
+    KERNEL_PATH="$OUTPUT_SUBDIR/${ZIP_BASENAME}-vmlinuz"
+    INITRD_PATH="$OUTPUT_SUBDIR/${ZIP_BASENAME}-initrd.img"
+
+    if [ "$ZIP_FORCE" -eq 1 ] || [ ! -f "$LIVE_DISK" ] || [ ! -f "$KERNEL_PATH" ] || [ ! -f "$INITRD_PATH" ]; then
+        echo "Extracting Clonezilla ZIP. This may take a moment..."
+        CONVERT_CMD=("$CONVERSION_SCRIPT" --zip "$CLONEZILLA_ZIP" --output "$ZIP_OUTPUT_DIR" --size "$ZIP_IMAGE_SIZE" --arch "$ARCH")
+        if [ "$ZIP_FORCE" -eq 1 ]; then CONVERT_CMD+=("--force"); fi
+        
+        if ! "${CONVERT_CMD[@]}"; then
+            echo "Error: Failed to process Clonezilla ZIP file." >&2
+            exit 1
+        fi
+    else
+        echo "Required boot files already exist. Skipping extraction."
+    fi
+    echo "-----------------------------------"
 fi
 
 # --- Argument Validation ---
-if [ ! -f "$ISO_PATH" ]; then
-    echo "ERROR: ISO file not found: $ISO_PATH" >&2
-    echo "Download may have failed or an incorrect path was provided." >&2
-    exit 1
+if [ -n "$ISO_PATH" ] && [ ! -f "$ISO_PATH" ]; then
+    echo "ERROR: ISO file not found: $ISO_PATH" >&2; exit 1;
 fi
-
-if [ ! -f "$DISK_IMAGE" ]; then
-    echo "ERROR: Disk image not found: $DISK_IMAGE" >&2
-    echo "Please specify a valid path using the --disk option." >&2
-    exit 1
+if [ -n "$CLONEZILLA_ZIP" ] && [ ! -f "$CLONEZILLA_ZIP" ]; then
+    echo "ERROR: ZIP file not found: $CLONEZILLA_ZIP" >&2; exit 1;
 fi
-
+if [ -n "$DISK_IMAGE" ] && [ ! -f "$DISK_IMAGE" ]; then
+    echo "ERROR: Disk image not found: $DISK_IMAGE" >&2; exit 1;
+fi
 if [ ! -d "$PARTIMAG_PATH" ]; then
-    echo "ERROR: The partimag directory does not exist: $PARTIMAG_PATH" >&2
-    echo "Please create it or specify a valid path using the --partimag option." >&2
-    exit 1
+    echo "ERROR: The partimag directory does not exist: $PARTIMAG_PATH" >&2; exit 1;
 fi
 
 # --- QEMU Execution ---
 echo "--- Starting QEMU with Clonezilla ---"
-echo "ISO File: $ISO_PATH"
-echo "Disk Image: $DISK_IMAGE"
-echo "Image Share: $PARTIMAG_PATH"
-echo "-------------------------------------"
 
 # Set QEMU binary and machine type based on architecture
 case "$ARCH" in
-    "amd64")
-        QEMU_BINARY="qemu-system-x86_64"
-        QEMU_MACHINE_ARGS=()
-        ;;
-    "arm64")
-        QEMU_BINARY="qemu-system-aarch64"
-        QEMU_MACHINE_ARGS=("-machine" "virt" "-bios" "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd")
-        ;;
-    *)
-        echo "Error: Unsupported architecture for this script: $ARCH" >&2
-        exit 1
-        ;;
+    "amd64") QEMU_BINARY="qemu-system-x86_64"; QEMU_MACHINE_ARGS=() ;;
+    "arm64") QEMU_BINARY="qemu-system-aarch64"; QEMU_MACHINE_ARGS=("-machine" "virt" "-bios" "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd") ;;
+    "riscv64") QEMU_BINARY="qemu-system-riscv64"; QEMU_MACHINE_ARGS=("-machine" "virt") ;;
+    *) echo "Error: Unsupported architecture: $ARCH" >&2; exit 1 ;;
 esac
 
-# Check if QEMU binary exists
 if ! command -v "$QEMU_BINARY" &> /dev/null; then
-    echo "Error: QEMU binary not found for architecture '$ARCH': $QEMU_BINARY" >&2
-    echo "Please ensure the QEMU system emulator for '$ARCH' is installed and in your PATH." >&2
-    echo "On Debian/Ubuntu, you might need to install 'qemu-system-arm' (for arm64) or 'qemu-system-misc' (for riscv64)." >&2
-    exit 1
+    echo "Error: QEMU binary not found for '$ARCH': $QEMU_BINARY" >&2; exit 1;
 fi
 
-QEMU_ARGS=(
-    "$QEMU_BINARY"
-    "-m" "4096"
-    "-drive" "file=$DISK_IMAGE,if=virtio,format=qcow2"
-    "-cdrom" "$ISO_PATH"
-    "-boot" "d"
+QEMU_ARGS=("$QEMU_BINARY" "-m" "4096" "-smp" "2")
+
+# --- Add boot media ---
+if [ -n "$CLONEZILLA_ZIP" ]; then
+    echo "Booting from ZIP..."
+    # Booting from extracted kernel, initrd and live media qcow2
+    QEMU_ARGS+=(
+        "-kernel" "$KERNEL_PATH"
+        "-initrd" "$INITRD_PATH"
+        "-drive" "id=livemedia,file=$LIVE_DISK,format=qcow2,if=virtio"
+        "-append" "boot=live config union=overlay noswap nomodeset noninteractive locales=en_US.UTF-8 keyboard-layouts=us live-getty console=ttyS0,38400n81 live-media=/dev/vda1 live-media-path=/live toram ocs_prerun1=\"mkdir -p /home/partimag\" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\" noeject noprompt"
+    )
+elif [ -n "$ISO_PATH" ]; then
+    echo "Booting from ISO..."
+    QEMU_ARGS+=("-cdrom" "$ISO_PATH" "-boot" "d")
+fi
+
+# --- Conditionally add user disk ---
+if [ -n "$DISK_IMAGE" ]; then
+    echo "Attaching disk: $DISK_IMAGE"
+    # Attach user disk as the next available virtio device
+    if [ -n "$CLONEZILLA_ZIP" ]; then
+        QEMU_ARGS+=("-drive" "id=userdisk,file=$DISK_IMAGE,format=qcow2,if=virtio") # vdb
+    else
+        QEMU_ARGS+=("-drive" "id=userdisk,file=$DISK_IMAGE,format=qcow2,if=virtio") # vda
+    fi
+fi
+
+# --- Add common devices ---
+QEMU_ARGS+=(
     "-fsdev" "local,id=hostshare,path=$PARTIMAG_PATH,security_model=mapped-xattr"
     "-device" "virtio-9p-pci,fsdev=hostshare,mount_tag=hostshare"
     "-nic" "user,hostfwd=tcp::2222-:22"
-    "-display" "gtk"
-    "-serial" "mon:stdio"
 )
 
 if [ ${#QEMU_MACHINE_ARGS[@]} -gt 0 ]; then
     QEMU_ARGS+=("${QEMU_MACHINE_ARGS[@]}")
 fi
 
-# KVM and CPU host are not always available/compatible
-if [ -e "/dev/kvm" ] && [ "$(groups | grep -c kvm)" -gt 0 ]; then
-    HOST_ARCH=$(uname -m)
-    KVM_SUPPORTED=false
-    if [[ "$ARCH" == "amd64" && "$HOST_ARCH" == "x86_64" ]]; then
-        KVM_SUPPORTED=true
-        QEMU_ARGS+=("-enable-kvm" "-cpu" "host")
-    elif [[ "$ARCH" == "arm64" && "$HOST_ARCH" == "aarch64" ]]; then
-        KVM_SUPPORTED=true
-        QEMU_ARGS+=("-enable-kvm" "-cpu" "host")
-    fi
-
-    if [[ "$KVM_SUPPORTED" == "false" ]]; then
-        echo "INFO: KVM is available on this host, but not for the target architecture '$ARCH'. Running in emulation mode."
-        if [[ "$ARCH" == "arm64" ]]; then
-            QEMU_ARGS+=("-cpu" "cortex-a57")
-        fi
-    fi
+# --- Set QEMU display and serial arguments based on architecture ---
+if [[ "$ARCH" == "amd64" ]]; then
+    QEMU_ARGS+=("-display" "gtk")
+    QEMU_ARGS+=("-serial" "mon:stdio") # Keep serial for GUI modes
 else
-    # No KVM available at all.
-    # For arm64 emulation, a CPU must be specified.
-    if [[ "$ARCH" == "arm64" ]]; then
-        QEMU_ARGS+=("-cpu" "cortex-a57")
-    fi
+    # For arm64/riscv64, prefer nographic console output
+    QEMU_ARGS+=("-nographic")
+    # -nographic usually implies serial to stdio, so no need for -serial mon:stdio explicitly
 fi
 
+# --- KVM acceleration ---
+if [ -e "/dev/kvm" ] && [ "$(groups | grep -c kvm)" -gt 0 ]; then
+    HOST_ARCH=$(uname -m)
+    if [[ "$ARCH" == "amd64" && "$HOST_ARCH" == "x86_64" ]] || [[ "$ARCH" == "arm64" && "$HOST_ARCH" == "aarch64" ]]; then
+        QEMU_ARGS+=("-enable-kvm" "-cpu" "host")
+    else
+        echo "INFO: KVM available but not for target arch '$ARCH'. Emulating."
+        if [[ "$ARCH" == "arm64" ]]; then QEMU_ARGS+=("-cpu" "cortex-a57"); fi
+    fi
+else
+    if [[ "$ARCH" == "arm64" ]]; then QEMU_ARGS+=("-cpu" "cortex-a57"); fi
+fi
+
+echo "--- Executing QEMU ---"
+echo "Command: ${QEMU_ARGS[*]}"
 "${QEMU_ARGS[@]}"
+

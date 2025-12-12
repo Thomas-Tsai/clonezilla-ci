@@ -22,7 +22,7 @@ Ensure the following dependencies are installed. On a Debian-based system, you c
 
 ```bash
 sudo apt update
-sudo apt install qemu-utils qemu-system-x86 libguestfs-tools shunit2 unzip curl wget uuid-runtime genisoimage
+sudo apt install qemu-utils qemu-system-x86 qemu-system-arm qemu-efi-aarch64 libguestfs-tools shunit2 unzip curl wget uuid-runtime genisoimage
 ```
 It is also recommended that your user be part of the `kvm` group for hardware-accelerated virtualization:
 ```bash
