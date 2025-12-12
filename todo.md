@@ -7,7 +7,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 整個專案的readme 文件需要補充
 - [x] 整個專案的usage 文件需要補充
 - [x] 整個專案需要支援多架構，先處理 riscv-64, arm64 架構支援; 所有script 需要支援多架構
-- [ ] 相依的套件要補上 qemu-efi-aarch64 qemu-system-arm
+- [ ] 相依的套件要補上 qemu-efi-aarch64 qemu-system-arm for usage
 
 ## start.sh 改進事項：
 開發一個 start.sh 腳本，這個腳本主要用來啟動一個完整的 clonezilla ci 流程, 使用 shunit2 來進行單元測試, 並且產生測試報告
@@ -103,6 +103,10 @@ Error: Missing command. Please provide either --cmd or --cmdpath.
       initrd.img,                  --initrd <path>         Path to the initrd file.
       且不要重複進行解壓縮，如果三個檔案都已經存在，就跳過這個步驟
       如果只有部份檔案，就還是需要使用 clonezilla-zip2qcow.sh 來解壓縮 with --force 參數來強制覆蓋
+- [ ] 增加額外qemu參數，例如要設定mtddevice 等參數，以便支援更多硬體裝置模擬，例如
+    -drive file=mtd.img,format=raw,id=mtddev0 \
+    -device mtd-ram,id=mtd0,drive=mtddev0,size=0x4000000 \ # Or similar mtd device
+    要怎麼安全的合併到 qemu-clonezilla-ci-run.sh
 
 ## clonezilla-zip2qcow.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
@@ -117,6 +121,8 @@ Error: Missing command. Please provide either --cmd or --cmdpath.
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 2. 增加--help 參數可以讓使用者查詢使用說明
 - [x] 3. 自動下載 clonezilla iso 檔案，當沒有指定 --iso 參數時，自動下載最新的 clonezilla iso 檔案，預設下載stable amd64 iso 版本
+- [ ] 增加參數 --zip 行為類似 qemu-clonezilla-ci-run.sh 的用 clonezilla-zip2qcow.sh , 自動解壓縮 zip 檔案取得 vmlinux, initrd.img, clonezilla-live-xxxx.qcow2, 並以qemu開機，用console 顯示。主要用來確認可以用clonezilla iso zip 開機就好，不需要額外指定append args 與 ocs cmd
+- [ ] --disk 換成optional 參數, 如果有指定就掛載qcow2 磁碟映像檔案, 沒有指定就不掛載
 
 ## debian-install.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。

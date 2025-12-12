@@ -153,7 +153,7 @@ echo
 
 echo "--- (Step 2/5) Preparing Source Disk for Backup ---"
 TMPL_BASENAME=$(basename "$TEMPLATE_QCOW")
-BACKUP_SOURCE_DISK="$QEMU_DIR/${TMPL_BASENAME}.sda.qcow2"
+BACKUP_SOURCE_DISK="$QEMU_DIR/${TMPL_BASENAME}.vda.qcow2"
 cp "$TEMPLATE_QCOW" "$BACKUP_SOURCE_DISK"
 echo "Copied template to $BACKUP_SOURCE_DISK"
 echo "--- Source Disk prepared successfully. ---"

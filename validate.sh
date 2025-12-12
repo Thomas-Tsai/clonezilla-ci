@@ -181,21 +181,20 @@ LOG_FILE="validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
         "-nic" "user,hostfwd=tcp::2222-:22"
     )
 
-    # Use modern virtio for arm64/riscv64, and classic -hda for amd64
-    if [[ "$ARCH" == "arm64" ]]; then
+    # Use modern virtio-blk-pci for all architectures for consistent /dev/vdX naming.
+    QEMU_ARGS+=("-drive" "id=drive0,file=$DISK_IMAGE,format=qcow2,if=none")
+    QEMU_ARGS+=("-device" "virtio-blk-pci,drive=drive0")
+
+    # For architectures that require it, set the boot order.
+    # RISC-V boot is typically handled by the bootloader/kernel, so we don't set -boot.
+    if [[ "$ARCH" != "riscv64" ]]; then
         QEMU_ARGS+=("-boot" "c")
-        QEMU_ARGS+=("-drive" "id=drive0,file=$DISK_IMAGE,format=qcow2,if=none")
-        QEMU_ARGS+=("-device" "virtio-blk-pci,drive=drive0")
-    elif [[ "$ARCH" == "riscv64" ]]; then
-        # For riscv64 cloud images, we don't specify -boot, as the boot order
-        # is handled by the u-boot kernel and its environment.
-        QEMU_ARGS+=("-device" "virtio-blk-device,drive=hd")
-        QEMU_ARGS+=("-drive" "file=$DISK_IMAGE,if=none,id=hd")
-        QEMU_ARGS+=("-object" "rng-random,filename=/dev/urandom,id=rng")
-        QEMU_ARGS+=("-device" "virtio-rng-device,rng=rng")
-    else
-        QEMU_ARGS+=("-boot" "c")
-        QEMU_ARGS+=("-hda" "$DISK_IMAGE")
+    fi
+
+    # Add virtio RNG for non-amd64 architectures for better entropy.
+    if [[ "$ARCH" == "riscv64" ]]; then
+      QEMU_ARGS+=("-object" "rng-random,filename=/dev/urandom,id=rng")
+      QEMU_ARGS+=("-device" "virtio-rng-device,rng=rng")
     fi
 
     if [ ${#QEMU_MACHINE_ARGS[@]} -gt 0 ]; then

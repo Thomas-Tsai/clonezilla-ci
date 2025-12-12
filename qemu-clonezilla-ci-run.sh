@@ -61,7 +61,7 @@ print_usage() {
     echo "    --live ./isos/clonezilla.qcow2 \\"
     echo "    --kernel ./isos/vmlinuz \\"
     echo "    --initrd ./isos/initrd.img \\"
-    echo "    --cmd 'sudo /usr/sbin/ocs-sr -g auto -e1 auto -e2 -c -r -j2 -p poweroff restoredisk my-img-name sda' \\"
+    echo "    --cmd 'sudo /usr/sbin/ocs-sr -g auto -e1 auto -e2 -c -r -j2 -p poweroff restoredisk my-img-name vda' \\"
     echo "    --image ./partimag"
     exit 1
 }
@@ -460,8 +460,7 @@ LIVE_DISK_INDEX=$((${#DISKS[@]}))
 QEMU_DISK_ARGS_ARRAY=()
 LIVE_MEDIA_DEVICE=""
 
-if [[ "$ARCH" == "arm64" || "$ARCH" == "riscv64" ]]; then
-    # For ARM64 and RISC-V, use modern virtio-blk-pci devices for predictable /dev/vdX naming.
+    # Use modern virtio-blk-pci devices for predictable /dev/vdX naming across all architectures.
     DEVICE_NAMES=('vda' 'vdb' 'vdc' 'vdd' 'vde' 'vdf')
     for i in "${!ALL_DISKS[@]}"; do
         if [ $i -lt ${#DEVICE_NAMES[@]} ]; then
@@ -479,24 +478,6 @@ if [[ "$ARCH" == "arm64" || "$ARCH" == "riscv64" ]]; then
             break
         fi
     done
-else
-    # For amd64, stick to the classic -hdX mapping which results in /dev/sdX devices.
-    DRIVE_LETTERS=('a' 'b' 'c' 'd' 'e' 'f')
-    DEVICE_NAMES=('sda' 'sdb' 'sdc' 'sdd' 'sde' 'sdf')
-    for i in "${!ALL_DISKS[@]}"; do
-        if [ $i -lt ${#DRIVE_LETTERS[@]} ]; then
-            drive_letter=${DRIVE_LETTERS[$i]}
-            QEMU_DISK_ARGS_ARRAY+=("-hd${drive_letter}" "${ALL_DISKS[$i]}")
-            
-            if [ $i -eq $LIVE_DISK_INDEX ]; then
-                LIVE_MEDIA_DEVICE="${DEVICE_NAMES[$i]}"
-            fi
-        else
-            echo "Warning: Maximum number of disks (${#DRIVE_LETTERS[@]}) exceeded. Ignoring extra disks."
-            break
-        fi
-    done
-fi
 
 if [ -z "$LIVE_MEDIA_DEVICE" ]; then
     echo "Error: Could not determine the device for the live media disk." >&2

@@ -296,7 +296,7 @@ else
 fi
 
 CLONE_IMAGE_NAME="dcr-image-$(date +%s)"
-OCS_COMMAND="sudo /usr/sbin/ocs-sr -b -y -j2 -p poweroff savedisk ${CLONE_IMAGE_NAME} sda"
+OCS_COMMAND="sudo /usr/sbin/ocs-sr -b -y -j2 -p poweroff savedisk ${CLONE_IMAGE_NAME} vda"
 # Use -b and -y for non-interactive batch mode
 ./qemu-clonezilla-ci-run.sh \
     --disk "$SOURCE_DISK_QCOW2" \
@@ -325,7 +325,7 @@ RESTORE_DISK_SIZE=$(printf "%.0fG" "$RESTORE_DISK_SIZE_RAW")
 echo "INFO: Creating blank restore disk: $RESTORE_DISK_QCOW2 (Size: $RESTORE_DISK_SIZE)"
 qemu-img create -f qcow2 "$RESTORE_DISK_QCOW2" "$RESTORE_DISK_SIZE"
 
-OCS_COMMAND_RESTORE="sudo /usr/sbin/ocs-sr -b -y -j2 -p poweroff restoredisk ${CLONE_IMAGE_NAME} sda"
+OCS_COMMAND_RESTORE="sudo /usr/sbin/ocs-sr -b -y -j2 -p poweroff restoredisk ${CLONE_IMAGE_NAME} vda"
 
 ./qemu-clonezilla-ci-run.sh \
     --disk "$RESTORE_DISK_QCOW2" \
