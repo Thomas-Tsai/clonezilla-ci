@@ -44,6 +44,7 @@ print_usage() {
     echo "  --append-args <args>    A string of custom kernel append arguments to override the default."
     echo "  --append-args-file <path> Path to a file containing custom kernel append arguments."
     echo "  --log-dir <path>        Directory to store log files (default: ./logs)."
+    echo "  --arch <arch>           Target architecture (amd64, arm64, riscv64). Default: amd64."
     echo "  -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal)."
     echo "  -h, --help              Display this help message and exit."
     echo ""
@@ -105,10 +106,22 @@ CLONEZILLA_ZIP=""
 ZIP_OUTPUT_DIR="./zip"
 ZIP_IMAGE_SIZE="2G"
 ZIP_FORCE=0
+ARCH="amd64"
+ARCH_WAS_SET=0
 
 # Argument parsing
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --arch)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                ARCH="$2"
+                ARCH_WAS_SET=1
+                shift 2
+            else
+                echo "Error: --arch requires a value." >&2
+                print_usage
+            fi
+            ;;
         -i|--interactive)
             INTERACTIVE_MODE=1
             shift # past argument
@@ -244,6 +257,33 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
+# --- Architecture Inference ---
+if [[ "$ARCH_WAS_SET" -eq 0 ]]; then
+    # If --arch was not specified, try to infer it from the input files
+    FILE_TO_INSPECT=""
+    if [[ -n "$CLONEZILLA_ZIP" ]]; then
+        FILE_TO_INSPECT="$CLONEZILLA_ZIP"
+    elif [[ -n "$KERNEL_PATH" ]]; then
+        # This case handles when user provides --kernel but not --zip
+        FILE_TO_INSPECT="$KERNEL_PATH"
+    fi
+
+    if [[ -n "$FILE_TO_INSPECT" ]]; then
+        if echo "$FILE_TO_INSPECT" | grep -q "arm64"; then
+            ARCH="arm64"
+            echo "INFO: Inferred architecture as 'arm64' from input file. Use --arch to override."
+        elif echo "$FILE_TO_INSPECT" | grep -q "riscv64"; then
+            ARCH="riscv64"
+            echo "INFO: Inferred architecture as 'riscv64' from input file. Use --arch to override."
+        elif echo "$FILE_TO_INSPECT" | grep -q "amd64"; then
+            ARCH="amd64"
+            # No message for the default case
+        else
+            echo "WARNING: Could not infer architecture from input file name. Defaulting to '$ARCH'. Use --arch to specify."
+        fi
+    fi
+fi
+
 # --- Automatic ZIP Extraction ---
 if [ -n "$CLONEZILLA_ZIP" ]; then
     # Validate that mutually exclusive boot options are not used
@@ -253,7 +293,7 @@ if [ -n "$CLONEZILLA_ZIP" ]; then
     fi
 
     # Check for the conversion script
-    CONVERSION_SCRIPT="./clonezilla_zip2qcow.sh"
+    CONVERSION_SCRIPT="./clonezilla-zip2qcow.sh"
     if [ ! -x "$CONVERSION_SCRIPT" ]; then
         echo "Error: Conversion script not found or not executable: $CONVERSION_SCRIPT" >&2
         exit 1
@@ -275,7 +315,7 @@ if [ -n "$CLONEZILLA_ZIP" ]; then
         echo "Extracting Clonezilla ZIP. This may take a moment..."
         
         # Build the command
-        CONVERT_CMD=("$CONVERSION_SCRIPT" --zip "$CLONEZILLA_ZIP" --output "$ZIP_OUTPUT_DIR" --size "$ZIP_IMAGE_SIZE")
+        CONVERT_CMD=("$CONVERSION_SCRIPT" --zip "$CLONEZILLA_ZIP" --output "$ZIP_OUTPUT_DIR" --size "$ZIP_IMAGE_SIZE" --arch "$ARCH")
         if [ "$ZIP_FORCE" -eq 1 ]; then
             CONVERT_CMD+=("--force")
         fi
@@ -417,27 +457,46 @@ fi
 ALL_DISKS=("${DISKS[@]}" "$LIVE_DISK")
 LIVE_DISK_INDEX=$((${#DISKS[@]}))
 
-# Define mappings for QEMU drive letters and guest OS device names.
-DRIVE_LETTERS=('a' 'b' 'c' 'd' 'e' 'f')
-DEVICE_NAMES=('sda' 'sdb' 'sdc' 'sdd' 'sde' 'sdf')
-
 QEMU_DISK_ARGS_ARRAY=()
 LIVE_MEDIA_DEVICE=""
 
-# Build the -hdX arguments for QEMU and identify the device name for the live media.
-for i in "${!ALL_DISKS[@]}"; do
-    if [ $i -lt ${#DRIVE_LETTERS[@]} ]; then
-        drive_letter=${DRIVE_LETTERS[$i]}
-        QEMU_DISK_ARGS_ARRAY+=("-hd${drive_letter}" "${ALL_DISKS[$i]}")
-        
-        if [ $i -eq $LIVE_DISK_INDEX ]; then
-            LIVE_MEDIA_DEVICE="${DEVICE_NAMES[$i]}"
+if [[ "$ARCH" == "arm64" || "$ARCH" == "riscv64" ]]; then
+    # For ARM64 and RISC-V, use modern virtio-blk-pci devices for predictable /dev/vdX naming.
+    DEVICE_NAMES=('vda' 'vdb' 'vdc' 'vdd' 'vde' 'vdf')
+    for i in "${!ALL_DISKS[@]}"; do
+        if [ $i -lt ${#DEVICE_NAMES[@]} ]; then
+            drive_id="drive${i}"
+            device_name="${DEVICE_NAMES[$i]}"
+            
+            QEMU_DISK_ARGS_ARRAY+=("-drive" "id=${drive_id},file=${ALL_DISKS[$i]},format=qcow2,if=none")
+            QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${drive_id}")
+
+            if [ $i -eq $LIVE_DISK_INDEX ]; then
+                LIVE_MEDIA_DEVICE="${device_name}"
+            fi
+        else
+            echo "Warning: Maximum number of disks (${#DEVICE_NAMES[@]}) exceeded. Ignoring extra disks."
+            break
         fi
-    else
-        echo "Warning: Maximum number of disks (${#DRIVE_LETTERS[@]}) exceeded. Ignoring extra disks."
-        break
-    fi
-done
+    done
+else
+    # For amd64, stick to the classic -hdX mapping which results in /dev/sdX devices.
+    DRIVE_LETTERS=('a' 'b' 'c' 'd' 'e' 'f')
+    DEVICE_NAMES=('sda' 'sdb' 'sdc' 'sdd' 'sde' 'sdf')
+    for i in "${!ALL_DISKS[@]}"; do
+        if [ $i -lt ${#DRIVE_LETTERS[@]} ]; then
+            drive_letter=${DRIVE_LETTERS[$i]}
+            QEMU_DISK_ARGS_ARRAY+=("-hd${drive_letter}" "${ALL_DISKS[$i]}")
+            
+            if [ $i -eq $LIVE_DISK_INDEX ]; then
+                LIVE_MEDIA_DEVICE="${DEVICE_NAMES[$i]}"
+            fi
+        else
+            echo "Warning: Maximum number of disks (${#DRIVE_LETTERS[@]}) exceeded. Ignoring extra disks."
+            break
+        fi
+    done
+fi
 
 if [ -z "$LIVE_MEDIA_DEVICE" ]; then
     echo "Error: Could not determine the device for the live media disk." >&2
@@ -449,7 +508,10 @@ if [ -n "$CUSTOM_APPEND_ARGS" ]; then
     APPEND_ARGS="$CUSTOM_APPEND_ARGS"
 else
     # Construct the default kernel command line, dynamically setting 'live-media'.
-    APPEND_ARGS="boot=live config union=overlay noswap edd=on nomodeset noninteractive"
+    APPEND_ARGS="boot=live config union=overlay noswap nomodeset noninteractive"
+    if [ "$ARCH" = "amd64" ]; then
+        APPEND_ARGS+=" edd=on"
+    fi
     APPEND_ARGS+=" locales=en_US.UTF-8 keyboard-layouts=us live-getty console=ttyS0,38400n81"
     APPEND_ARGS+=" live-media=/dev/${LIVE_MEDIA_DEVICE}1 live-media-path=/live toram"
     APPEND_ARGS+=" ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\""
@@ -464,20 +526,74 @@ fi
 
 # --- QEMU Execution ---
 
+# Set QEMU binary and machine type based on architecture
+case "$ARCH" in
+    "amd64")
+        QEMU_BINARY="qemu-system-x86_64"
+        QEMU_MACHINE_ARGS=()
+        ;;
+    "arm64")
+        QEMU_BINARY="qemu-system-aarch64"
+        QEMU_MACHINE_ARGS=("-machine" "virt" "-bios" "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd")
+        ;;
+    "riscv64")
+        QEMU_BINARY="qemu-system-riscv64"
+        QEMU_MACHINE_ARGS=("-machine" "virt")
+        ;;
+    *)
+        echo "Error: Unsupported architecture: $ARCH" >&2
+        print_usage
+        ;;
+esac
+
+# Check if QEMU binary exists
+if ! command -v "$QEMU_BINARY" &> /dev/null; then
+    echo "Error: QEMU binary not found for architecture '$ARCH': $QEMU_BINARY" >&2
+    echo "Please ensure the QEMU system emulator for '$ARCH' is installed and in your PATH." >&2
+    echo "On Debian/Ubuntu, you might need to install 'qemu-system-arm' (for arm64) or 'qemu-system-misc' (for riscv64)." >&2
+    exit 1
+fi
+
 # Build the QEMU command using a bash array for robustness.
 # This avoids all the quoting issues associated with building a command string and using eval.
 QEMU_ARGS=(
-    "qemu-system-x86_64"
+    "$QEMU_BINARY"
     "-m" "2048"
     "-smp" "2"
     "-nographic"
+)
+if [ ${#QEMU_MACHINE_ARGS[@]} -gt 0 ]; then
+    QEMU_ARGS+=("${QEMU_MACHINE_ARGS[@]}")
+fi
+QEMU_ARGS+=(
     "-kernel" "$KERNEL_PATH"
     "-initrd" "$INITRD_PATH"
 )
 
-# Conditionally add -enable-kvm if available
+# Conditionally add -enable-kvm if available AND the architecture is compatible.
 if check_kvm_available; then
-    QEMU_ARGS+=("-enable-kvm")
+    HOST_ARCH=$(uname -m)
+    KVM_SUPPORTED=false
+    if [[ "$ARCH" == "amd64" && "$HOST_ARCH" == "x86_64" ]]; then
+        KVM_SUPPORTED=true
+        QEMU_ARGS+=("-enable-kvm")
+    elif [[ "$ARCH" == "arm64" && "$HOST_ARCH" == "aarch64" ]]; then
+        KVM_SUPPORTED=true
+        QEMU_ARGS+=("-enable-kvm" "-cpu" "host")
+    fi
+
+    if [[ "$KVM_SUPPORTED" == "false" ]]; then
+        echo "INFO: KVM is available on this host, but not for the target architecture '$ARCH'. Running in emulation mode."
+        if [[ "$ARCH" == "arm64" ]]; then
+            QEMU_ARGS+=("-cpu" "cortex-a57")
+        fi
+    fi
+else
+    # No KVM available at all.
+    # For arm64 emulation, a CPU must be specified.
+    if [[ "$ARCH" == "arm64" ]]; then
+        QEMU_ARGS+=("-cpu" "cortex-a57")
+    fi
 fi
 QEMU_ARGS+=( "${QEMU_DISK_ARGS_ARRAY[@]}" )
 QEMU_ARGS+=(

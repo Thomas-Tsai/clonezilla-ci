@@ -22,6 +22,8 @@ ZIP_DIR="./zip"
 RESTORE_DISK_SIZE="30G"
 VALIDATE_ISO="$ISOS_DIR/cidata.iso"
 KEEP_TEMP_FILES=false # Default is to clean up temp files
+ARCH="amd64"
+
 
 # --- Helper Functions ---
 
@@ -37,6 +39,7 @@ print_usage() {
     echo ""
     echo "Optional Arguments:"
     echo "  --image-name <name> Name for the Clonezilla image folder. (Default: $CLONE_IMAGE_NAME)"
+    echo "  --arch <arch>       Target architecture (amd64, arm64, riscv64). Default: amd64."
     echo "  --keep-temp         Do not delete the temporary working directory on failure, for debugging."
     echo "  -h, --help          Display this help message and exit."
 }
@@ -62,6 +65,10 @@ cleanup_on_exit() {
 # --- Argument Parsing ---
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --arch)
+            ARCH="$2"
+            shift 2
+            ;;
         --zip)
             CLONEZILLA_ZIP="$2"
             shift 2
@@ -108,7 +115,7 @@ if [ ! -f "$TEMPLATE_QCOW" ]; then
 fi
 
 # Check for required scripts
-for script in clonezilla_zip2qcow.sh qemu_clonezilla_ci_run.sh validateOS.sh; do
+for script in clonezilla-zip2qcow.sh qemu-clonezilla-ci-run.sh validate.sh; do
     if ! command -v "./${script}" &> /dev/null; then
         echo "ERROR: Required script ./${script} not found or not executable." >&2
         exit 1
@@ -130,7 +137,7 @@ echo "--- (Step 1/5) Preparing Clonezilla Live Media ---"
 CZ_ZIP_BASENAME=$(basename "$CLONEZILLA_ZIP" .zip)
 CZ_LIVE_DIR="$ZIP_DIR/$CZ_ZIP_BASENAME"
 
-./clonezilla_zip2qcow.sh --zip "$CLONEZILLA_ZIP" -o "$ZIP_DIR" --force
+./clonezilla-zip2qcow.sh --zip "$CLONEZILLA_ZIP" -o "$ZIP_DIR" --force --arch "$ARCH"
 # Define paths to the generated Clonezilla files
 CZ_LIVE_QCOW="$CZ_LIVE_DIR/$CZ_ZIP_BASENAME.qcow2"
 CZ_KERNEL="$CZ_LIVE_DIR/${CZ_ZIP_BASENAME}-vmlinuz"
@@ -160,13 +167,14 @@ echo "Generating clone script at: $CLONE_SCRIPT_PATH"
 # Read the base command and replace the hardcoded name with the desired one
 sed "s/\"debian-sid\"/\"$CLONE_IMAGE_NAME\"/" "dev/ocscmd/clone-first-disk.sh" > "$CLONE_SCRIPT_PATH"
 
-./qemu_clonezilla_ci_run.sh \
+./qemu-clonezilla-ci-run.sh \
   --disk "$BACKUP_SOURCE_DISK" \
   --live "$CZ_LIVE_QCOW" \
   --kernel "$CZ_KERNEL" \
   --initrd "$CZ_INITRD" \
   --cmdpath "$CLONE_SCRIPT_PATH" \
-  --image "$PARTIMAG_DIR"
+  --image "$PARTIMAG_DIR" \
+  --arch "$ARCH"
 echo "--- Backup completed successfully. ---"
 echo
 
@@ -180,21 +188,23 @@ RESTORE_SCRIPT_PATH="$TEMP_DIR/restore-disk.sh"
 echo "Generating restore script at: $RESTORE_SCRIPT_PATH"
 sed "s/\"debian-sid\"/\"$CLONE_IMAGE_NAME\"/" "dev/ocscmd/restore-first-disk.sh" > "$RESTORE_SCRIPT_PATH"
 
-./qemu_clonezilla_ci_run.sh \
+./qemu-clonezilla-ci-run.sh \
   --disk "$RESTORE_DISK" \
   --live "$CZ_LIVE_QCOW" \
   --kernel "$CZ_KERNEL" \
   --initrd "$CZ_INITRD" \
   --cmdpath "$RESTORE_SCRIPT_PATH" \
-  --image "$PARTIMAG_DIR"
+  --image "$PARTIMAG_DIR" \
+  --arch "$ARCH"
 echo "--- Restore completed successfully. ---"
 echo
 
 echo "--- (Step 5/5) Validating the Restored Disk ---"
-./validateOS.sh \
+./validate.sh \
   --iso "$VALIDATE_ISO" \
   --disk "$RESTORE_DISK" \
-  --timeout 300
+  --timeout 300 \
+  --arch "$ARCH"
 echo "--- Validation completed successfully. ---"
 echo
 

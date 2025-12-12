@@ -76,7 +76,7 @@ This orchestration script is designed for end-to-end testing of filesystem backu
 
 ### `linux-clone-restore.sh`
 
-This is an orchestration script that automates the full backup, restore, and validation cycle for a Linux distribution. It uses `clonezilla_zip2qcow.sh`, `qemu_clonezilla_ci_run.sh`, and `validateOS.sh` internally.
+This is an orchestration script that automates the full backup, restore, and validation cycle for a Linux distribution. It uses `clonezilla-zip2qcow.sh`, `qemu-clonezilla-ci-run.sh`, and `validate.sh` internally.
 
 **Features:**
 - Uses long options (`--zip`, `--tmpl`, `--image-name`, `-h`/`--help`).
@@ -109,7 +109,7 @@ This is an orchestration script that automates the full backup, restore, and val
 ./linux-clone-restore.sh --help
 ```
 
-### `validateOS.sh`
+### `validate.sh`
 
 This script boots a restored QCOW2 image with a cloud-init ISO to verify that the OS starts and runs a cloud-init script successfully. It runs non-interactively and checks for a success keyword in the output log.
 
@@ -123,22 +123,22 @@ This script boots a restored QCOW2 image with a cloud-init ISO to verify that th
 **Usage:**
 ```bash
 # Validate a restored disk image with a cloud-init ISO
-./validateOS.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk ./qemu/restore.qcow2
+./validate.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk ./qemu/restore.qcow2
 
 # Validate with a longer timeout and keep the log file
-./validateOS.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk ./qemu/restore.qcow2 --timeout 600 --keeplog
+./validate.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk ./qemu/restore.qcow2 --timeout 600 --keeplog
 
 # Display help
-./validateOS.sh --help
+./validate.sh --help
 ```
 
-### `qemu_clonezilla_ci_run.sh`
+### `qemu-clonezilla-ci-run.sh`
 
 This is the primary script for running fully automated, non-interactive Clonezilla tasks. It can prepare boot media directly from a Clonezilla ZIP file or use pre-extracted files. It boots a Clonezilla "live" environment, mounts a shared directory for images, and executes a specified command.
 
 **Usage:**
 ```
-Usage: ./qemu_clonezilla_ci_run.sh [OPTIONS]
+Usage: ./qemu-clonezilla-ci-run.sh [OPTIONS]
 Run a fully automated, non-interactive Clonezilla task in a QEMU VM.
 
 Boot Media Options (choose one method):
@@ -165,14 +165,14 @@ VM and Task Options:
   -h, --help              Display this help message and exit.
 
 Example (Backup with ZIP):
-  ./qemu_clonezilla_ci_run.sh \
+  ./qemu-clonezilla-ci-run.sh \
     --disk ./qemu/source.qcow2 \
     --zip ./zip/clonezilla-live-3.1.2-9-amd64.zip \
     --cmdpath ./dev/ocscmd/clone-first-disk.sh \
     --image ./partimag
 
 Example (Restore with extracted files):
-  ./qemu_clonezilla_ci_run.sh \
+  ./qemu-clonezilla-ci-run.sh \
     --disk ./qemu/restore.qcow2 \
     --live ./isos/clonezilla.qcow2 \
     --kernel ./isos/vmlinuz \
@@ -181,20 +181,20 @@ Example (Restore with extracted files):
     --image ./partimag
 ```
 
-### `clonezilla_zip2qcow.sh`
+### `clonezilla-zip2qcow.sh`
 
 This utility converts an official Clonezilla live ZIP distribution into a QCOW2 disk image, and extracts the kernel and initrd files. It uses long options for clarity, provides a help message, validates arguments, and names output files based on the ZIP\'s base name.
 
 **Usage:**
 ```bash
 # Basic usage, outputs to a directory named after the zip in the current folder
-./clonezilla_zip2qcow.sh --zip ./isos/clonezilla-live-3.1.2-9-amd64.zip
+./clonezilla-zip2qcow.sh --zip ./isos/clonezilla-live-3.1.2-9-amd64.zip
 
 # Specify output directory and force overwrite
-./clonezilla_zip2qcow.sh --zip ./isos/clonezilla-live-3.1.2-9-amd64.zip --output ./isos/ --force
+./clonezilla-zip2qcow.sh --zip ./isos/clonezilla-live-3.1.2-9-amd64.zip --output ./isos/ --force
 
 # Display help
-./clonezilla_zip2qcow.sh --help
+./clonezilla-zip2qcow.sh --help
 ```
 
 ### `clonezilla-boot.sh`

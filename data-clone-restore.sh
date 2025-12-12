@@ -25,6 +25,8 @@ PARTIMAG_LOCATION="" # Default is to use a temporary directory
 KEEP_TEMP_FILES=false # Default is to clean up temp files
 TMP_PATH="" # Default is to let mktemp decide
 CHECKSUM_FILE_PATH="" # Path to external checksum file
+ARCH="amd64"
+
 
 # --- Helper Functions ---
 
@@ -45,6 +47,7 @@ print_usage() {
     echo "  --keep-temp       Do not delete the temporary working directory on failure, for debugging."
     echo "  --tmp-path <dir>  Specify a base directory for temporary files. (Default: system temporary directory)"
     echo "  --checksum-file <path> Specify a file to load/save checksums. If exists, load; else, generate and save."
+    echo "  --arch <arch>     Target architecture (amd64, arm64, riscv64). Default: amd64."
     echo "  -h, --help        Display this help message and exit."
     echo ""
     echo "Example:"
@@ -54,6 +57,10 @@ print_usage() {
 # --- Argument Parsing ---
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --arch)
+            ARCH="$2"
+            shift 2
+            ;;
         --zip)
             CLONEZILLA_ZIP="$2"
             shift 2
@@ -140,7 +147,7 @@ case "$FILESYSTEM_TYPE" in
         ;;
 esac
 # Validate that required tools exist
-for cmd in ./clonezilla_zip2qcow.sh ./qemu_clonezilla_ci_run.sh qemu-img guestfish guestmount guestunmount md5sum; do
+for cmd in ./clonezilla-zip2qcow.sh ./qemu-clonezilla-ci-run.sh qemu-img guestfish guestmount guestunmount md5sum; do
     command -v "$cmd" >/dev/null 2>&1 || { echo >&2 "ERROR: Required command '$cmd' not found. Please ensure it is in your PATH."; exit 1; }
 done
 echo "INFO: All dependencies found."
@@ -194,7 +201,7 @@ trap cleanup EXIT
 
 # --- Step 1: Convert Clonezilla zip to QCOW2 ---
 echo "INFO: [Step 1/5] Converting Clonezilla ZIP to QCOW2 format..."
-./clonezilla_zip2qcow.sh --zip "$CLONEZILLA_ZIP" --output "$WORK_DIR" --force > /dev/null
+./clonezilla-zip2qcow.sh --zip "$CLONEZILLA_ZIP" --output "$WORK_DIR" --force --arch "$ARCH" > /dev/null
 
 # Define paths for the generated Clonezilla live media
 CZ_ZIP_BASENAME=$(basename "${CLONEZILLA_ZIP%.zip}")
@@ -289,16 +296,16 @@ else
 fi
 
 CLONE_IMAGE_NAME="dcr-image-$(date +%s)"
+OCS_COMMAND="sudo /usr/sbin/ocs-sr -b -y -j2 -p poweroff savedisk ${CLONE_IMAGE_NAME} sda"
 # Use -b and -y for non-interactive batch mode
-OCS_COMMAND="sudo /usr/sbin/ocs-sr -b -q2 -j2 -edio -z9p -i 0 -sfsck -scs -senc -p poweroff  savedisk ${CLONE_IMAGE_NAME} sda"
-
-./qemu_clonezilla_ci_run.sh \
+./qemu-clonezilla-ci-run.sh \
     --disk "$SOURCE_DISK_QCOW2" \
     --live "$CZ_LIVE_QCOW2" \
     --kernel "$CZ_KERNEL" \
     --initrd "$CZ_INITRD" \
     --cmd "$OCS_COMMAND" \
-    --image "$PARTIMAG_DIR"
+    --image "$PARTIMAG_DIR" \
+    --arch "$ARCH"
 
 if [ ! -d "$PARTIMAG_DIR/$CLONE_IMAGE_NAME" ]; then
     echo "ERROR: Backup failed. Image directory '$PARTIMAG_DIR/$CLONE_IMAGE_NAME' not found." >&2
@@ -320,13 +327,14 @@ qemu-img create -f qcow2 "$RESTORE_DISK_QCOW2" "$RESTORE_DISK_SIZE"
 
 OCS_COMMAND_RESTORE="sudo /usr/sbin/ocs-sr -b -y -j2 -p poweroff restoredisk ${CLONE_IMAGE_NAME} sda"
 
-./qemu_clonezilla_ci_run.sh \
+./qemu-clonezilla-ci-run.sh \
     --disk "$RESTORE_DISK_QCOW2" \
     --live "$CZ_LIVE_QCOW2" \
     --kernel "$CZ_KERNEL" \
     --initrd "$CZ_INITRD" \
     --cmd "$OCS_COMMAND_RESTORE" \
-    --image "$PARTIMAG_DIR"
+    --image "$PARTIMAG_DIR" \
+    --arch "$ARCH"
 echo "INFO: Restore process finished."
 echo ""
 

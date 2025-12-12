@@ -20,6 +20,7 @@ FORCE_OVERWRITE=0
 CLONEZILLA_ZIP=""
 OUTPUT_BASE_DIR="."
 IMAGE_SIZE="2G" # Default image size
+ARCH="amd64"
 CLONEZILLA_LIVE_STABLE_URL="http://free.nchc.org.tw/clonezilla-live/stable/"
 DEFAULT_DOWNLOAD_DIR="zip"
 
@@ -27,22 +28,25 @@ DEFAULT_DOWNLOAD_DIR="zip"
 
 # Function to display usage information
 print_usage() {
-    echo "Usage: $0 --zip <Clonezilla_ZIP_Path> [OPTIONS]"
+    echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "This script converts a Clonezilla Live ZIP file into a QCOW2 disk image"
-    echo "and extracts the kernel and initrd files."
+    echo "and extracts the kernel and initrd files. If no ZIP file is provided via --zip,"
+    echo "it will automatically download the latest stable version for the specified architecture."
     echo ""
-    echo "Required Arguments:"
-    echo "  --zip <path>        Path to the source Clonezilla Live ZIP file."
+    echo "Arguments:"
+    echo "  --zip <path>        Path to the source Clonezilla Live ZIP file. (Optional)"
     echo ""
     echo "Optional Arguments:"
     echo "  -o, --output <dir>  Base directory to create the output folder in. (Default: current directory)"
     echo "  -s, --size <size>   Size of the QCOW2 image to be created (e.g., '2G'). (Default: 2G)"
+    echo "  --arch <arch>       Architecture for auto-download (e.g., amd64, arm64). Default: amd64."
     echo "  -f, --force         Force overwrite of the output directory if it already exists."
     echo "  -h, --help          Display this help message and exit."
     echo ""
     echo "Example:"
     echo "  $0 --zip ./zip/clonezilla-live-3.1.2-9-amd64.zip --output ./zip/ --force"
+    echo "  $0 --arch arm64 --output ./zip/ # Auto-download for ARM64"
 }
 
 # --- Prerequisite Check ---
@@ -54,6 +58,10 @@ command -v wget >/dev/null 2>&1 || { echo >&2 "ERROR: The 'wget' command is requ
 # --- Argument Parsing ---
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --arch)
+            ARCH="$2"
+            shift 2
+            ;;
         --zip)
             CLONEZILLA_ZIP="$2"
             shift 2
@@ -86,12 +94,12 @@ done
 
 # Auto-download Clonezilla Live ZIP if not provided
 if [[ -z "$CLONEZILLA_ZIP" ]]; then
-    echo "The --zip argument was not provided. Attempting to auto-download the latest stable AMD64 Clonezilla Live ZIP."
+    echo "The --zip argument was not provided. Attempting to auto-download the latest stable $ARCH Clonezilla Live ZIP."
 
     mkdir -p "$DEFAULT_DOWNLOAD_DIR" || { echo "ERROR: Could not create download directory: $DEFAULT_DOWNLOAD_DIR" >&2; exit 1; }
 
-    echo "Fetching latest Clonezilla Live stable AMD64 ZIP from $CLONEZILLA_LIVE_STABLE_URL"
-    LATEST_ZIP_FILENAME=$(curl -s "$CLONEZILLA_LIVE_STABLE_URL" | grep -oP 'clonezilla-live-\d+\.\d+\.\d+-\d+-amd64\.zip' | head -n 1)
+    echo "Fetching latest Clonezilla Live stable $ARCH ZIP from $CLONEZILLA_LIVE_STABLE_URL"
+    LATEST_ZIP_FILENAME=$(curl -s "$CLONEZILLA_LIVE_STABLE_URL" | grep -oP "clonezilla-live-\d+\.\d+\.\d+-\d+-${ARCH}\.zip" | head -n 1)
 
     if [[ -z "$LATEST_ZIP_FILENAME" ]]; then
         echo "ERROR: Could not find the latest Clonezilla Live ZIP filename from $CLONEZILLA_LIVE_STABLE_URL" >&2
@@ -178,11 +186,21 @@ fi
 
 # Find and copy kernel/initrd, renaming them to include the zip's base name
 echo "4. Copying kernel and initrd files to the target directory..."
-VMLINUZ_FILE=$(find "$SOURCE_ROOT/live" -maxdepth 1 -type f \( -name 'vmlinuz-*' -o -name 'vmlinuz' \) -print -quit)
+# Look for standard kernel names first (vmlinuz)
+VMLINUZ_FILE=$(find "$SOURCE_ROOT/live" -maxdepth 1 -type f \( -name 'vmlinuz' -o -name 'vmlinuz-*' \) -print -quit)
+
+if [[ -z "$VMLINUZ_FILE" ]]; then
+    # If not found, look for vmlinux variants (common on RISC-V, etc.)
+    VMLINUZ_FILE=$(find "$SOURCE_ROOT/live" -maxdepth 1 -type f \( -name 'vmlinux' -o -name 'vmlinux-*' \) -print -quit)
+    if [[ -n "$VMLINUZ_FILE" ]]; then
+        echo "WARNING: Standard 'vmlinuz' kernel not found. Using non-standard name: $(basename "$VMLINUZ_FILE")"
+    fi
+fi
+
 INITRD_FILE=$(find "$SOURCE_ROOT/live" -maxdepth 1 -type f \( -name 'initrd.img-*' -o -name 'initrd.img' \) -print -quit)
 
 if [[ -z "$VMLINUZ_FILE" || -z "$INITRD_FILE" ]]; then
-    echo "ERROR: Could not find the kernel (vmlinuz*) or initrd (initrd.img*) files in the ZIP." >&2
+    echo "ERROR: Could not find the kernel (vmlinuz*/vmlinux*) or initrd (initrd.img*) files in the ZIP." >&2
     exit 1
 fi
 
@@ -196,11 +214,11 @@ mkdir -p "$CLONEZILLA_CONTENT_FOR_QCOW2"
 cp -r "$SOURCE_ROOT/live" "$CLONEZILLA_CONTENT_FOR_QCOW2/"
 
 echo "5. Creating QCOW2 image: $OUTPUT_IMAGE (Size: $IMAGE_SIZE)..."
-if virt-make-fs --format qcow2 --size "$IMAGE_SIZE" --partition --type ext4 "$CLONEZILLA_CONTENT_FOR_QCOW2" "$OUTPUT_IMAGE"; then
+if virt-make-fs --format qcow2 --size "$IMAGE_SIZE" --partition --type vfat "$CLONEZILLA_CONTENT_FOR_QCOW2" "$OUTPUT_IMAGE"; then
     echo "--- SUCCESS ---"
     echo "Image and boot files successfully created at: $OUTPUT_DIR/"
     echo ""
-    echo "Example for qemu_clonezilla_ci_run.sh:"
+    echo "Example for qemu-clonezilla-ci-run.sh:"
     echo "  --live $OUTPUT_IMAGE \\"
     echo "  --kernel $OUTPUT_DIR/${BASE_NAME}-vmlinuz \\"
     echo "  --initrd $OUTPUT_DIR/${BASE_NAME}-initrd.img \\"

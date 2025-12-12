@@ -16,6 +16,7 @@ ISO_PATH="" # Now defaults to empty, will be set by logic
 DISK_IMAGE="qemu/debian.qcow2"
 PARTIMAG_PATH="partimag"
 DOWNLOAD_DIR="isos"
+ARCH="amd64"
 
 # --- Helper Functions ---
 
@@ -24,12 +25,13 @@ print_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "This script boots a QEMU VM from a Clonezilla ISO. If --iso is not provided,"
-    echo "it will attempt to download the latest stable AMD64 version."
+    echo "it will attempt to download the latest stable version for the specified architecture."
     echo ""
     echo "Optional Arguments:"
     echo "  --iso <path>      Path to the Clonezilla Live ISO file. If omitted, downloads the latest."
     echo "  --disk <path>     Path to the QCOW2 disk image to attach. (Default: $DISK_IMAGE)"
     echo "  --partimag <path> Path to the shared directory for Clonezilla images. (Default: $PARTIMAG_PATH)"
+    echo "  --arch <arch>     Target architecture (amd64, arm64). Default: amd64."
     echo "  -h, --help        Display this help message and exit."
     echo ""
     echo "Example:"
@@ -37,9 +39,9 @@ print_usage() {
     echo "  $0 --iso ./isos/my-clonezilla.iso --disk ./qemu/my-disk.qcow2"
 }
 
-# Function to download the latest Clonezilla stable AMD64 ISO
+# Function to download the latest Clonezilla stable ISO for the specified architecture
 download_latest_clonezilla() {
-    echo "--- Auto-downloading latest Clonezilla ---"
+    echo "--- Auto-downloading latest Clonezilla ($ARCH) ---"
     
     # URL of the stable directory on SourceForge
     local stable_url="https://sourceforge.net/projects/clonezilla/files/clonezilla_live_stable/"
@@ -59,7 +61,7 @@ download_latest_clonezilla() {
     
     echo "Latest version found: $latest_version"
     
-    local iso_filename="clonezilla-live-${latest_version}-amd64.iso"
+    local iso_filename="clonezilla-live-${latest_version}-${ARCH}.iso"
     local download_url="${stable_url}${latest_version}/${iso_filename}/download"
     local target_iso_path="${DOWNLOAD_DIR}/${iso_filename}"
     
@@ -93,6 +95,10 @@ download_latest_clonezilla() {
 # We need to parse --iso first to see if we need to download
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --arch)
+            ARCH="$2"
+            shift 2
+            ;;
         --iso)
             ISO_PATH="$2"
             shift 2
@@ -150,15 +156,71 @@ echo "Disk Image: $DISK_IMAGE"
 echo "Image Share: $PARTIMAG_PATH"
 echo "-------------------------------------"
 
-qemu-system-x86_64 \
-  -enable-kvm \
-  -m 4096 \
-  -cpu host \
-  -drive file="$DISK_IMAGE",if=virtio,format=qcow2 \
-  -cdrom "$ISO_PATH" \
-  -boot d \
-  -fsdev local,id=hostshare,path="$PARTIMAG_PATH",security_model=mapped-xattr \
-  -device virtio-9p-pci,fsdev=hostshare,mount_tag=hostshare \
-  -nic user,hostfwd=tcp::2222-:22 \
-  -display gtk\
-  -serial mon:stdio
+# Set QEMU binary and machine type based on architecture
+case "$ARCH" in
+    "amd64")
+        QEMU_BINARY="qemu-system-x86_64"
+        QEMU_MACHINE_ARGS=()
+        ;;
+    "arm64")
+        QEMU_BINARY="qemu-system-aarch64"
+        QEMU_MACHINE_ARGS=("-machine" "virt" "-bios" "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd")
+        ;;
+    *)
+        echo "Error: Unsupported architecture for this script: $ARCH" >&2
+        exit 1
+        ;;
+esac
+
+# Check if QEMU binary exists
+if ! command -v "$QEMU_BINARY" &> /dev/null; then
+    echo "Error: QEMU binary not found for architecture '$ARCH': $QEMU_BINARY" >&2
+    echo "Please ensure the QEMU system emulator for '$ARCH' is installed and in your PATH." >&2
+    echo "On Debian/Ubuntu, you might need to install 'qemu-system-arm' (for arm64) or 'qemu-system-misc' (for riscv64)." >&2
+    exit 1
+fi
+
+QEMU_ARGS=(
+    "$QEMU_BINARY"
+    "-m" "4096"
+    "-drive" "file=$DISK_IMAGE,if=virtio,format=qcow2"
+    "-cdrom" "$ISO_PATH"
+    "-boot" "d"
+    "-fsdev" "local,id=hostshare,path=$PARTIMAG_PATH,security_model=mapped-xattr"
+    "-device" "virtio-9p-pci,fsdev=hostshare,mount_tag=hostshare"
+    "-nic" "user,hostfwd=tcp::2222-:22"
+    "-display" "gtk"
+    "-serial" "mon:stdio"
+)
+
+if [ ${#QEMU_MACHINE_ARGS[@]} -gt 0 ]; then
+    QEMU_ARGS+=("${QEMU_MACHINE_ARGS[@]}")
+fi
+
+# KVM and CPU host are not always available/compatible
+if [ -e "/dev/kvm" ] && [ "$(groups | grep -c kvm)" -gt 0 ]; then
+    HOST_ARCH=$(uname -m)
+    KVM_SUPPORTED=false
+    if [[ "$ARCH" == "amd64" && "$HOST_ARCH" == "x86_64" ]]; then
+        KVM_SUPPORTED=true
+        QEMU_ARGS+=("-enable-kvm" "-cpu" "host")
+    elif [[ "$ARCH" == "arm64" && "$HOST_ARCH" == "aarch64" ]]; then
+        KVM_SUPPORTED=true
+        QEMU_ARGS+=("-enable-kvm" "-cpu" "host")
+    fi
+
+    if [[ "$KVM_SUPPORTED" == "false" ]]; then
+        echo "INFO: KVM is available on this host, but not for the target architecture '$ARCH'. Running in emulation mode."
+        if [[ "$ARCH" == "arm64" ]]; then
+            QEMU_ARGS+=("-cpu" "cortex-a57")
+        fi
+    fi
+else
+    # No KVM available at all.
+    # For arm64 emulation, a CPU must be specified.
+    if [[ "$ARCH" == "arm64" ]]; then
+        QEMU_ARGS+=("-cpu" "cortex-a57")
+    fi
+fi
+
+"${QEMU_ARGS[@]}"

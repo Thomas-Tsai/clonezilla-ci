@@ -14,12 +14,19 @@ CLONEZILLA_ZIP="zip/clonezilla-live-20251124-resolute-amd64.zip"
 LOG_DIR="./logs"
 testData="dev/testData"
 START_TIME=$(date +%s)
+ARCH="amd64"
+ZIP_WAS_SET=0
 
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --zip)
             CLONEZILLA_ZIP="$2"
+            ZIP_WAS_SET=1
+            shift 2
+            ;;
+        --arch)
+            ARCH="$2"
             shift 2
             ;;
         *)
@@ -28,6 +35,11 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
+
+if [ "$ZIP_WAS_SET" -eq 0 ]; then
+    CLONEZILLA_ZIP="zip/clonezilla-live-20251124-resolute-${ARCH}.zip"
+fi
+
 
 # Check for shunit2
 if ! command -v shunit2 >/dev/null 2>&1; then
@@ -58,8 +70,8 @@ run_os_clone_restore() {
     local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
     local DISK_IMAGE="$1"
 
-    echo "--- Running OS $DISK_IMAGE Clone/Restore Test (Log: $LOG_FILE) ---"
-    ./linux-clone-restore.sh --zip "$CLONEZILLA_ZIP" --tmpl $DISK_IMAGE > "$LOG_FILE" 2>&1
+    echo "--- Running OS $DISK_IMAGE ($ARCH) Clone/Restore Test (Log: $LOG_FILE) ---"
+    ./linux-clone-restore.sh --zip "$CLONEZILLA_ZIP" --tmpl $DISK_IMAGE --arch "$ARCH" > "$LOG_FILE" 2>&1
     local RESULT=$?
     local TEST_END_TIME=$(date +%s) # Record end time for this specific test
     local TEST_DURATION=$((TEST_END_TIME - TEST_START_TIME))
@@ -80,8 +92,8 @@ run_fs_clone_restore() {
     local TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
     local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
 
-    echo "--- Running FS Clone/Restore Test with $fs (Log: $LOG_FILE) ---"
-    ./data-clone-restore.sh --zip "$CLONEZILLA_ZIP" --data $testData --fs "$fs" > "$LOG_FILE" 2>&1
+    echo "--- Running FS Clone/Restore Test with $fs ($ARCH) (Log: $LOG_FILE) ---"
+    ./data-clone-restore.sh --zip "$CLONEZILLA_ZIP" --data $testData --fs "$fs" --arch "$ARCH" > "$LOG_FILE" 2>&1
     local RESULT=$?
     local TEST_END_TIME=$(date +%s) # Record end time for this specific test
     local TEST_DURATION=$((TEST_END_TIME - TEST_START_TIME))
@@ -102,7 +114,12 @@ test_ubuntu_clone_restore() {
 
 # Test for debian sid system clone and restore
 test_debian_sid_clone_restore() {
-    run_os_clone_restore "qemu/cloudimages/debian-sid-daily-amd64.qcow2"
+    local image_path="qemu/cloudimages/debian-sid-daily-${ARCH}.qcow2"
+    if [ ! -f "$image_path" ]; then
+        echo "Skipping Debian SID test for $ARCH, image not found: $image_path"
+        return
+    fi
+    run_os_clone_restore "$image_path"
 }
 
 # Test for exfat file system clone and restore

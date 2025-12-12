@@ -2,10 +2,12 @@
 default prompt: 這是 clonezilla 準備來開發CI的目錄，裡面討論可以用英文與繁體中文，程式與註解都用英文。大部分用bash script 開發, 請協助我整理目前需要改進的事項，並以checklist 方式列出，完成後不可以打勾，列出完成的項目給開發者驗證。
 
 ## Overview
-This directory contains scripts and tools for automating Clonezilla operations in a Continuous Integration (CI) environment. The main scripts include `qemu_clonezilla_ci_run.sh`, which is used to run Clonezilla in a QEMU virtual machine, and `clonezilla_zip2qcow.sh`, which converts Clonezilla zip images to QCOW2 format for use in QEMU.
+This directory contains scripts and tools for automating Clonezilla operations in a Continuous Integration (CI) environment. The main scripts include `qemu-clonezilla-ci-run.sh`, which is used to run Clonezilla in a QEMU virtual machine, and `clonezilla-zip2qcow.sh`, which converts Clonezilla zip images to QCOW2 format for use in QEMU.
 
 - [x] 整個專案的readme 文件需要補充
 - [x] 整個專案的usage 文件需要補充
+- [x] 整個專案需要支援多架構，先處理 riscv-64, arm64 架構支援; 所有script 需要支援多架構
+- [ ] 相依的套件要補上 qemu-efi-aarch64 qemu-system-arm
 
 ## start.sh 改進事項：
 開發一個 start.sh 腳本，這個腳本主要用來啟動一個完整的 clonezilla ci 流程, 使用 shunit2 來進行單元測試, 並且產生測試報告
@@ -23,11 +25,10 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
 - [x] 實作主要流程:
-    - [x] 1. 使用 clonezilla_zip2qcow.sh 將 clonezilla zip 轉成 qcow2 檔案
+    - [x] 1. 使用 clonezilla-zip2qcow.sh 將 clonezilla zip 轉成 qcow2 檔案
     - [x] 2. 備份前準備，將--data 目錄複製到 qcow2 裡面, 需要進行檔案的checksum 記錄供還原時驗證
-    - [x] 3. 使用 qemu_clonezilla_ci_run.sh 備份 qcow2 到 partimag/
-    - [x] 4. 使用 qemu_clonezilla_ci_run.sh 還原 clonezilla qcow2 到 restore.qcow2
-    - [x] 5. 驗證 restore.qcow2 是否能正常還原出正確的檔案內容，與備份前的checksum 進行比對
+    - [x] 3. 使用 qemu-clonezilla-ci-run.sh 備份 qcow2 到 partimag/
+    - [x] 4. 使用 qemu-clonezilla-ci-run.sh 還原 clonezilla qcow2 到 restore.qcow2    - [x] 5. 驗證 restore.qcow2 是否能正常還原出正確的檔案內容，與備份前的checksum 進行比對
 - [x] 增加參數設定partimag 目錄位置
 - [x] 增加參數錯誤時保留temp檔案，方便debug
 - [x] 嘗試增加檔案系統類型支援 ext2, ext3, xfs, btrfs, exfat 
@@ -46,17 +47,17 @@ This directory contains scripts and tools for automating Clonezilla operations i
 2. --tmpl 設定 linux distro 參數，例: debian-sid-generic-amd64-daily-20250805-2195.qcow2 需支援 cloud init
 
 主要流程
-1. 使用 clonezilla_zip2qcow.sh 將 clonezilla zip 轉成 qcow2 檔案
-eg: ./clonezilla_zip2qcow.sh --zip isos/clonezilla-live-20251124-resolute-amd64.zip  -o isos/
+1. 使用 clonezilla-zip2qcow.sh 將 clonezilla zip 轉成 qcow2 檔案
+eg: ./clonezilla-zip2qcow.sh --zip isos/clonezilla-live-20251124-resolute-amd64.zip  -o isos/
 2. 備份debian-sid-generic-amd64-daily-20250805-2195.qcow2 到 debian-sid-generic-amd64-daily-20250805-2195.sda.qcow2
 eg: cp qemu/debian-sid-generic-amd64-daily-20250805-2195.qcow2 qemu/debian-sid-generic-amd64-daily-20250805-2195.sda.qcow2
-3. 使用 qemu_clonezilla_ci_run.sh 備份 debian-sid-generic-amd64-daily-20250805-2195.sda.qcow2 到 partimag/ ; 可以直接使用cmdpath  dev/ocscmd/clone-first-disk.sh
-eg: ./qemu_clonezilla_ci_run.sh --disk qemu/debian-sid-generic-amd64-daily-20250805-2195.sda.qcow2 --live isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64.qcow2 --kernel isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-vmlinuz --initrd isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-initrd.img --cmdpath dev/ocscmd/clone-first-disk.sh  --image ./partimag/
-4. 使用 qemu_clonezilla_ci_run.sh 還原 clonezilla qcow2 到 restore.qcow2(需要產生新的30g qcow2) ; 可以直接使用cmdpath  dev/ocscmd/restore-first-disk.sh
+3. 使用 qemu-clonezilla-ci-run.sh 備份 debian-sid-generic-amd64-daily-20250805-2195.sda.qcow2 到 partimag/ ; 可以直接使用cmdpath  dev/ocscmd/clone-first-disk.sh
+eg: ./qemu-clonezilla-ci-run.sh --disk qemu/debian-sid-generic-amd64-daily-20250805-2195.sda.qcow2 --live isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64.qcow2 --kernel isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-vmlinuz --initrd isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-initrd.img --cmdpath dev/ocscmd/clone-first-disk.sh  --image ./partimag/
+4. 使用 qemu-clonezilla-ci-run.sh 還原 clonezilla qcow2 到 restore.qcow2(需要產生新的30g qcow2) ; 可以直接使用cmdpath  dev/ocscmd/restore-first-disk.sh
 eg: qemu-img create -f qemu/qcow2 restore.qcow2 30G
-eg: ./qemu_clonezilla_ci_run.sh --disk qemu/restore.qcow2 --live isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64.qcow2 --kernel isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-vmlinuz --initrd isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-initrd.img --cmdpath dev/ocscmd/restore-first-disk.sh  --image ./partimag/
-5. 使用 validateOS.sh 驗證 restore.qcow2 是否能正常啟動
-./validateOS.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk qemu/restore.qcow2 --timeout 60 --keeplog
+eg: ./qemu-clonezilla-ci-run.sh --disk qemu/restore.qcow2 --live isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64.qcow2 --kernel isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-vmlinuz --initrd isos/clonezilla-live-20251124-resolute-amd64/clonezilla-live-20251124-resolute-amd64-initrd.img --cmdpath dev/ocscmd/restore-first-disk.sh  --image ./partimag/
+5. 使用 validate.sh 驗證 restore.qcow2 是否能正常啟動
+./validate.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk qemu/restore.qcow2 --timeout 60 --keeplog
 
 - [x] 整個 script flow 需要開發，完整flow, 參數說明
 - [x] 增加--help 參數可以讓使用者查詢使用說明
@@ -65,49 +66,49 @@ eg: ./qemu_clonezilla_ci_run.sh --disk qemu/restore.qcow2 --live isos/clonezilla
 - [x] 設定參數 CLONE_IMAGE_NAME 來指定 backup / restore 的 image name; 且要同步到 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面; 抑或是以hardcode 常數方式寫死在 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面
 - [x] 增加參數 --keep-temp 當失敗時，保留中間產生的所有檔案，方便debug
 
-## qemu_clonezilla_ci_run.sh 改進事項：
-qemu_clonezilla_ci_run.sh 需要修改：
+## qemu-clonezilla-ci-run.sh 改進事項：
+qemu-clonezilla-ci-run.sh 需要修改：
 - [x] 1. 以長參數與短參數取代目前依照順序的方式取得使用者參數
 Example:
-./qemu_clonezilla_ci_run.sh -i restore.qcow2 live.qcow2 ./clonezilla/vmlinuz ./clonezilla/initrd.img "sudo /usr/sbin/ocs-sr -g auto -p poweroff restoredisk ask_user sda" "./partimag"
+./qemu-clonezilla-ci-run.sh -i restore.qcow2 live.qcow2 ./clonezilla/vmlinuz ./clonezilla/initrd.img "sudo /usr/sbin/ocs-sr -g auto -p poweroff restoredisk ask_user sda" "./partimag"
 to
 
-./qemu_clonezilla_ci_run.sh -i --disk restore.qcow2 --disk second.qcow2 --disk third.qcow2  --live live.qcow2  --kernel ./clonezilla/vmlinuz --initrd ./clonezilla/initrd.img --cmd "sudo /usr/sbin/ocs-sr -g auto -p poweroff restoredisk ask_user sda" --image "./partimag"
+./qemu-clonezilla-ci-run.sh -i --disk restore.qcow2 --disk second.qcow2 --disk third.qcow2  --live live.qcow2  --kernel ./clonezilla/vmlinuz --initrd ./clonezilla/initrd.img --cmd "sudo /usr/sbin/ocs-sr -g auto -p poweroff restoredisk ask_user sda" --image "./partimag"
 
 - [x] 2. 目前APPAND ARGS 是寫死的，需要改成可以由使用者輸入參數來決定要不要加入override APPAND ARGS, 提供一個參數複寫APPAND ARGS
 - [x] 3. 增加參數 cmdpath 用來替換 執行 cmd 的方式。目前只能執行簡易指令，我想要執行一個script file, 所以用一個 參數 cmdpath 來指定 script file 的路徑，然後把 script file 複製到 clonezilla live 的 ramdisk 裡面，最後在 cmd 裡面執行這個 script file。
   例如：
-  ./qemu_clonezilla_ci_run.sh --disk restore.qcow2 --live live.qcow2  --kernel ./clonezilla/vmlinuz --initrd ./clonezilla/initrd.img --cmdpath "/root/myscript.sh" --image "./partimag"
+  ./qemu-clonezilla-ci-run.sh --disk restore.qcow2 --live live.qcow2  --kernel ./clonezilla/vmlinuz --initrd ./clonezilla/initrd.img --cmdpath "/root/myscript.sh" --image "./partimag"
   裡面的 myscript.sh 內容可以是：
   ```
   #!/bin/bash
   sudo /usr/sbin/ocs-sr -g auto -p poweroff restoredisk ask_user sda
   ```
-  然後 qemu_clonezilla_ci_run.sh 裡面會把 myscript.sh 複製到 ramdisk 裡面，然後在 boot 的參數裡面執行 /root/myscript.sh
+  然後 qemu-clonezilla-ci-run.sh 裡面會把 myscript.sh 複製到 ramdisk 裡面，然後在 boot 的參數裡面執行 /root/myscript.sh
 reference https://clonezilla.nchc.org.tw/clonezilla-live/doc/fine-print.php?path=99_Misc/00_live-boot-parameters.doc#00_live-boot-parameters.doc
 - [x] 4. 一樣cmdpath的邏輯，我也想要讓APPAND ARGS 可以從一個檔案讀取進來，而不是只能用參數帶進來
 - [x] 5. 發現沒有--help 參數可以讓使用者查詢使用說明，請加上--help 參數; 且參數錯誤也沒有充分說明錯誤原因，請補上錯誤訊息說明
 example:
-$ ./qemu_clonezilla_ci_run.sh 
+$ ./qemu-clonezilla-ci-run.sh 
 Error: Missing command. Please provide either --cmd or --cmdpath.
 - [x] 6. 目前的程式碼沒有檢查參數的有效性，請加上參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 7. 發現 partimage 有殘留的 md_script_1764665091_12358  cmd_script_1764665393_8800 , 應該於執行完成之後刪除。
 - [x] 自動判斷是否 --enable-kvm
 - [x] 於完成時間顯示總共花費時間紀錄到log 檔案
 - [x] 增加參數設定log目錄，預設為當前目錄下的 logs/ 目錄 (done)
-- [x] 增加zip參數，呼叫 clonezilla_zip2qcow.sh 自動轉換zip 為 qcow2; 參數範例 --zip path/to/clonezilla.zip --output zip/ --size 2G
+- [x] 增加zip參數，呼叫 clonezilla-zip2qcow.sh 自動轉換zip 為 qcow2; 參數範例 --zip path/to/clonezilla.zip --output zip/ --size 2G
       解壓縮之後會產生需要的檔案 vmlinux initrd.img clonezilla-live-xxxx.qcow2 就是 
       clonezilla-live-xxxx.qcow2,  --live <path>           Path to the Clonezilla live QCOW2 media.
       vmlinux,                     --kernel <path>         Path to the kernel file (e.g., vmlinuz).
       initrd.img,                  --initrd <path>         Path to the initrd file.
       且不要重複進行解壓縮，如果三個檔案都已經存在，就跳過這個步驟
-      如果只有部份檔案，就還是需要使用 clonezilla_zip2qcow.sh 來解壓縮 with --force 參數來強制覆蓋
+      如果只有部份檔案，就還是需要使用 clonezilla-zip2qcow.sh 來解壓縮 with --force 參數來強制覆蓋
 
-## clonezilla_zip2qcow.sh 改進事項：
+## clonezilla-zip2qcow.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 2. 增加--help 參數可以讓使用者查詢使用說明
 - [x] 3. 參數改為長參數，例如
-./clonezilla_zip2qcow.sh --zip clonezilla_image.zip --output outputdir/ --size 10G --force
+./clonezilla-zip2qcow.sh --zip clonezilla_image.zip --output outputdir/ --size 10G --force
 - [x] 4. 在步驟 Copying Kernel/Initrd files to the target directory，檔案名稱prefix採用clonezilla zip 的base name 來命名，而不是固定用 vmlinuz 與 initrd.img
 - [x] 自動下載最新的zip 檔案，當沒有指定 --zip 參數時，自動下載最新的 clonezilla zip 檔案，預設下載stable amd64 版本
 
@@ -127,8 +128,8 @@ Error: Missing command. Please provide either --cmd or --cmdpath.
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 2. 增加--help 參數可以讓使用者查詢使用說明
 
-## validateOS.sh 改進事項：
-validateOS.sh 主要功能是當clonezilla 還原成功之後，驗證作業系統是否能正常啟動。驗證方式是利用cloud init 方式進行驗證
+## validate.sh 改進事項：
+validate.sh 主要功能是當clonezilla 還原成功之後，驗證作業系統是否能正常啟動。驗證方式是利用cloud init 方式進行驗證
 cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/cloud_init_config/cidata.iso
 當 cloud init 作用之後會變更使用者密碼最後echo 關鍵字 ReStOrE
 程式需要已 auto ci 方式，不提供互動、輸出到log檔, 並檢查關鍵字是否有成功輸出

@@ -11,7 +11,7 @@ The primary goal is to enable fully automated, non-interactive validation of Clo
 - **Automated Test Suite**: `start.sh` runs a comprehensive suite of tests using `shunit2`.
 - **OS Testing**: Automatically tests cloning and restoring full Linux distributions (e.g., Debian, Ubuntu) using `linux-clone-restore.sh`.
 - **Filesystem Testing**: Automatically tests cloning and restoring various filesystems (e.g., ext4, xfs, btrfs, ntfs) with data integrity checks using `data-clone-restore.sh`.
-- **Flexible QEMU Runner**: `qemu_clonezilla_ci_run.sh` provides a powerful interface to run ad-hoc Clonezilla commands in a QEMU VM, with features like automatic ZIP extraction, script execution, and customizable kernel parameters.
+- **Flexible QEMU Runner**: `qemu-clonezilla-ci-run.sh` provides a powerful interface to run ad-hoc Clonezilla commands in a QEMU VM, with features like automatic ZIP extraction, script execution, and customizable kernel parameters.
 - **Dependency Automation**: Scripts can automatically download necessary ISOs (Debian, Clonezilla) if they are not found locally.
 
 ## Getting Started
@@ -50,8 +50,8 @@ Test results are shown in the console, and detailed logs for each major operatio
 - **`start.sh`**: The main test runner. It executes all `test_*` functions defined within it using `shunit2`.
 - **`linux-clone-restore.sh`**: An orchestration script that performs a full backup, restore, and boot validation cycle for a Linux OS disk image.
 - **`data-clone-restore.sh`**: An orchestration script that tests backup and restore for a disk image containing a specific filesystem and data, verifying data integrity via checksums.
-- **`qemu_clonezilla_ci_run.sh`**: The core component for executing commands within a Clonezilla QEMU VM. It handles the complexities of setting up the VM, storage, networking, and boot parameters.
-- **`clonezilla_zip2qcow.sh`**: A utility to convert a Clonezilla Live ZIP archive into the QCOW2, kernel, and initrd files required for booting in QEMU.
-- **`validateOS.sh`**: A helper script to verify that a restored OS disk image can boot successfully, using cloud-init for automation.
+- **`qemu-clonezilla-ci-run.sh`**: The core component for executing commands within a Clonezilla QEMU VM. It handles the complexities of setting up the VM, storage, networking, and boot parameters.
+- **`clonezilla-zip2qcow.sh`**: A utility to convert a Clonezilla Live ZIP archive into the QCOW2, kernel, and initrd files required for booting in QEMU.
+- **`validate.sh`**: A helper script to verify that a restored OS disk image can boot successfully, using cloud-init for automation.
 
 For detailed command-line options for each script, see the **[Usage Guide](usage.md)**.

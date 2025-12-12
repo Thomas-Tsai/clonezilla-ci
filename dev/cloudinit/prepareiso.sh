@@ -46,7 +46,7 @@ runcmd:
   - echo "Running verification script..." >> /tmp/cloud_init_status.txt
   - touch /tmp/verification_complete
   - sh -c "echo 'Verification finished at $(date)' >> /tmp/cloud_init_status.txt"
-  # This is the keyword that the validateOS.sh script looks for.
+  # This is the keyword that the validate.sh script looks for.
   - sh -c "echo 'ReStOrE VM Is DoNe!'"
   # Power off the VM automatically after the script runs.
   - poweroff
