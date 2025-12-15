@@ -18,6 +18,9 @@ This directory contains scripts and tools for automating Clonezilla operations i
     - [x] zip檔不要寫死在程式碼裡面，可以在檔案前面進行定義 也可以用參數帶入 (done)
     - [x] 每一個測試的log 檔案要分開存放到 /log/XXX，方便debug (done)
     - [x] 我加了SHUNIT_TIMER=1 # Enable test timing 希望可以在log 裡面看到每一個測試花費的時間, 但目前沒有看到相關資訊, 需要修正
+    - [x] 支援 --arch 參數，並從 qemu/cloudimages/cloud_images.conf 讀取對應架構的 cloud image，如果沒有就忽略 (done)
+    - [x] 移除作業系統測試中 hardcode 的 release version，改為測試所有支援的 release (done)
+    - [x] 提供 --help 參數 (done)
 
 ## data-clone-restore.sh 改進事項：
 - [x] 整個 script flow 需要開發，完整flow, 參數說明

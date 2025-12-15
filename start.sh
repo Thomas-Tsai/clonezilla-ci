@@ -22,6 +22,18 @@ mkdir -p "$LOG_DIR"
 exec &> >(tee -a "$MAIN_LOG_FILE")
 
 
+# --- Usage ---
+usage() {
+    echo "Usage: $0 [options]"
+    echo ""
+    echo "Run the clonezilla ci test suite."
+    echo ""
+    echo "Options:"
+    echo "  --zip <file>    Specify the Clonezilla zip file to use."
+    echo "  --arch <arch>   Specify the architecture to test (e.g., amd64, arm64). Defaults to amd64."
+    echo "  --help          Display this help message and exit."
+}
+
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -29,8 +41,17 @@ while [ "$#" -gt 0 ]; do
             CLONEZILLA_ZIP="$2"
             shift 2
             ;;
+        --arch)
+            ARCH="$2"
+            shift 2
+            ;;
+        --help)
+            usage
+            exit 0
+            ;;
         *)
-            echo "Unknown argument: $1"
+            echo "Unknown argument: $1" >&2
+            usage
             exit 1
             ;;
     esac
@@ -105,17 +126,59 @@ run_fs_clone_restore() {
 
 # Test for ubuntu system clone and restore
 test_ubuntu_clone_restore() {
-    run_os_clone_restore "qemu/cloudimages/ubuntu-24.04-amd64.qcow2"
+    local os="ubuntu"
+    
+    # Find all ubuntu releases for the given arch in the conf file
+    grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while read -r config_line; do
+        # Extract release from the line
+        local release=$(echo "$config_line" | awk '{print $2}')
+        local image_name="${os}-${release}-${ARCH}.qcow2"
+        local image_path="qemu/cloudimages/${image_name}"
+
+        if [ -f "$image_path" ]; then
+            run_os_clone_restore "$image_path"
+        else
+            echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
+        fi
+    done
 }
 
-# Test for debian sid system clone and restore
-test_debian_sid_clone_restore() {
-    run_os_clone_restore "qemu/cloudimages/debian-sid-amd64.qcow2"
+# Test for debian system clone and restore
+test_debian_clone_restore() {
+    local os="debian"
+    
+    # Find all debian releases for the given arch in the conf file
+    grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while read -r config_line; do
+        # Extract release from the line
+        local release=$(echo "$config_line" | awk '{print $2}')
+        local image_name="${os}-${release}-${ARCH}.qcow2"
+        local image_path="qemu/cloudimages/${image_name}"
+
+        if [ -f "$image_path" ]; then
+            run_os_clone_restore "$image_path"
+        else
+            echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
+        fi
+    done
 }
 
 # Test for fedora system clone and restore
 test_fedora_clone_restore() {
-    run_os_clone_restore "qemu/cloudimages/fedora-43.qcow2"
+    local os="fedora"
+    
+    # Find all fedora releases for the given arch in the conf file
+    grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while read -r config_line; do
+        # Extract release from the line
+        local release=$(echo "$config_line" | awk '{print $2}')
+        local image_name="${os}-${release}-${ARCH}.qcow2"
+        local image_path="qemu/cloudimages/${image_name}"
+
+        if [ -f "$image_path" ]; then
+            run_os_clone_restore "$image_path"
+        else
+            echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
+        fi
+    done
 }
 
 # Test for exfat file system clone and restore

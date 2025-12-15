@@ -35,13 +35,25 @@ You will need to log out and log back in for this change to take effect.
 The main entry point for running all CI tests is `start.sh`.
 
 ```bash
-# Run the full test suite
+# Run the full test suite with default architecture (amd64)
 ./start.sh
 ```
 
 By default, it uses a pre-configured Clonezilla Live ZIP file specified within the script. You can override this:
 ```bash
 ./start.sh --zip /path/to/your/clonezilla.zip
+```
+You can also specify the architecture to test (defaults to `amd64`):
+```bash
+./start.sh --arch arm64
+```
+To run tests with a specific Clonezilla ZIP for a given architecture:
+```bash
+./start.sh --zip /path/to/your/clonezilla.zip --arch arm64
+```
+For help with available options:
+```bash
+./start.sh --help
 ```
 Test results are shown in the console, and detailed logs for each major operation are saved in the `./logs/` directory.
 

@@ -35,6 +35,35 @@ Here's a breakdown of what each package provides:
 
 Here is a breakdown of the available scripts and their functions.
 
+### `start.sh`
+
+The main test runner script for the Clonezilla CI test suite. It orchestrates the execution of various OS and filesystem clone/restore tests using `shunit2`.
+
+**Features:**
+-   Supports specifying the Clonezilla Live ZIP file.
+-   Allows selecting the target architecture (`amd64`, `arm64`, `riscv64`, etc.).
+-   Automatically discovers and tests all available OS releases (Ubuntu, Debian, Fedora) for the selected architecture based on `qemu/cloudimages/cloud_images.conf`.
+-   Provides a help message with `--help`.
+-   Redirects detailed logs for each test to the `./logs/` directory.
+
+**Usage:**
+```bash
+# Run the full test suite with default settings (uses internal Clonezilla ZIP, targets amd64)
+./start.sh
+
+# Run with a specific Clonezilla Live ZIP file
+./start.sh --zip /path/to/your/clonezilla-live.zip
+
+# Run tests for a specific architecture (e.g., arm64)
+./start.sh --arch arm64
+
+# Run with a specific ZIP and target architecture
+./start.sh --zip /path/to/your/clonezilla-live.zip --arch arm64
+
+# Display help message
+./start.sh --help
+```
+
 ### `data-clone-restore.sh`
 
 This orchestration script is designed for end-to-end testing of filesystem backup and restoration. It creates a temporary disk image, formats it with a specified filesystem, copies a local data directory into it, backs up the disk using Clonezilla, restores it to a new disk, and finally verifies the integrity of the restored data by comparing checksums.
