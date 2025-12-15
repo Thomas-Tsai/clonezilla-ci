@@ -32,16 +32,16 @@ fi
 echo ""
 
 # Read the config file, skipping comments and empty lines
-grep -vE '^\s*#|^\s*$' "$CONFIG_FILE" | while read -r OS RELEASE URL; do
-    if [[ -z "$OS" || -z "$RELEASE" || -z "$URL" ]]; then
-        echo "Skipping invalid line: $OS $RELEASE $URL"
+grep -vE '^\s*#|^\s*$' "$CONFIG_FILE" | while read -r OS RELEASE ARCH URL; do
+    if [[ -z "$OS" || -z "$RELEASE" || -z "$ARCH" || -z "$URL" ]]; then
+        echo "Skipping invalid line: $OS $RELEASE $ARCH $URL"
         continue
     fi
 
-    FILENAME="${OS}-${RELEASE}.qcow2"
+    FILENAME="${OS}-${RELEASE}-${ARCH}.qcow2"
     OUTPUT_PATH="${BASE_DIR}/${FILENAME}"
 
-    echo "Processing ${OS} ${RELEASE}..."
+    echo "Processing ${OS} ${RELEASE} ${ARCH}..."
 
     if [[ -f "${OUTPUT_PATH}" && "${FORCE_DOWNLOAD}" == "false" ]]; then
         echo "  Image ${FILENAME} already exists. Skipping download. Use --force to re-download."
@@ -54,7 +54,7 @@ grep -vE '^\s*#|^\s*$' "$CONFIG_FILE" | while read -r OS RELEASE URL; do
     else
         echo "  Downloading from ${URL}..."
         curl -L --fail --output "${OUTPUT_PATH}" "${URL}" || {
-            echo "  Download for ${OS} ${RELEASE} failed."
+            echo "  Download for ${OS} ${RELEASE} ${ARCH} failed."
             # Continue to next image instead of exiting
             continue
         }
