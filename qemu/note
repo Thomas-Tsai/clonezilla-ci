@@ -1,13 +1,69 @@
-
+# create qcow2
 qemu-img create -f qcow2 debian.qcow2 20G
 qemu-img create -f qcow2 restore.qcow2 30G
 
-get from debian cloud image
-https://cdimage.debian.org/images/cloud/
+# Windows qcow2
 
-without cloud init
-wget https://cdimage.debian.org/images/cloud/sid/daily/20251126-2308/debian-sid-nocloud-amd64-daily-20251126-2308.qcow2
+已經有寫好的 qemu 以動指令：
+win11-setup.sh 用於安裝、沒有網卡、有virt相關驅動光碟
+win11-prepare.sh 用於一般使用、有網卡、有virt相關驅動光碟、9P檔案共享、遠端桌面port for localhost
 
-generic, with cloud init
-https://cdimage.debian.org/images/cloud/sid/daily/20250805-2195/debian-sid-generic-amd64-daily-20250805-2195.qcow2
+準備好 ISO, Win11_25H2_Chinese_Traditional_x64.iso, virtio-win-0.1.285.iso 用 win11-setup.sh 啟動
+安裝時選 pro,  win11 home 沒有遠端桌面
 
+pass tpm, security...
+安裝的時候 看到檢查失敗 按 shift+F10
+regedit
+
+reg add HKLM\SYSTEM\Setup\LabConfig
+reg add HKLM\SYSTEM\Setup\LabConfig /t REG_DWORD /v BypassTPMCheck /d 1
+reg add HKLM\SYSTEM\Setup\LabConfig /t REG_DWORD /v BypassSecureBootCheck /d 1
+reg add HKLM\SYSTEM\Setup\LabConfig /t REG_DWORD /v BypassRAMCheck /d 1
+reg add HKLM\SYSTEM\Setup\LabConfig /t REG_DWORD /v BypassCPUCheck /d 1
+
+設定好之後，上一頁，下一頁 anyway 就會pass check 
+
+安裝的時候沒有辨識磁碟 virtio, 所以要安裝驅動程式，之後就會看到硬碟並開始安裝。
+
+安裝完之後進行初始化。會停在啟用網路，如果要啟用，就先關機，重新跑qemu並且有加上網路裝置`-nic user,model=e1000,id=net1`、安裝驅動。
+
+如果不需要網路，就 shift+F10 之後  `OOBE\BYPASSNRO` 可以跳過。
+
+完成安裝與初始化。
+
+改用 win11-prepare.sh 啟動 vm
+
+virtio-win-gt-x64.msi setup
+
+啟用RDP, sudo, share 等for debug
+
+安裝 cloudbase init CloudbaseInitSetup_1_1_6_x64.msi , 完成之後先不要 sysprep
+先修改設定檔
+allow_reboot=true //允許執行完後自動重啟。
+stop_service_on_exit=false //防止服務異常終止。
+我只啟用cdrom true, 其他為false
+
+進行snapshot / savevm 
+
+powershell
+cd C:\Windows\System32\Sysprep
+.\sysprep.exe /generalize /oobe /shutdown
+
+準備 win11_cidata.iso
+切換到 cloudinit, 執行`prepare.sh`
+
+執行 win11-cloudinit.sh
+
+手動測試 cloud init ：
+掛載cloud init iso
+qemu monitor ctrl+alt+2 -> 
+(qemu) change ide1-cd0 /home/thomas/Downloads/windows/cloudinit/win11_cidata.iso
+
+手動將 C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\ 下的舊日誌刪除。
+在「服務」管理員(service or service.msc)  中找到 Cloudbase-Init 服務，手動點擊 「啟動」。
+之後看log 應該要找到
+b'\r\nC:\\Windows\\System32>rem cmd \r\n\r\nC:\\Windows\\System32>powershell -ExecutionPolicy Bypass -Command "Set-TimeZone -Name \'Taipei Standard Time\'" \r\n\r\nC:\\Windows\\System32>powershell -ExecutionPolicy Bypass -Command "echo ReStOrE > C:\\Verification_Flag.txt" \r\n\r\nC:\\Windows\\System32>shutdown /s /t 10 \r\n' execute_user_data_script C:\Program Files\Cloudbase Solutions\Cloudbase-Init\Python\Lib\site-packages\cloudbaseinit\plugins\common\userdatautils.py:93
+
+
+測試之後要準備乾淨的檔案
+qemu-img convert -c -f qcow2 -O qcow2 win11.qcow2 win11_clean_golden_image.qcow2

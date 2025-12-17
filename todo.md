@@ -8,6 +8,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 整個專案的usage 文件需要補充
 - [x] 整個專案需要支援多架構，先處理 riscv-64, arm64 架構支援; 所有script 需要支援多架構
 - [x] 相依的套件要補上 qemu-efi-aarch64 qemu-system-arm for usage
+- [ ] 容器化支援, 開發一個 Dockerfile 來建置一個包含所有相依套件的容器映像檔，方便在不同環境中執行這些腳本，要可以支援多架構，與 dev/testData, qemu/cloudimages, isos, zip 等目錄的掛載
 
 ## start.sh 改進事項：
 開發一個 start.sh 腳本，這個腳本主要用來啟動一個完整的 clonezilla ci 流程, 使用 shunit2 來進行單元測試, 並且產生測試報告

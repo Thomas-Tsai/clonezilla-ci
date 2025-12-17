@@ -30,6 +30,51 @@ sudo usermod -aG kvm $USER
 ```
 You will need to log out and log back in for this change to take effect.
 
+## Running with Docker (Recommended)
+
+This project includes a `Dockerfile` to build a container image with all the necessary dependencies. This is the recommended way to run the test suite, as it avoids having to install QEMU and other dependencies directly on your host machine.
+
+### Prerequisites
+
+-   [Docker](https://docs.docker.com/get-docker/) installed and running.
+
+### Build the Docker Image
+
+From the root of the project directory, run the following command:
+
+```bash
+docker build -t clonezilla-ci .
+```
+
+### Run the Test Suite in Docker
+
+To run the test suite, you need to mount the directories containing your test data and images into the container.
+
+```bash
+docker run --rm -it \
+  -v ./dev/testData:/app/dev/testData \
+  -v ./qemu/cloudimages:/app/qemu/cloudimages \
+  -v ./isos:/app/isos \
+  -v ./zip:/app/zip \
+  -v ./partimag:/app/partimag \
+  -v ./logs:/app/logs \
+  clonezilla-ci
+```
+
+You can pass arguments to `start.sh` as well:
+
+```bash
+docker run --rm -it \
+  -v ./dev/testData:/app/dev/testData \
+  -v ./qemu/cloudimages:/app/qemu/cloudimages \
+  -v ./isos:/app/isos \
+  -v ./zip:/app/zip \
+  -v ./partimag:/app/partimag \
+  -v ./logs:/app/logs \
+  clonezilla-ci --arch arm64 --zip /app/zip/clonezilla-live-stable-arm64.zip
+```
+**Note:** For hardware acceleration, you may need to add `--device=/dev/kvm` to the `docker run` command if you are on a Linux host.
+
 ### Running the Test Suite
 
 The main entry point for running all CI tests is `start.sh`.

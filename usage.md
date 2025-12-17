@@ -1,5 +1,47 @@
 # Clonezilla CI Automation Tools
 
+This project can be run inside a Docker container, which is the recommended method as it bundles all dependencies.
+
+## Running with Docker
+
+### 1. Build the Image
+
+First, build the Docker image from the project root:
+```bash
+docker build -t clonezilla-ci .
+```
+
+### 2. Run the Scripts
+
+To run any of the scripts, you use `docker run` and mount the necessary host directories as volumes. This ensures that the container can access required disk images, ISOs, and ZIP files, and that output artifacts (like logs and partimag backups) are saved to your host.
+
+**Example: Running the main test suite (`start.sh`)**
+```bash
+docker run --rm -it \
+  --device=/dev/kvm \
+  -v ./dev/testData:/app/dev/testData \
+  -v ./qemu/cloudimages:/app/qemu/cloudimages \
+  -v ./isos:/app/isos \
+  -v ./zip:/app/zip \
+  -v ./partimag:/app/partimag \
+  -v ./logs:/app/logs \
+  clonezilla-ci --arch amd64
+```
+**Note:** The `--device=/dev/kvm` flag is for enabling KVM hardware acceleration on Linux hosts. It may not be needed or available on other operating systems.
+
+**Example: Running an individual script (e.g., `clonezilla-boot.sh`)**
+```bash
+docker run --rm -it \
+  --device=/dev/kvm \
+  -v ./qemu:/app/qemu \
+  -v ./isos:/app/isos \
+  -v ./zip:/app/zip \
+  clonezilla-ci ./clonezilla-boot.sh --disk /app/qemu/my-disk.qcow2
+```
+
+---
+The rest of the document describes the scripts and their options, which can be run inside the container as shown in the examples above.
+
 This project provides a suite of bash scripts to automate the use of Clonezilla within a QEMU virtual environment. It is designed to facilitate Continuous Integration (CI) workflows, such as automated disk imaging, restoration, and testing.
 
 ## Prerequisites
