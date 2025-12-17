@@ -1,10 +1,10 @@
 #!/bin/bash
 # ----------------------------------------------------------------------
-# Linux Distro Clone/Restore/Validate Orchestration Script
+# OS Clone/Restore/Validate Orchestration Script
 #
 # This script automates the entire process of:
 # 1. Preparing a Clonezilla live medium.
-# 2. Backing up a source Linux qcow2 image using Clonezilla.
+# 2. Backing up a source OS qcow2 image using Clonezilla.
 # 3. Restoring the backup to a new qcow2 image.
 # 4. Validating that the restored image boots and runs a cloud-init script.
 # ----------------------------------------------------------------------
@@ -35,13 +35,14 @@ print_usage() {
     echo ""
     echo "Required Arguments:"
     echo "  --zip <path>   Path to the Clonezilla Live ZIP file."
-    echo "  --tmpl <path>  Path to the source Linux distro QCOW2 template image."
+    echo "  --tmpl <path>  Path to the source OS distro QCOW2 template image."
     echo ""
     echo "Optional Arguments:"
-    echo "  --image-name <name> Name for the Clonezilla image folder. (Default: $CLONE_IMAGE_NAME)"
-    echo "  --arch <arch>       Target architecture (amd64, arm64, riscv64). Default: amd64."
-    echo "  --keep-temp         Do not delete the temporary working directory on failure, for debugging."
-    echo "  -h, --help          Display this help message and exit."
+    echo "  --image-name <name>   Name for the Clonezilla image folder. (Default: $CLONE_IMAGE_NAME)"
+    echo "  --arch <arch>         Target architecture (amd64, arm64, riscv64). Default: amd64."
+    echo "  --validate-iso <path> Path to the validation ISO file. (Default: $VALIDATE_ISO)"
+    echo "  --keep-temp           Do not delete the temporary working directory on failure, for debugging."
+    echo "  -h, --help            Display this help message and exit."
 }
 
 # Cleanup for temporary files and directories
@@ -81,6 +82,10 @@ while [[ "$#" -gt 0 ]]; do
             CLONE_IMAGE_NAME="$2"
             shift 2
             ;;
+        --validate-iso)
+            VALIDATE_ISO="$2"
+            shift 2
+            ;;
         --keep-temp)
             KEEP_TEMP_FILES=true
             shift 1
@@ -111,6 +116,11 @@ fi
 
 if [ ! -f "$TEMPLATE_QCOW" ]; then
     echo "ERROR: Template QCOW2 file not found: $TEMPLATE_QCOW" >&2
+    exit 1
+fi
+
+if [ ! -f "$VALIDATE_ISO" ]; then
+    echo "ERROR: Validation ISO file not found: $VALIDATE_ISO" >&2
     exit 1
 fi
 

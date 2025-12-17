@@ -88,7 +88,7 @@ run_os_clone_restore() {
     local DISK_IMAGE="$1"
 
     echo "--- Running OS $DISK_IMAGE ($ARCH) Clone/Restore Test (Log: $LOG_FILE) ---"
-    ./linux-clone-restore.sh --zip "$CLONEZILLA_ZIP" --tmpl $DISK_IMAGE --arch "$ARCH" > "$LOG_FILE" 2>&1
+    ./os-clone-restore.sh --zip "$CLONEZILLA_ZIP" --tmpl $DISK_IMAGE --arch "$ARCH" > "$LOG_FILE" 2>&1
     local RESULT=$?
     local TEST_END_TIME=$(date +%s) # Record end time for this specific test
     local TEST_DURATION=$((TEST_END_TIME - TEST_START_TIME))

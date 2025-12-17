@@ -14,7 +14,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
 開發一個 start.sh 腳本，這個腳本主要用來啟動一個完整的 clonezilla ci 流程, 使用 shunit2 來進行單元測試, 並且產生測試報告
 - [x] check shunit2 並提示安裝 (done)
 - [x] 實做單元測試，主要包含兩種類型 (done)
-    - [x] 作業系統測試，利用 linux-clone-restore.sh 以不同的 linux distro 進行 clonezilla 備份還原測試 (done)
+    - [x] 作業系統測試，利用 os-clone-restore.sh 以不同的 linux distro 進行 clonezilla 備份還原測試 (done)
     - [x] 檔案系統測試，利用 data-clone-restore.sh 以不同的檔案系統類型進行 clonezilla 備份還原測試 (done)
     - [x] zip檔不要寫死在程式碼裡面，可以在檔案前面進行定義 也可以用參數帶入 (done)
     - [x] 每一個測試的log 檔案要分開存放到 /log/XXX，方便debug (done)
@@ -44,11 +44,12 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 檔案的checksum 記錄供還原時驗證, 希望設計為可以保留checksum 檔案, 以便後續可以用來驗證其他 qcow2 檔案，減少步驟2的時間, 可以設定位置於當前目錄下的 dcr_checksums.txt 檔案
 - [x] 還原失敗時，保留相關檔案，方便debug
 
-## linux-clone-restore.sh 改進事項：
-這個程式主要用來進行linux distro 的clonezilla 備份還原，完全非互動方式一次完成備份、還原、還原檢查
+## os-clone-restore.sh 改進事項：
+- [x] linux-clone-restore.sh 更名為 os-clone-restore.sh
+這個程式主要用來進行os distro 的clonezilla 備份還原，完全非互動方式一次完成備份、還原、還原檢查
 提供使用者參數：
 1. --zip 指定 clonezilla zip 檔案路徑 
-2. --tmpl 設定 linux distro 參數，例: debian-sid-generic-amd64-daily-20250805-2195.qcow2 需支援 cloud init
+2. --tmpl 設定 os distro 參數，例: debian-sid-generic-amd64-daily-20250805-2195.qcow2 需支援 cloud init
 
 主要流程
 1. 使用 clonezilla-zip2qcow.sh 將 clonezilla zip 轉成 qcow2 檔案

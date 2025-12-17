@@ -145,7 +145,7 @@ This orchestration script is designed for end-to-end testing of filesystem backu
 ./data-clone-restore.sh --help
 ```
 
-### `linux-clone-restore.sh`
+### `os-clone-restore.sh`
 
 This is an orchestration script that automates the full backup, restore, and validation cycle for a Linux distribution. It uses `clonezilla-zip2qcow.sh`, `qemu-clonezilla-ci-run.sh`, and `validate.sh` internally.
 
@@ -166,18 +166,18 @@ This is an orchestration script that automates the full backup, restore, and val
 **Usage:**
 ```bash
 # Run a full cycle with default image name
-./linux-clone-restore.sh \
+./os-clone-restore.sh \
   --zip ./isos/clonezilla-live-20251124-resolute-amd64.zip \
   --tmpl ./qemu/debian-sid-generic-amd64-daily-20250805-2195.qcow2
 
 # Run a full cycle with a custom image name
-./linux-clone-restore.sh \
+./os-clone-restore.sh \
   --zip ./isos/clonezilla-live-20251124-resolute-amd64.zip \
   --tmpl ./qemu/debian-sid-generic-amd64-daily-20250805-2195.qcow2 \
   --image-name "my-custom-image"
 
 # Display help
-./linux-clone-restore.sh --help
+./os-clone-restore.sh --help
 ```
 
 ### `validate.sh`
