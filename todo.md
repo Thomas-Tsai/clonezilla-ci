@@ -43,6 +43,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 指定tmp路徑，預設使用 /tmp/dcr-xxxxxx , 並於完成後刪除; --tmp_path /home/debian/tmp/ 參數指定tmp 路徑
 - [x] 檔案的checksum 記錄供還原時驗證, 希望設計為可以保留checksum 檔案, 以便後續可以用來驗證其他 qcow2 檔案，減少步驟2的時間, 可以設定位置於當前目錄下的 dcr_checksums.txt 檔案
 - [x] 還原失敗時，保留相關檔案，方便debug
+- [x] 檢查還原的檔案系統會直接用 checksum; 希望在這步驟之前設計一個新的檢查，以read-only的方式用fsck檢查檔案系統是否有錯誤(只檢查不修正)，確保還原的檔案系統是健康的，再進行checksum 比對
 
 ## os-clone-restore.sh 改進事項：
 - [x] linux-clone-restore.sh 更名為 os-clone-restore.sh
@@ -70,6 +71,7 @@ eg: ./qemu-clonezilla-ci-run.sh --disk qemu/restore.qcow2 --live isos/clonezilla
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
 - [x] 設定參數 CLONE_IMAGE_NAME 來指定 backup / restore 的 image name; 且要同步到 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面; 抑或是以hardcode 常數方式寫死在 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面
 - [x] 增加參數 --keep-temp 當失敗時，保留中間產生的所有檔案，方便debug
+- [x] image name 如果沒有參數指定，目前預設是固定字串； 建議改成以 os distro 名稱來命名，例如 debian-sid-generic-amd64-daily-20250805-2195.qcow2 就會是 debian-sid-generic-amd64-daily-20250805-2195/
 
 ## qemu-clonezilla-ci-run.sh 改進事項：
 qemu-clonezilla-ci-run.sh 需要修改：

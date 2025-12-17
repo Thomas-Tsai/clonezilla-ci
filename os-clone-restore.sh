@@ -14,7 +14,7 @@ set -e # Exit immediately if a command exits with a non-zero status.
 # --- Default values ---
 CLONEZILLA_ZIP=""
 TEMPLATE_QCOW=""
-CLONE_IMAGE_NAME="debian-sid" # Default image name for the backup/restore process
+CLONE_IMAGE_NAME="" # Default image name for the backup/restore process
 PARTIMAG_DIR="./partimag"
 QEMU_DIR="./qemu"
 ISOS_DIR="./isos"
@@ -38,7 +38,7 @@ print_usage() {
     echo "  --tmpl <path>  Path to the source OS distro QCOW2 template image."
     echo ""
     echo "Optional Arguments:"
-    echo "  --image-name <name>   Name for the Clonezilla image folder. (Default: $CLONE_IMAGE_NAME)"
+    echo "  --image-name <name>   Name for the Clonezilla image folder. (Default: based on template filename)"
     echo "  --arch <arch>         Target architecture (amd64, arm64, riscv64). Default: amd64."
     echo "  --validate-iso <path> Path to the validation ISO file. (Default: $VALIDATE_ISO)"
     echo "  --keep-temp           Do not delete the temporary working directory on failure, for debugging."
@@ -122,6 +122,12 @@ fi
 if [ ! -f "$VALIDATE_ISO" ]; then
     echo "ERROR: Validation ISO file not found: $VALIDATE_ISO" >&2
     exit 1
+fi
+
+# If no image name is provided, derive it from the template filename
+if [ -z "$CLONE_IMAGE_NAME" ]; then
+    CLONE_IMAGE_NAME=$(basename "$TEMPLATE_QCOW" .qcow2)
+    echo "INFO: --image-name not specified, deriving from template: $CLONE_IMAGE_NAME"
 fi
 
 # Check for required scripts
