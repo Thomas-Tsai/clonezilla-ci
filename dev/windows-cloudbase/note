@@ -1,12 +1,8 @@
-# create qcow2
-qemu-img create -f qcow2 debian.qcow2 20G
-qemu-img create -f qcow2 restore.qcow2 30G
-
-# Windows qcow2
-
 已經有寫好的 qemu 以動指令：
 win11-setup.sh 用於安裝、沒有網卡、有virt相關驅動光碟
 win11-prepare.sh 用於一般使用、有網卡、有virt相關驅動光碟、9P檔案共享、遠端桌面port for localhost
+
+
 
 準備好 ISO, Win11_25H2_Chinese_Traditional_x64.iso, virtio-win-0.1.285.iso 用 win11-setup.sh 啟動
 安裝時選 pro,  win11 home 沒有遠端桌面
@@ -64,14 +60,21 @@ qemu monitor ctrl+alt+2 ->
 之後看log 應該要找到
 b'\r\nC:\\Windows\\System32>rem cmd \r\n\r\nC:\\Windows\\System32>powershell -ExecutionPolicy Bypass -Command "Set-TimeZone -Name \'Taipei Standard Time\'" \r\n\r\nC:\\Windows\\System32>powershell -ExecutionPolicy Bypass -Command "echo ReStOrE > C:\\Verification_Flag.txt" \r\n\r\nC:\\Windows\\System32>shutdown /s /t 10 \r\n' execute_user_data_script C:\Program Files\Cloudbase Solutions\Cloudbase-Init\Python\Lib\site-packages\cloudbaseinit\plugins\common\userdatautils.py:93
 
+win11
+powershell
+Win11Debloat https://github.com/Raphire/Win11Debloat
+```
+& ([scriptblock]::Create((irm "https://debloat.raphi.re/")))
+```
+
+再 zero
+https://learn.microsoft.com/zh-tw/sysinternals/downloads/sdelete
+sdelete64.exe -z c:
 
 測試之後要準備乾淨的檔案
+
 qemu-img convert -c -f qcow2 -O qcow2 win11.qcow2 win11_clean_golden_image.qcow2
 
-reference
-https://cloudbase-init.readthedocs.io/en/latest/
-https://xen-orchestra.com/blog/windows-templates-with-cloudbase-init-step-by-step-guide-best-practices/
-https://www.tencentcloud.com/document/product/213/32364
-https://computernewb.com/wiki/QEMU/Guests/Windows_11
-https://cloudbase.it/cloudbase-init/
-
+or
+如果你安裝了 libguestfs-tools，可以使用此工具自動處理，無需手動在 VM 內下 sdelete：
+virt-sparsify --in-place disk.qcow2

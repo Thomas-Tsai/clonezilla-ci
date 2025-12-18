@@ -1,0 +1,13 @@
+.git
+.gitignore
+logs/
+partimag/
+qemu/
+isos/
+zip/
+*.log
+*.qcow2
+*.iso
+*.zip
+clonezilla-live-*/
+dev/

@@ -200,7 +200,7 @@ cleanup() {
 trap cleanup EXIT
 
 # --- Step 1: Convert Clonezilla zip to QCOW2 ---
-echo "INFO: [Step 1/6] Converting Clonezilla ZIP to QCOW2 format..."
+echo "INFO: [Step 1/5] Converting Clonezilla ZIP to QCOW2 format..."
 ./clonezilla-zip2qcow.sh --zip "$CLONEZILLA_ZIP" --output "$WORK_DIR" --force --arch "$ARCH" > /dev/null
 
 # Define paths for the generated Clonezilla live media
@@ -218,7 +218,7 @@ echo "INFO: Clonezilla media successfully created."
 echo ""
 
 # --- Step 2: Prepare source disk and copy data ---
-echo "INFO: [Step 2/6] Preparing source disk..."
+echo "INFO: [Step 2/5] Preparing source disk..."
 SOURCE_DISK_QCOW2="$WORK_DIR/source.qcow2"
 
 echo "INFO: Creating blank source disk: $SOURCE_DISK_QCOW2"
@@ -284,7 +284,7 @@ echo "INFO: Source disk prepared successfully."
 echo ""
 
 # --- Step 3: Backup source disk ---
-echo "INFO: [Step 3/6] Backing up source disk using Clonezilla..."
+echo "INFO: [Step 3/5] Backing up source disk using Clonezilla..."
 # Determine the partimag directory: use user-specified or create a temporary one.
 if [ -n "$PARTIMAG_LOCATION" ]; then
     PARTIMAG_DIR="$PARTIMAG_LOCATION"
@@ -315,7 +315,7 @@ echo "INFO: Backup completed successfully to $PARTIMAG_DIR/$CLONE_IMAGE_NAME"
 echo ""
 
 # --- Step 4: Restore to new disk ---
-echo "INFO: [Step 4/6] Restoring image to a new disk..."
+echo "INFO: [Step 4/5] Restoring image to a new disk..."
 RESTORE_DISK_QCOW2="$WORK_DIR/restore.qcow2"
 
 # Create a new disk for restoration, 20% larger than the original.
@@ -339,12 +339,13 @@ echo "INFO: Restore process finished."
 echo ""
 
 # --- Step 5: Verify restored data ---
-echo "INFO: [Step 6/6] Verifying restored data..."
+echo "INFO: [Step 5/5] Verifying restored disk health and data integrity..."
 
 echo "INFO: Checking filesystem health of restored disk..."
 set +e
-guestfish --ro -a "$RESTORE_DISK_QCOW2" -i <<-EOF > "$WORK_DIR/fsck.log" 2>&1
-    fsck /dev/sda1
+guestfish --ro -a "$RESTORE_DISK_QCOW2" <<-EOF > "$WORK_DIR/fsck.log" 2>&1
+    run
+    fsck $FILESYSTEM_TYPE /dev/sda1
 EOF
 fsck_result=$?
 set -e
