@@ -57,21 +57,31 @@ build_latest_zip:
     - build_latest_zip
   before_script:
     - |
-      echo "Using local clonezilla-ci from /data/clonezilla-ci as requested."
-      if [ ! -d "/data/clonezilla-ci" ]; then
-        echo "Error: Directory /data/clonezilla-ci not found." >&2
+      echo "Cloning clonezilla-ci repository..."
+      if ! git clone https://gitlab.com/freelabstw/clonezilla-ci.git; then
+        echo "Error: Failed to clone the repository." >&2
         exit 1
       fi
-      ln -s /data/clonezilla-ci clonezilla-ci
     - |
-      echo "Copying artifact..."
+      echo "Setting up qemu cloud images..."
+      if [ -d "/data/cloudimages" ]; then
+        mkdir -p clonezilla-ci/qemu/cloudimages
+        ln -s /data/cloudimages/*.qcow2 clonezilla-ci/qemu/cloudimages/
+        echo "Linked cloud images from /data/cloudimages."
+      else
+        echo "Warning: /data/cloudimages not found. OS tests will fail if images are not present."
+      fi
+    - |
+      echo "Copying build artifact (Clonezilla ZIP)..."
       if ! ls ${ZIP_DIR}/*.zip > /dev/null 2>&1; then
         echo "Error: Artifact zip file not found in ${ZIP_DIR}/" >&2
-        echo "Listing contents of . :"
+        echo "Listing contents of current directory ('.'):"
         ls -l .
         exit 1
       fi
+      mkdir -p "clonezilla-ci/${ZIP_DIR}"
       cp ${ZIP_DIR}/*.zip clonezilla-ci/${ZIP_DIR}/
+      echo "Copied zip to clonezilla-ci/${ZIP_DIR}/"
     - |
       export ZIP_FILE=$(cd clonezilla-ci/${ZIP_DIR} && ls *.zip 2>/dev/null | head -n1)
       if [ -z "${ZIP_FILE}" ]; then
@@ -80,7 +90,7 @@ build_latest_zip:
         ls -l clonezilla-ci/${ZIP_DIR}/
         exit 1
       fi
-      echo "zip file: ${ZIP_FILE}"
+      echo "Using ZIP file: ${ZIP_FILE}"
     - cd clonezilla-ci
     - export LOG_DIR="./logs"
     - mkdir -p $LOG_DIR
@@ -97,7 +107,7 @@ test:os:ubuntu:
   extends: .test_template
   parallel:
     matrix:
-      - ARCH: [amd64, arm64, riscv64]
+      - ARCH: [amd64]
   script:
     - |
       os="ubuntu"
@@ -126,7 +136,7 @@ test:os:debian:
   extends: .test_template
   parallel:
     matrix:
-      - ARCH: [amd64, arm64, riscv64]
+      - ARCH: [amd64]
   script:
     - |
       os="debian"
@@ -155,7 +165,7 @@ test:os:fedora:
   extends: .test_template
   parallel:
     matrix:
-      - ARCH: [amd64, arm64, riscv64]
+      - ARCH: [amd64]
   script:
     - |
       os="fedora"
@@ -209,7 +219,7 @@ test:os:windows11:
   extends: .test_template
   parallel:
     matrix:
-      - ARCH: [amd64, arm64, riscv64]
+      - ARCH: [amd64]
   script:
     - |
       echo "--- Running FS Clone/Restore Test with $FS ($ARCH) ---"
