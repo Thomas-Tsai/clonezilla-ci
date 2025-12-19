@@ -1,0 +1,93 @@
+stages:
+  - build
+  - test
+
+default:
+  tags:
+    - shell
+    - clonezilla
+
+variables:
+  CLONEZILLA_BASE_URL: "https://free.nchc.org.tw/clonezilla-live/stable"
+  ZIP_DIR: "zip"
+  ZIP_PATTERN: "clonezilla-live-.*\\.zip"
+  CURL_OPTS: "-fsSL"
+
+build_latest_zip:
+  stage: build
+  script:
+    - mkdir -p "${ZIP_DIR}"
+
+    - |
+      echo "get zip name..."
+      LATEST_ZIP=$(curl ${CURL_OPTS} "${CLONEZILLA_BASE_URL}/" \
+        | grep -Eo 'href="clonezilla-live-[^"]+\.zip"' \
+        | cut -d'"' -f2 \
+        | sort -V \
+        | tail -n1)
+
+      if [ -z "${LATEST_ZIP}" ]; then
+        echo "can't fine ${ZIP_PATTERN} !" >&2
+        exit 1
+      fi
+      echo "zip name: ${LATEST_ZIP}"
+      export LATEST_ZIP
+
+    - |
+      DOWNLOAD_URL="${CLONEZILLA_BASE_URL}/${LATEST_ZIP}"
+      DEST_FILE="${ZIP_DIR}/${LATEST_ZIP}"
+      echo "downloading ${DOWNLOAD_URL} to ${DEST_FILE}"
+      curl ${CURL_OPTS} -o "${DEST_FILE}" "${DOWNLOAD_URL}"
+      echo "finish"
+
+  artifacts:
+    name: "clonezilla-live-zip"
+    paths:
+      - "${ZIP_DIR}/"
+    expire_in: 7 day
+
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}"
+    paths:
+      - "${ZIP_DIR}/"
+
+run_main_test:
+  stage: test
+  dependencies:
+    - build_latest_zip
+  script:
+    - |
+      echo "Using local clonezilla-ci from /data/clonezilla-ci as requested."
+      if [ ! -d "/data/clonezilla-ci" ]; then
+        echo "Error: Directory /data/clonezilla-ci not found." >&2
+        exit 1
+      fi
+      
+      ln -s /data/clonezilla-ci clonezilla-ci
+      
+      echo "Copying artifact..."
+      if ! ls ${ZIP_DIR}/*.zip > /dev/null 2>&1; then
+        echo "Error: Artifact zip file not found in ${ZIP_DIR}/" >&2
+        echo "Listing contents of . :"
+        ls -l .
+        exit 1
+      fi
+      cp ${ZIP_DIR}/*.zip clonezilla-ci/${ZIP_DIR}/
+      
+      ZIP_FILE=$(cd clonezilla-ci/${ZIP_DIR} && ls *.zip 2>/dev/null | head -n1)
+      if [ -z "${ZIP_FILE}" ]; then
+        echo "Error: Failed to find zip file in clonezilla-ci/${ZIP_DIR}/ after copy." >&2
+        echo "Listing contents of clonezilla-ci/${ZIP_DIR}/ :"
+        ls -l clonezilla-ci/${ZIP_DIR}/
+        exit 1
+      fi
+
+      echo "zip file: ${ZIP_FILE}"
+      cd clonezilla-ci
+      ./start.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --arch amd64
+  artifacts:
+    when: always
+    paths:
+      - clonezilla-ci/log/*.log
+    expire_in: 5 days
+  timeout: 4h
