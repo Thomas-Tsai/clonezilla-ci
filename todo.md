@@ -22,6 +22,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
     - [x] 支援 --arch 參數，並從 qemu/cloudimages/cloud_images.conf 讀取對應架構的 cloud image，如果沒有就忽略 (done)
     - [x] 移除作業系統測試中 hardcode 的 release version，改為測試所有支援的 release (done)
     - [x] 提供 --help 參數 (done)
+    - [x] os_clone_restore 與 data_clone_restore 兩個 使用 tee 來同時輸出到螢幕與log 檔
 
 ## data-clone-restore.sh 改進事項：
 - [x] 整個 script flow 需要開發，完整flow, 參數說明

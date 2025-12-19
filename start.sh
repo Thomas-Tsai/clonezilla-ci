@@ -86,10 +86,12 @@ run_os_clone_restore() {
     local TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
     local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
     local DISK_IMAGE="$1"
+    local VALIDATE_ISO="$2"
 
     echo "--- Running OS $DISK_IMAGE ($ARCH) Clone/Restore Test (Log: $LOG_FILE) ---"
-    ./os-clone-restore.sh --zip "$CLONEZILLA_ZIP" --tmpl $DISK_IMAGE --arch "$ARCH" > "$LOG_FILE" 2>&1
-    local RESULT=$?
+    ./os-clone-restore.sh --zip "$CLONEZILLA_ZIP" --tmpl "$DISK_IMAGE" --arch "$ARCH" --validate-iso "$VALIDATE_ISO" 2>&1 | tee -a "$LOG_FILE"
+    local SCRIPT_RESULT="${PIPESTATUS[0]}"
+    local RESULT="$SCRIPT_RESULT"
     local TEST_END_TIME=$(date +%s) # Record end time for this specific test
     local TEST_DURATION=$((TEST_END_TIME - TEST_START_TIME))
 
@@ -110,8 +112,9 @@ run_fs_clone_restore() {
     local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
 
     echo "--- Running FS Clone/Restore Test with $fs ($ARCH) (Log: $LOG_FILE) ---"
-    ./data-clone-restore.sh --zip "$CLONEZILLA_ZIP" --data $testData --fs "$fs" --arch "$ARCH" > "$LOG_FILE" 2>&1
-    local RESULT=$?
+    ./data-clone-restore.sh --zip "$CLONEZILLA_ZIP" --data $testData --fs "$fs" --arch "$ARCH" 2>&1 | tee -a "$LOG_FILE"
+    local SCRIPT_RESULT="${PIPESTATUS[0]}"
+    local RESULT="$SCRIPT_RESULT"
     local TEST_END_TIME=$(date +%s) # Record end time for this specific test
     local TEST_DURATION=$((TEST_END_TIME - TEST_START_TIME))
 
@@ -136,7 +139,7 @@ test_ubuntu_clone_restore() {
         local image_path="qemu/cloudimages/${image_name}"
 
         if [ -f "$image_path" ]; then
-            run_os_clone_restore "$image_path"
+            run_os_clone_restore "$image_path" "isos/cidata.iso"
         else
             echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
         fi
@@ -155,7 +158,7 @@ test_debian_clone_restore() {
         local image_path="qemu/cloudimages/${image_name}"
 
         if [ -f "$image_path" ]; then
-            run_os_clone_restore "$image_path"
+            run_os_clone_restore "$image_path" "isos/cidata.iso"
         else
             echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
         fi
@@ -165,7 +168,7 @@ test_debian_clone_restore() {
 # Test for fedora system clone and restore
 test_fedora_clone_restore() {
     local os="fedora"
-    
+
     # Find all fedora releases for the given arch in the conf file
     grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while read -r config_line; do
         # Extract release from the line
@@ -174,11 +177,22 @@ test_fedora_clone_restore() {
         local image_path="qemu/cloudimages/${image_name}"
 
         if [ -f "$image_path" ]; then
-            run_os_clone_restore "$image_path"
+            run_os_clone_restore "$image_path" "isos/cidata.iso" 
         else
             echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
         fi
     done
+}
+
+# Test for windows clone and restore
+test_windows11_clone_restore() {
+    local image_path="qemu/cloudimages/windown-11-${ARCH}.qcow2"
+
+    if [ -f "$image_path" ]; then
+        run_os_clone_restore "$image_path" "isos/win11_cidata.iso"
+    else
+        echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
+    fi
 }
 
 # Test for exfat file system clone and restore

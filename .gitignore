@@ -5,3 +5,4 @@ qemu/cloudimages/*.qcow2
 isos/*.iso
 logs/*
 dev/testData/*
+partimag/*
