@@ -200,7 +200,7 @@ test:os:windows11:
       - ARCH: [amd64]
   script:
     - |
-      image_path="qemu/cloudimages/windown-11-${ARCH}.qcow2"
+      image_path="qemu/cloudimages/windows-11-${ARCH}.qcow2"
       echo "--- Running OS Clone/Restore Test for Windows 11 ($ARCH) ---"
       if [ -f "$image_path" ]; then
           echo "--- Testing ${image_path} ---"
