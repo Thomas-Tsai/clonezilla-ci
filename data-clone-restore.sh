@@ -26,6 +26,7 @@ KEEP_TEMP_FILES=false # Default is to clean up temp files
 TMP_PATH="" # Default is to let mktemp decide
 CHECKSUM_FILE_PATH="" # Path to external checksum file
 ARCH="amd64"
+VALIDATE_FS=false # Default is not to run the new fs validation
 
 
 # --- Helper Functions ---
@@ -44,6 +45,7 @@ print_usage() {
     echo "  --fs <type>       Filesystem type to use (e.g., ext2/34, btrfs, xfs, ntfs, vfat, exfat). (Default: $FILESYSTEM_TYPE)"
     echo "  --size <size>     Size of the source test disk (e.g., '10G'). (Default: $DISK_SIZE)"
     echo "  --partimag <dir>  Directory to store Clonezilla image backups. (Default: temporary directory)"
+    echo "  --validate-fs     Run an external filesystem check using validate-fs.sh after restore. (Requires sudo)"
     echo "  --keep-temp       Do not delete the temporary working directory on failure, for debugging."
     echo "  --tmp-path <dir>  Specify a base directory for temporary files. (Default: system temporary directory)"
     echo "  --checksum-file <path> Specify a file to load/save checksums. If exists, load; else, generate and save."
@@ -51,7 +53,7 @@ print_usage() {
     echo "  -h, --help        Display this help message and exit."
     echo ""
     echo "Example:"
-    echo "  $0 --zip zip/clonezilla.zip --data ./my_test_data --fs ext4 --partimag /mnt/my_backups"
+    echo "  $0 --zip zip/clonezilla.zip --data ./my_test_data --fs ext4 --partimag /mnt/my_backups --validate-fs"
 }
 
 # --- Argument Parsing ---
@@ -80,6 +82,10 @@ while [[ "$#" -gt 0 ]]; do
         --partimag)
             PARTIMAG_LOCATION="$2"
             shift 2
+            ;;
+        --validate-fs)
+            VALIDATE_FS=true
+            shift 1
             ;;
         --keep-temp)
             KEEP_TEMP_FILES=true
@@ -147,7 +153,7 @@ case "$FILESYSTEM_TYPE" in
         ;;
 esac
 # Validate that required tools exist
-for cmd in ./clonezilla-zip2qcow.sh ./qemu-clonezilla-ci-run.sh qemu-img guestfish guestmount guestunmount md5sum; do
+for cmd in ./clonezilla-zip2qcow.sh ./qemu-clonezilla-ci-run.sh ./validate-fs.sh qemu-img guestfish guestmount guestunmount md5sum; do
     command -v "$cmd" >/dev/null 2>&1 || { echo >&2 "ERROR: Required command '$cmd' not found. Please ensure it is in your PATH."; exit 1; }
 done
 echo "INFO: All dependencies found."
@@ -161,6 +167,9 @@ echo "Filesystem:     $FILESYSTEM_TYPE"
 echo "Disk Size:      $DISK_SIZE"
 if [ -n "$CHECKSUM_FILE_PATH" ]; then
     echo "Checksum File:  $CHECKSUM_FILE_PATH"
+fi
+if [ "$VALIDATE_FS" = "true" ]; then
+    echo "FS Validation:  Enabled"
 fi
 echo "---------------------------------"
 
@@ -200,7 +209,7 @@ cleanup() {
 trap cleanup EXIT
 
 # --- Step 1: Convert Clonezilla zip to QCOW2 ---
-echo "INFO: [Step 1/5] Converting Clonezilla ZIP to QCOW2 format..."
+echo "INFO: [Step 1/6] Converting Clonezilla ZIP to QCOW2 format..."
 ./clonezilla-zip2qcow.sh --zip "$CLONEZILLA_ZIP" --output "$WORK_DIR" --force --arch "$ARCH" > /dev/null
 
 # Define paths for the generated Clonezilla live media
@@ -218,7 +227,7 @@ echo "INFO: Clonezilla media successfully created."
 echo ""
 
 # --- Step 2: Prepare source disk and copy data ---
-echo "INFO: [Step 2/5] Preparing source disk..."
+echo "INFO: [Step 2/6] Preparing source disk..."
 SOURCE_DISK_QCOW2="$WORK_DIR/source.qcow2"
 
 echo "INFO: Creating blank source disk: $SOURCE_DISK_QCOW2"
@@ -284,7 +293,7 @@ echo "INFO: Source disk prepared successfully."
 echo ""
 
 # --- Step 3: Backup source disk ---
-echo "INFO: [Step 3/5] Backing up source disk using Clonezilla..."
+echo "INFO: [Step 3/6] Backing up source disk using Clonezilla..."
 # Determine the partimag directory: use user-specified or create a temporary one.
 if [ -n "$PARTIMAG_LOCATION" ]; then
     PARTIMAG_DIR="$PARTIMAG_LOCATION"
@@ -315,7 +324,7 @@ echo "INFO: Backup completed successfully to $PARTIMAG_DIR/$CLONE_IMAGE_NAME"
 echo ""
 
 # --- Step 4: Restore to new disk ---
-echo "INFO: [Step 4/5] Restoring image to a new disk..."
+echo "INFO: [Step 4/6] Restoring image to a new disk..."
 RESTORE_DISK_QCOW2="$WORK_DIR/restore.qcow2"
 
 # Create a new disk for restoration, 20% larger than the original.
@@ -338,30 +347,20 @@ OCS_COMMAND_RESTORE="sudo /usr/sbin/ocs-sr -b -k0 -j2 -p poweroff restoredisk ${
 echo "INFO: Restore process finished."
 echo ""
 
-# --- Step 5: Verify restored data ---
-echo "INFO: [Step 5/5] Verifying restored disk health and data integrity..."
-
-echo "INFO: Checking filesystem health of restored disk..."
-set +e
-guestfish --ro -a "$RESTORE_DISK_QCOW2" <<-EOF > "$WORK_DIR/fsck.log" 2>&1
-    run
-    fsck $FILESYSTEM_TYPE /dev/sda1
-EOF
-fsck_result=$?
-set -e
-
-if [ $fsck_result -ne 0 ]; then
-    echo "----------------------------------------------------"
-    echo "--- ❌ FAILURE: Filesystem check (fsck) failed! ---"
-    echo "----------------------------------------------------"
-    echo "Filesystem on restored disk appears to be corrupted."
-    echo "fsck output:"
-    cat "$WORK_DIR/fsck.log"
-    echo "----------------------------------------------------"
-    exit 1
+# --- Step 5: Validate Filesystem Health (Optional) ---
+echo "INFO: [Step 5/6] Validating filesystem health of restored disk..."
+if [ "$VALIDATE_FS" = "true" ]; then
+    echo "INFO: --validate-fs flag is set. Running external filesystem check."
+    # The 'set -e' at the top of the script will cause it to exit on failure.
+    ./validate-fs.sh --qcow2 "$RESTORE_DISK_QCOW2" --fstype "$FILESYSTEM_TYPE"
+    echo "INFO: Filesystem check via validate-fs.sh passed."
 else
-    echo "INFO: Filesystem check passed."
+    echo "INFO: Skipping filesystem health check (--validate-fs not specified)."
 fi
+echo ""
+
+# --- Step 6: Verify restored data ---
+echo "INFO: [Step 6/6] Verifying restored data integrity via checksums..."
 
 MOUNT_POINT="$WORK_DIR/mnt"
 CHECKSUM_LOG="$WORK_DIR/checksum_verification.log"

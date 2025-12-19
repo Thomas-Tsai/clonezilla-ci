@@ -10,6 +10,11 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 相依的套件要補上 qemu-efi-aarch64 qemu-system-arm for usage
 - [ ] 容器化支援, 開發一個 Dockerfile 來建置一個包含所有相依套件的容器映像檔，方便在不同環境中執行這些腳本，要可以支援多架構，與 dev/testData, qemu/cloudimages, isos, zip 等目錄的掛載
 
+## .gitlab-ci.yml 改進事項：
+- [ ] 目前行為是執行 start.sh 來進行所有的單元測試, 我想改為每一個 script 都有自己的單元測試, 並且在 .gitlab-ci.yml 裡面分別執行每一個 script 的單元測試, 這樣可以更清楚知道是哪一個 script 有問題
+- [ ] 以 .gitlab-ci.yml 來執行所有在 start.sh 內的測試, 並且產生測試報告
+- [ ] 支援多架構測試, 例如 amd64, arm64, riscv64 等架構的測試 可以搭配不同的pipelines 來執行不同架構的測試
+
 ## start.sh 改進事項：
 開發一個 start.sh 腳本，這個腳本主要用來啟動一個完整的 clonezilla ci 流程, 使用 shunit2 來進行單元測試, 並且產生測試報告
 - [x] check shunit2 並提示安裝 (done)

@@ -51,20 +51,19 @@ build_latest_zip:
     paths:
       - "${ZIP_DIR}/"
 
-run_main_test:
+.test_template:
   stage: test
   dependencies:
     - build_latest_zip
-  script:
+  before_script:
     - |
       echo "Using local clonezilla-ci from /data/clonezilla-ci as requested."
       if [ ! -d "/data/clonezilla-ci" ]; then
         echo "Error: Directory /data/clonezilla-ci not found." >&2
         exit 1
       fi
-      
       ln -s /data/clonezilla-ci clonezilla-ci
-      
+    - |
       echo "Copying artifact..."
       if ! ls ${ZIP_DIR}/*.zip > /dev/null 2>&1; then
         echo "Error: Artifact zip file not found in ${ZIP_DIR}/" >&2
@@ -73,21 +72,182 @@ run_main_test:
         exit 1
       fi
       cp ${ZIP_DIR}/*.zip clonezilla-ci/${ZIP_DIR}/
-      
-      ZIP_FILE=$(cd clonezilla-ci/${ZIP_DIR} && ls *.zip 2>/dev/null | head -n1)
+    - |
+      export ZIP_FILE=$(cd clonezilla-ci/${ZIP_DIR} && ls *.zip 2>/dev/null | head -n1)
       if [ -z "${ZIP_FILE}" ]; then
         echo "Error: Failed to find zip file in clonezilla-ci/${ZIP_DIR}/ after copy." >&2
         echo "Listing contents of clonezilla-ci/${ZIP_DIR}/ :"
         ls -l clonezilla-ci/${ZIP_DIR}/
         exit 1
       fi
-
       echo "zip file: ${ZIP_FILE}"
-      cd clonezilla-ci
-      ./start.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --arch amd64
+    - cd clonezilla-ci
+    - export LOG_DIR="./logs"
+    - mkdir -p $LOG_DIR
   artifacts:
     when: always
     paths:
       - clonezilla-ci/log/*.log
     expire_in: 5 days
   timeout: 4h
+
+# --- OS Tests ---
+
+test:os:ubuntu:
+  extends: .test_template
+  parallel:
+    matrix:
+      - ARCH: [amd64, arm64, riscv64]
+  script:
+    - |
+      os="ubuntu"
+      echo "--- Running OS Clone/Restore Tests for Ubuntu ($ARCH) ---"
+      grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while IFS= read -r config_line; do
+          release=$(echo "$config_line" | awk '{print $2}')
+          image_name="${os}-${release}-${ARCH}.qcow2"
+          image_path="qemu/cloudimages/${image_name}"
+
+          if [ -f "$image_path" ]; then
+              echo "--- Testing ${image_path} ---"
+              log_file="$LOG_DIR/os_ubuntu_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
+              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" 2>&1 | tee -a "$log_file"
+              rc=${PIPESTATUS[0]}
+              if [ $rc -ne 0 ]; then
+                  echo "--- Test FAILED for ${image_path} ---"
+                  exit 1
+              fi
+              echo "--- Test PASSED for ${image_path} ---"
+          else
+              echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
+          fi
+      done
+
+test:os:debian:
+  extends: .test_template
+  parallel:
+    matrix:
+      - ARCH: [amd64, arm64, riscv64]
+  script:
+    - |
+      os="debian"
+      echo "--- Running OS Clone/Restore Tests for Debian ($ARCH) ---"
+      grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while IFS= read -r config_line; do
+          release=$(echo "$config_line" | awk '{print $2}')
+          image_name="${os}-${release}-${ARCH}.qcow2"
+          image_path="qemu/cloudimages/${image_name}"
+
+          if [ -f "$image_path" ]; then
+              echo "--- Testing ${image_path} ---"
+              log_file="$LOG_DIR/os_debian_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
+              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" 2>&1 | tee -a "$log_file"
+              rc=${PIPESTATUS[0]}
+              if [ $rc -ne 0 ]; then
+                  echo "--- Test FAILED for ${image_path} ---"
+                  exit 1
+              fi
+              echo "--- Test PASSED for ${image_path} ---"
+          else
+              echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
+          fi
+      done
+
+test:os:fedora:
+  extends: .test_template
+  parallel:
+    matrix:
+      - ARCH: [amd64, arm64, riscv64]
+  script:
+    - |
+      os="fedora"
+      echo "--- Running OS Clone/Restore Tests for Fedora ($ARCH) ---"
+      grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while IFS= read -r config_line; do
+          release=$(echo "$config_line" | awk '{print $2}')
+          image_name="${os}-${release}-${ARCH}.qcow2"
+          image_path="qemu/cloudimages/${image_name}"
+
+          if [ -f "$image_path" ]; then
+              echo "--- Testing ${image_path} ---"
+              log_file="$LOG_DIR/os_fedora_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
+              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" 2>&1 | tee -a "$log_file"
+              rc=${PIPESTATUS[0]}
+              if [ $rc -ne 0 ]; then
+                  echo "--- Test FAILED for ${image_path} ---"
+                  exit 1
+              fi
+              echo "--- Test PASSED for ${image_path} ---"
+          else
+              echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
+          fi
+      done
+
+test:os:windows11:
+  extends: .test_template
+  parallel:
+    matrix:
+      - ARCH: [amd64]
+  script:
+    - |
+      image_path="qemu/cloudimages/windown-11-${ARCH}.qcow2"
+      echo "--- Running OS Clone/Restore Test for Windows 11 ($ARCH) ---"
+      if [ -f "$image_path" ]; then
+          echo "--- Testing ${image_path} ---"
+          log_file="$LOG_DIR/os_windows11_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
+          ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/win11_cidata.iso" 2>&1 | tee -a "$log_file"
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+              echo "--- Test FAILED for ${image_path} ---"
+              exit 1
+          fi
+          echo "--- Test PASSED for ${image_path} ---"
+      else
+          echo "Skipping test for Windows 11: image file not found at ${image_path}"
+      fi
+
+# --- Filesystem Tests ---
+
+.fs_test_template:
+  extends: .test_template
+  parallel:
+    matrix:
+      - ARCH: [amd64, arm64, riscv64]
+  script:
+    - |
+      echo "--- Running FS Clone/Restore Test with $FS ($ARCH) ---"
+      log_file="$LOG_DIR/fs_${FS}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
+      ./data-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --data dev/testData --fs "$FS" --arch "$ARCH" 2>&1 | tee -a "$log_file"
+      rc=${PIPESTATUS[0]}
+      if [ $rc -ne 0 ]; then
+          echo "--- Test FAILED for filesystem $FS ---"
+          exit 1
+      fi
+      echo "--- Test PASSED for filesystem $FS ---"
+
+test:fs:exfat:
+  extends: .fs_test_template
+  variables:
+    FS: exfat
+
+test:fs:ntfs:
+  extends: .fs_test_template
+  variables:
+    FS: ntfs
+
+test:fs:vfat:
+  extends: .fs_test_template
+  variables:
+    FS: vfat
+
+test:fs:ext4:
+  extends: .fs_test_template
+  variables:
+    FS: ext4
+
+test:fs:xfs:
+  extends: .fs_test_template
+  variables:
+    FS: xfs
+
+test:fs:btrfs:
+  extends: .fs_test_template
+  variables:
+    FS: btrfs

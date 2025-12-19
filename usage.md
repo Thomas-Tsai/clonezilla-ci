@@ -15,7 +15,7 @@ docker build -t clonezilla-ci .
 
 To run any of the scripts, you use `docker run` and mount the necessary host directories as volumes. This ensures that the container can access required disk images, ISOs, and ZIP files, and that output artifacts (like logs and partimag backups) are saved to your host.
 
-**Example: Running the main test suite (`start.sh`)**
+# Run the main test suite (`start.sh`)
 ```bash
 docker run --rm -it \
   --device=/dev/kvm \
@@ -38,6 +38,41 @@ docker run --rm -it \
   -v ./zip:/app/zip \
   clonezilla-ci ./clonezilla-boot.sh --disk /app/qemu/my-disk.qcow2
 ```
+
+### CI Runner Sudo Configuration
+
+For running scripts like `validate-fs.sh` directly on a CI runner (i.e., not inside the provided Docker container), passwordless `sudo` access is required for specific commands. This allows the scripts to perform system-level operations like loading kernel modules and managing block devices without manual intervention.
+
+**Warning:** Modifying `sudoers` has significant security implications. Only grant permissions for the specific commands required by the scripts.
+
+**Steps to Configure:**
+
+1.  **Identify the CI runner user.** This is often `gitlab-runner`, `github-actions`, or `jenkins`.
+
+2.  **Create a new `sudoers` configuration file.** It is best practice to add a new file rather than editing the main `/etc/sudoers` file. Use `visudo` to safely create and edit the file:
+    ```bash
+    sudo visudo -f /etc/sudoers.d/99-clonezilla-ci-runner
+    ```
+
+3.  **Add the necessary permissions.** Paste the following lines into the file, replacing `gitlab-runner` with your actual runner username if it's different.
+
+    ```
+    # Allow the CI runner to execute specific commands for clonezilla-ci
+    # without a password prompt.
+    gitlab-runner ALL=(ALL) NOPASSWD: /usr/sbin/modprobe, /sbin/modprobe
+    gitlab-runner ALL=(ALL) NOPASSWD: /usr/bin/qemu-nbd, /sbin/qemu-nbd
+    gitlab-runner ALL=(ALL) NOPASSWD: /usr/sbin/fsck.*, /sbin/fsck.*
+    ```
+
+4.  **Verify Command Paths:** The paths to the commands (`/usr/sbin/`, `/sbin/`, etc.) may differ on your system. Before adding them to the `sudoers` file, verify the correct path for each command using `which`:
+    ```bash
+    which modprobe
+    which qemu-nbd
+    which fsck.ext4
+    ```
+    Adjust the paths in the `sudoers` file to match the output of the `which` command. The example above includes common paths for Debian-based systems.
+
+After saving the file, the CI runner will be able to execute the validation scripts that require elevated permissions.
 
 ---
 The rest of the document describes the scripts and their options, which can be run inside the container as shown in the examples above.
@@ -201,6 +236,27 @@ This script boots a restored QCOW2 image with a cloud-init ISO to verify that th
 
 # Display help
 ./validate.sh --help
+```
+
+### `validate-fs.sh`
+
+A standalone script to safely check the filesystem integrity of a QCOW2 image. It uses `qemu-nbd` to expose the disk image as a read-only block device and then runs the appropriate `fsck` utility. This is a reliable way to verify filesystem health after a restore operation.
+
+**Features:**
+-   Checks for necessary permissions (`sudo`), commands (`qemu-nbd`, `fsck.*`), and ensures the `nbd` kernel module is loaded.
+-   Requires passwordless `sudo` access, making it suitable for automated CI/CD environments.
+-   If `fsck` detects an error, the script exits with a non-zero status and saves a detailed log to the `logs/` directory.
+
+**Usage:**
+```bash
+# Check an ext4 filesystem within a QCOW2 image
+./validate-fs.sh --qcow2 ./qemu/restored-debian.qcow2 --fstype ext4
+
+# Check an ntfs filesystem
+./validate-fs.sh --qcow2 ./qemu/restored-windows.qcow2 --fstype ntfs
+
+# Display help
+./validate-fs.sh --help
 ```
 
 ### `qemu-clonezilla-ci-run.sh`
