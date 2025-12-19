@@ -60,43 +60,35 @@ build_latest_zip:
     - build_latest_zip
   before_script:
     - |
-      echo "Cloning clonezilla-ci repository..."
-      if ! git clone https://gitlab.com/freelabstw/clonezilla-ci.git; then
-        echo "Error: Failed to clone the repository." >&2
-        exit 1
-      fi
-    - |
-      echo "Setting up qemu cloud images..."
+      echo "Setting up qemu cloud images in the project root..."
       if [ -d "/data/cloudimages" ]; then
-        mkdir -p clonezilla-ci/qemu/cloudimages
-        ln -s /data/cloudimages/*.qcow2 clonezilla-ci/qemu/cloudimages/
+        mkdir -p qemu/cloudimages
+        ln -s /data/cloudimages/*.qcow2 qemu/cloudimages/
         echo "Linked cloud images from /data/cloudimages."
       else
         echo "Warning: /data/cloudimages not found. OS tests will fail if images are not present."
       fi
     - |
-      echo "Copying build artifact (Clonezilla ZIP)..."
+      echo "Verifying build artifact (Clonezilla ZIP)..."
       if ! ls ${ZIP_DIR}/*.zip > /dev/null 2>&1; then
         echo "Error: Artifact zip file not found in ${ZIP_DIR}/" >&2
         echo "Listing contents of current directory ('.'):"
-        ls -l .
+        ls -lA
         exit 1
       fi
-      mkdir -p "clonezilla-ci/${ZIP_DIR}"
-      cp ${ZIP_DIR}/*.zip clonezilla-ci/${ZIP_DIR}/
-      echo "Copied zip to clonezilla-ci/${ZIP_DIR}/"
     - |
-      export ZIP_FILE=$(cd clonezilla-ci/${ZIP_DIR} && ls *.zip 2>/dev/null | head -n1)
+      export ZIP_FILE=$(basename $(ls ${ZIP_DIR}/*.zip | head -n1))
       if [ -z "${ZIP_FILE}" ]; then
-        echo "Error: Failed to find zip file in clonezilla-ci/${ZIP_DIR}/ after copy." >&2
-        echo "Listing contents of clonezilla-ci/${ZIP_DIR}/ :"
-        ls -l clonezilla-ci/${ZIP_DIR}/
+        echo "Error: Failed to find zip file in ${ZIP_DIR}/." >&2
+        echo "Listing contents of ${ZIP_DIR}/ :"
+        ls -l ${ZIP_DIR}/
         exit 1
       fi
       echo "Using ZIP file: ${ZIP_FILE}"
-    - cd clonezilla-ci
-    - export LOG_DIR="./logs"
-    - mkdir -p $LOG_DIR
+    - |
+      echo "Preparing log directory..."
+      export LOG_DIR="./logs"
+      mkdir -p $LOG_DIR
   artifacts:
     when: always
     paths:
