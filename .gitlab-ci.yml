@@ -53,6 +53,9 @@ build_latest_zip:
 
 .test_template:
   stage: test
+  variables:
+    LIBGUESTFS_DEBUG: "1"
+    LIBGUESTFS_TRACE: "1"
   dependencies:
     - build_latest_zip
   before_script:
