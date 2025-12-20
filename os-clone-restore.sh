@@ -195,7 +195,7 @@ echo "--- Backup completed successfully. ---"
 echo
 
 echo "--- (Step 4/5) Restoring to a New Disk ---"
-RESTORE_DISK="$QEMU_DIR/restore.qcow2"
+RESTORE_DISK="$QEMU_DIR/${CLONE_IMAGE_NAME}.restore.qcow2"
 echo "Creating new 30G disk at $RESTORE_DISK..."
 qemu-img create -f qcow2 "$RESTORE_DISK" "$RESTORE_DISK_SIZE"
 
