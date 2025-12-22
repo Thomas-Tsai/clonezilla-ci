@@ -1,3 +1,14 @@
+# Define a reusable matrix for architectures
+.arch_matrix: &arch_matrix
+  parallel:
+    matrix:
+      - ARCH: amd64
+        CLONEZILLA_BASE_URL: "https://free.nchc.org.tw/clonezilla-live/stable"
+      - ARCH: arm64
+        CLONEZILLA_BASE_URL: "https://free.nchc.org.tw/clonezilla-live/experimental/arm/3.3.0-27/"
+      - ARCH: riscv64
+        CLONEZILLA_BASE_URL: "https://free.nchc.org.tw/clonezilla-live/experimental/riscv64/3.3.1-12/"
+
 stages:
   - build
   - test
@@ -8,56 +19,56 @@ default:
     - clonezilla
 
 variables:
-  CLONEZILLA_BASE_URL: "https://free.nchc.org.tw/clonezilla-live/stable"
   ZIP_DIR: "zip"
-  ZIP_PATTERN: "clonezilla-live-.*\\.zip"
   CURL_OPTS: "-fsSL"
 
-build_latest_zip:
+build_zip:
+  <<: *arch_matrix
   stage: build
   script:
     - mkdir -p "${ZIP_DIR}"
-
     - |
-      echo "get zip name..."
+      echo "Getting latest zip name for arch '${ARCH}' from ${CLONEZILLA_BASE_URL}..."
       LATEST_ZIP=$(curl ${CURL_OPTS} "${CLONEZILLA_BASE_URL}/" \
-        | grep -Eo 'href="clonezilla-live-[^"]+\.zip"' \
+        | grep -Eo "href=\"clonezilla-live-[^\"]*${ARCH}[^\"]*\\.zip\"" \
         | cut -d'"' -f2 \
         | sort -V \
         | tail -n1)
 
       if [ -z "${LATEST_ZIP}" ]; then
-        echo "can't fine ${ZIP_PATTERN} !" >&2
+        echo "Error: Could not find a Clonezilla ZIP for architecture '${ARCH}' at ${CLONEZILLA_BASE_URL}" >&2
         exit 1
       fi
-      echo "zip name: ${LATEST_ZIP}"
-      export LATEST_ZIP
+      echo "Latest ZIP for ${ARCH}: ${LATEST_ZIP}"
 
-    - |
       DOWNLOAD_URL="${CLONEZILLA_BASE_URL}/${LATEST_ZIP}"
       DEST_FILE="${ZIP_DIR}/${LATEST_ZIP}"
-      echo "downloading ${DOWNLOAD_URL} to ${DEST_FILE}"
-      curl ${CURL_OPTS} -o "${DEST_FILE}" "${DOWNLOAD_URL}"
-      echo "finish"
 
+      if [ -f "${DEST_FILE}" ]; then
+        echo "File '${DEST_FILE}' already exists (from cache or previous run). Skipping download."
+      else
+        echo "Downloading ${DOWNLOAD_URL} to ${DEST_FILE}"
+        curl ${CURL_OPTS} -o "${DEST_FILE}" "${DOWNLOAD_URL}"
+        echo "Download finished."
+      fi
   artifacts:
-    name: "clonezilla-live-zip"
+    name: "clonezilla-live-zip-${ARCH}"
     paths:
       - "${ZIP_DIR}/"
-    expire_in: 7 day
-
+    expire_in: 14 day
   cache:
-    key: "${CI_COMMIT_REF_SLUG}"
+    key: "${CI_COMMIT_REF_SLUG}-${ARCH}"
     paths:
       - "${ZIP_DIR}/"
 
 .test_template:
+  <<: *arch_matrix
   stage: test
   variables:
     LIBGUESTFS_DEBUG: "0"
     LIBGUESTFS_TRACE: "0"
   dependencies:
-    - build_latest_zip
+    - build_zip
   before_script:
     - |
       echo "Setting up qemu cloud images in the project root..."
@@ -92,7 +103,7 @@ build_latest_zip:
   artifacts:
     when: always
     paths:
-      - clonezilla-ci/log/*.log
+      - logs/
     expire_in: 5 days
   timeout: 4h
 
@@ -100,9 +111,6 @@ build_latest_zip:
 
 test:os:ubuntu:
   extends: .test_template
-  parallel:
-    matrix:
-      - ARCH: [amd64]
   script:
     - |
       os="ubuntu"
@@ -129,9 +137,6 @@ test:os:ubuntu:
 
 test:os:debian:
   extends: .test_template
-  parallel:
-    matrix:
-      - ARCH: [amd64]
   script:
     - |
       os="debian"
@@ -158,9 +163,6 @@ test:os:debian:
 
 test:os:fedora:
   extends: .test_template
-  parallel:
-    matrix:
-      - ARCH: [amd64]
   script:
     - |
       os="fedora"
@@ -187,9 +189,6 @@ test:os:fedora:
 
 # test:os:windows11:
 #   extends: .test_template
-#   parallel:
-#     matrix:
-#       - ARCH: [amd64]
 #   script:
 #     - |
 #       image_path="qemu/cloudimages/windows-11-${ARCH}.qcow2"
@@ -212,9 +211,6 @@ test:os:fedora:
 
 .fs_test_template:
   extends: .test_template
-  parallel:
-    matrix:
-      - ARCH: [amd64]
   script:
     - |
       echo "--- Running FS Clone/Restore Test with $FS ($ARCH) ---"

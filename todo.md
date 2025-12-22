@@ -14,6 +14,12 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 目前行為是執行 start.sh 來進行所有的單元測試, 我想改為每一個 script 都有自己的單元測試, 並且在 .gitlab-ci.yml 裡面分別執行每一個 script 的單元測試, 這樣可以更清楚知道是哪一個 script 有問題
 - [x] 以 .gitlab-ci.yml 來執行所有在 start.sh 內的測試, 並且產生測試報告
 - [x] 支援多架構測試, 例如 amd64, arm64, riscv64 等架構的測試 可以搭配不同的pipelines 來執行不同架構的測試
+- [ ] 支援多架構測試, 例如 amd64, arm64, riscv64 等架構的測試 可以搭配不同的 variables 來執行不同架構的 pipelines 測試
+      variable arch=amd64 zip=https://.../clonezilla-live-xxxx-amd64.zip
+      variable arch=riscv64 zip=https://.../clonezilla-live-xxxx-riscv64.zip
+      variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
+- [ ] 每一個 script 的測試結果都要產生 並上傳到 gitlab artifacts 裡面, 方便後續下載查看; 目前都會放到 logs/ 目錄裡面, 有些是以檔案形式產生，也一併上傳
+
 
 ## start.sh 改進事項：
 開發一個 start.sh 腳本，這個腳本主要用來啟動一個完整的 clonezilla ci 流程, 使用 shunit2 來進行單元測試, 並且產生測試報告
