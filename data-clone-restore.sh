@@ -27,6 +27,7 @@ TMP_PATH="" # Default is to let mktemp decide
 CHECKSUM_FILE_PATH="" # Path to external checksum file
 ARCH="amd64"
 VALIDATE_FS=false # Default is not to run the new fs validation
+QEMU_EXTRA_ARGS=""
 
 
 # --- Helper Functions ---
@@ -46,6 +47,7 @@ print_usage() {
     echo "  --size <size>     Size of the source test disk (e.g., '10G'). (Default: $DISK_SIZE)"
     echo "  --partimag <dir>  Directory to store Clonezilla image backups. (Default: temporary directory)"
     echo "  --validate-fs     Run an external filesystem check using validate-fs.sh after restore. (Requires sudo)"
+    echo "  --no-ssh-forward  Disable SSH port forwarding in QEMU (for parallel runs)."
     echo "  --keep-temp       Do not delete the temporary working directory on failure, for debugging."
     echo "  --tmp-path <dir>  Specify a base directory for temporary files. (Default: system temporary directory)"
     echo "  --checksum-file <path> Specify a file to load/save checksums. If exists, load; else, generate and save."
@@ -59,6 +61,10 @@ print_usage() {
 # --- Argument Parsing ---
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --no-ssh-forward)
+            QEMU_EXTRA_ARGS+=" --no-ssh-forward"
+            shift 1
+            ;;
         --arch)
             ARCH="$2"
             shift 2
@@ -314,7 +320,8 @@ OCS_COMMAND="sudo /usr/sbin/ocs-sr -b -senc -sfsck -j2 -q2 -z1 -p poweroff saved
     --initrd "$CZ_INITRD" \
     --cmd "$OCS_COMMAND" \
     --image "$PARTIMAG_DIR" \
-    --arch "$ARCH"
+    --arch "$ARCH" \
+    $QEMU_EXTRA_ARGS
 
 if [ ! -d "$PARTIMAG_DIR/$CLONE_IMAGE_NAME" ]; then
     echo "ERROR: Backup failed. Image directory '$PARTIMAG_DIR/$CLONE_IMAGE_NAME' not found." >&2
@@ -343,7 +350,8 @@ OCS_COMMAND_RESTORE="sudo /usr/sbin/ocs-sr -b -k0 -j2 -p poweroff restoredisk ${
     --initrd "$CZ_INITRD" \
     --cmd "$OCS_COMMAND_RESTORE" \
     --image "$PARTIMAG_DIR" \
-    --arch "$ARCH"
+    --arch "$ARCH" \
+    $QEMU_EXTRA_ARGS
 echo "INFO: Restore process finished."
 echo ""
 

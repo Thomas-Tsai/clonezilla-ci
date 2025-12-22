@@ -46,6 +46,7 @@ print_usage() {
     echo "  --qemu-args <args>      A string of extra arguments to pass to the QEMU command. Can be specified multiple times."
     echo "  --log-dir <path>        Directory to store log files (default: ./logs)."
     echo "  --arch <arch>           Target architecture (amd64, arm64, riscv64). Default: amd64."
+    echo "  --no-ssh-forward        Disable TCP port 2222 forwarding for SSH."
     echo "  -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal)."
     echo "  -h, --help              Display this help message and exit."
     echo ""
@@ -110,10 +111,15 @@ ZIP_FORCE=0
 ARCH="amd64"
 ARCH_WAS_SET=0
 EXTRA_QEMU_ARGS=()
+SSH_FORWARD_ENABLED=1
 
 # Argument parsing
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --no-ssh-forward)
+            SSH_FORWARD_ENABLED=0
+            shift 1
+            ;;
         --qemu-args)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
                 # Read the space-separated string into a temporary array
@@ -596,9 +602,18 @@ if [ ${#EXTRA_QEMU_ARGS[@]} -gt 0 ]; then
     QEMU_ARGS+=( "${EXTRA_QEMU_ARGS[@]}" )
 fi
 
+# Networking
+NETDEV_ARGS="user,id=net0"
+if [ "$SSH_FORWARD_ENABLED" -eq 1 ]; then
+    NETDEV_ARGS+=",hostfwd=tcp::2222-:22"
+    echo "INFO: SSH port forwarding enabled (host 2222 -> guest 22)."
+else
+    echo "INFO: SSH port forwarding disabled."
+fi
+
 QEMU_ARGS+=(
     "-device" "virtio-net-pci,netdev=net0"
-    "-netdev" "user,id=net0,hostfwd=tcp::2222-:22"
+    "-netdev" "$NETDEV_ARGS"
     "-fsdev" "local,id=hostshare,path=$PARTIMAG_PATH,security_model=mapped-xattr"
     "-device" "virtio-9p-pci,fsdev=hostshare,mount_tag=hostshare"
     "-append" "$APPEND_ARGS"

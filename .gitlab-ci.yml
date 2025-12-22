@@ -131,7 +131,7 @@ test:os:ubuntu:
           if [ -f "$image_path" ]; then
               echo "--- Testing ${image_path} ---"
               log_file="$LOG_DIR/os_ubuntu_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" 2>&1 | tee -a "$log_file"
+              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" --no-ssh-forward 2>&1 | tee -a "$log_file"
               rc=${PIPESTATUS[0]}
               if [ $rc -ne 0 ]; then
                   echo "--- Test FAILED for ${image_path} ---"
@@ -157,7 +157,7 @@ test:os:debian:
           if [ -f "$image_path" ]; then
               echo "--- Testing ${image_path} ---"
               log_file="$LOG_DIR/os_debian_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" 2>&1 | tee -a "$log_file"
+              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" --no-ssh-forward 2>&1 | tee -a "$log_file"
               rc=${PIPESTATUS[0]}
               if [ $rc -ne 0 ]; then
                   echo "--- Test FAILED for ${image_path} ---"
@@ -183,7 +183,7 @@ test:os:debian:
 #          if [ -f "$image_path" ]; then
 #              echo "--- Testing ${image_path} ---"
 #              log_file="$LOG_DIR/os_fedora_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-#              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" 2>&1 | tee -a "$log_file"
+#              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" --no-ssh-forward 2>&1 | tee -a "$log_file"
 #              rc=${PIPESTATUS[0]}
 #              if [ $rc -ne 0 ]; then
 #                  echo "--- Test FAILED for ${image_path} ---"
@@ -204,7 +204,7 @@ test:os:debian:
 #       if [ -f "$image_path" ]; then
 #           echo "--- Testing ${image_path} ---"
 #           log_file="$LOG_DIR/os_windows11_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-#           ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/win11_cidata.iso" 2>&1 | tee -a "$log_file"
+#           ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/win11_cidata.iso" --no-ssh-forward 2>&1 | tee -a "$log_file"
 #           rc=${PIPESTATUS[0]}
 #           if [ $rc -ne 0 ]; then
 #               echo "--- Test FAILED for ${image_path} ---"
@@ -223,7 +223,7 @@ test:os:debian:
     - |
       echo "--- Running FS Clone/Restore Test with $FS ($ARCH) ---"
       log_file="$LOG_DIR/fs_${FS}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-      ./data-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --data dev/testData --fs "$FS" --arch "$ARCH" 2>&1 | tee -a "$log_file"
+      ./data-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --data dev/testData --fs "$FS" --arch "$ARCH" --no-ssh-forward 2>&1 | tee -a "$log_file"
       rc=${PIPESTATUS[0]}
       if [ $rc -ne 0 ]; then
           echo "--- Test FAILED for filesystem $FS ---"

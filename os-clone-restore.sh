@@ -23,6 +23,7 @@ RESTORE_DISK_SIZE="80G"
 VALIDATE_ISO="$ISOS_DIR/cidata.iso"
 KEEP_TEMP_FILES=false # Default is to clean up temp files
 ARCH="amd64"
+QEMU_EXTRA_ARGS=""
 
 
 # --- Helper Functions ---
@@ -41,6 +42,7 @@ print_usage() {
     echo "  --image-name <name>   Name for the Clonezilla image folder. (Default: based on template filename)"
     echo "  --arch <arch>         Target architecture (amd64, arm64, riscv64). Default: amd64."
     echo "  --validate-iso <path> Path to the validation ISO file. (Default: $VALIDATE_ISO)"
+    echo "  --no-ssh-forward      Disable SSH port forwarding in QEMU (for parallel runs)."
     echo "  --keep-temp           Do not delete the temporary working directory on failure, for debugging."
     echo "  -h, --help            Display this help message and exit."
 }
@@ -66,6 +68,10 @@ cleanup_on_exit() {
 # --- Argument Parsing ---
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --no-ssh-forward)
+            QEMU_EXTRA_ARGS+=" --no-ssh-forward"
+            shift 1
+            ;;
         --arch)
             ARCH="$2"
             shift 2
@@ -190,7 +196,8 @@ sed "s/\"debian-sid\"/\"$CLONE_IMAGE_NAME\"/" "dev/ocscmd/clone-first-disk.sh" >
   --initrd "$CZ_INITRD" \
   --cmdpath "$CLONE_SCRIPT_PATH" \
   --image "$PARTIMAG_DIR" \
-  --arch "$ARCH"
+  --arch "$ARCH" \
+  $QEMU_EXTRA_ARGS
 echo "--- Backup completed successfully. ---"
 echo
 
@@ -211,7 +218,8 @@ sed "s/\"debian-sid\"/\"$CLONE_IMAGE_NAME\"/" "dev/ocscmd/restore-first-disk.sh"
   --initrd "$CZ_INITRD" \
   --cmdpath "$RESTORE_SCRIPT_PATH" \
   --image "$PARTIMAG_DIR" \
-  --arch "$ARCH"
+  --arch "$ARCH" \
+  $QEMU_EXTRA_ARGS
 echo "--- Restore completed successfully. ---"
 echo
 
