@@ -105,7 +105,7 @@ build_zip:
       export LOG_DIR="./logs"
       mkdir -p $LOG_DIR
   artifacts:
-    when: always
+    when: manual
     paths:
       - logs/
     expire_in: 5 days
