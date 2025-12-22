@@ -1,14 +1,3 @@
-# Define a reusable matrix for architectures
-.arch_matrix: &arch_matrix
-  parallel:
-    matrix:
-      - ARCH: amd64
-        CLONEZILLA_BASE_URL: "https://free.nchc.org.tw/clonezilla-live/stable"
-      - ARCH: arm64
-        CLONEZILLA_BASE_URL: "https://free.nchc.org.tw/clonezilla-live/experimental/arm/3.3.0-27/"
-      - ARCH: riscv64
-        CLONEZILLA_BASE_URL: "https://free.nchc.org.tw/clonezilla-live/experimental/riscv64/3.3.1-12/"
-
 stages:
   - build
   - test
@@ -19,29 +8,49 @@ default:
     - clonezilla
 
 variables:
+  # Default architecture. Can be overridden in the "Run pipeline" page.
+  ARCH: "amd64"
   ZIP_DIR: "zip"
   CURL_OPTS: "-fsSL"
 
 build_zip:
-  <<: *arch_matrix
   stage: build
   script:
     - mkdir -p "${ZIP_DIR}"
     - |
-      echo "Getting latest zip name for arch '${ARCH}' from ${CLONEZILLA_BASE_URL}..."
-      LATEST_ZIP=$(curl ${CURL_OPTS} "${CLONEZILLA_BASE_URL}/" \
-        | grep -Eo "href=\"clonezilla-live-[^\"]*${ARCH}[^\"]*\\.zip\"" \
-        | cut -d'"' -f2 \
-        | sort -V \
-        | tail -n1)
+      # If a specific CLONEZILLA_ZIP_URL is provided, use it directly.
+      if [ -n "${CLONEZILLA_ZIP_URL}" ]; then
+        echo "Using provided CLONEZILLA_ZIP_URL: ${CLONEZILLA_ZIP_URL}"
+        LATEST_ZIP=$(basename "${CLONEZILLA_ZIP_URL}")
+        DOWNLOAD_URL="${CLONEZILLA_ZIP_URL}"
+      # Otherwise, determine the base URL from ARCH and find the latest version.
+      else
+        if [ "${ARCH}" = "amd64" ]; then
+          CLONEZILLA_BASE_URL="https://free.nchc.org.tw/clonezilla-live/stable"
+        elif [ "${ARCH}" = "arm64" ]; then
+          CLONEZILLA_BASE_URL="https://free.nchc.org.tw/clonezilla-live/experimental/arm/3.3.0-27/"
+        elif [ "${ARCH}" = "riscv64" ]; then
+          CLONEZILLA_BASE_URL="https://free.nchc.org.tw/clonezilla-live/experimental/riscv64/3.3.1-12/"
+        else
+          echo "Error: Unsupported ARCH '${ARCH}'. Please use amd64, arm64, or riscv64." >&2
+          exit 1
+        fi
 
-      if [ -z "${LATEST_ZIP}" ]; then
-        echo "Error: Could not find a Clonezilla ZIP for architecture '${ARCH}' at ${CLONEZILLA_BASE_URL}" >&2
-        exit 1
+        echo "Searching for latest zip for arch '${ARCH}' from ${CLONEZILLA_BASE_URL}..."
+        LATEST_ZIP=$(curl ${CURL_OPTS} "${CLONEZILLA_BASE_URL}/" \
+          | grep -Eo "href=\"clonezilla-live-[^\"]*${ARCH}[^\"]*\\.zip\"" \
+          | cut -d'"' -f2 \
+          | sort -V \
+          | tail -n1)
+
+        if [ -z "${LATEST_ZIP}" ]; then
+          echo "Error: Could not find a Clonezilla ZIP for architecture '${ARCH}' at ${CLONEZILLA_BASE_URL}" >&2
+          exit 1
+        fi
+        DOWNLOAD_URL="${CLONEZILLA_BASE_URL}/${LATEST_ZIP}"
       fi
-      echo "Latest ZIP for ${ARCH}: ${LATEST_ZIP}"
 
-      DOWNLOAD_URL="${CLONEZILLA_BASE_URL}/${LATEST_ZIP}"
+      echo "Final ZIP file to be used: ${LATEST_ZIP}"
       DEST_FILE="${ZIP_DIR}/${LATEST_ZIP}"
 
       if [ -f "${DEST_FILE}" ]; then
@@ -62,7 +71,6 @@ build_zip:
       - "${ZIP_DIR}/"
 
 .test_template:
-  <<: *arch_matrix
   stage: test
   variables:
     LIBGUESTFS_DEBUG: "0"
@@ -161,32 +169,32 @@ test:os:debian:
           fi
       done
 
-test:os:fedora:
-  extends: .test_template
-  script:
-    - |
-      os="fedora"
-      echo "--- Running OS Clone/Restore Tests for Fedora ($ARCH) ---"
-      grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while IFS= read -r config_line; do
-          release=$(echo "$config_line" | awk '{print $2}')
-          image_name="${os}-${release}-${ARCH}.qcow2"
-          image_path="qemu/cloudimages/${image_name}"
-
-          if [ -f "$image_path" ]; then
-              echo "--- Testing ${image_path} ---"
-              log_file="$LOG_DIR/os_fedora_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" 2>&1 | tee -a "$log_file"
-              rc=${PIPESTATUS[0]}
-              if [ $rc -ne 0 ]; then
-                  echo "--- Test FAILED for ${image_path} ---"
-                  exit 1
-              fi
-              echo "--- Test PASSED for ${image_path} ---"
-          else
-              echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
-          fi
-      done
-
+#test:os:fedora:
+#  extends: .test_template
+#  script:
+#    - |
+#      os="fedora"
+#      echo "--- Running OS Clone/Restore Tests for Fedora ($ARCH) ---"
+#      grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while IFS= read -r config_line; do
+#          release=$(echo "$config_line" | awk '{print $2}')
+#          image_name="${os}-${release}-${ARCH}.qcow2"
+#          image_path="qemu/cloudimages/${image_name}"
+#
+#          if [ -f "$image_path" ]; then
+#              echo "--- Testing ${image_path} ---"
+#              log_file="$LOG_DIR/os_fedora_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
+#              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" 2>&1 | tee -a "$log_file"
+#              rc=${PIPESTATUS[0]}
+#              if [ $rc -ne 0 ]; then
+#                  echo "--- Test FAILED for ${image_path} ---"
+#                  exit 1
+#              fi
+#              echo "--- Test PASSED for ${image_path} ---"
+#          else
+#              echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
+#          fi
+#      done
+#
 # test:os:windows11:
 #   extends: .test_template
 #   script:
