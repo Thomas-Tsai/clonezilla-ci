@@ -15,6 +15,8 @@ variables:
 
 build_zip:
   stage: build
+  when: manual
+  allow_failure: false
   script:
     - mkdir -p "${ZIP_DIR}"
     - |
@@ -105,7 +107,7 @@ build_zip:
       export LOG_DIR="./logs"
       mkdir -p $LOG_DIR
   artifacts:
-    when: manual
+    when: always
     paths:
       - logs/
     expire_in: 5 days
