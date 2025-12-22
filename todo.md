@@ -19,6 +19,8 @@ This directory contains scripts and tools for automating Clonezilla operations i
       variable arch=riscv64 zip=https://.../clonezilla-live-xxxx-riscv64.zip
       variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] 每一個 script 的測試結果都要產生 並上傳到 gitlab artifacts 裡面, 方便後續下載查看; 目前都會放到 logs/ 目錄裡面, 有些是以檔案形式產生，也一併上傳
+- [x] 解決 QEMU port forwarding 衝突問題，在平行 CI jobs 中避免 `tcp::2222-:22` 錯誤。
+- [x] .gitlab-ci.yml 中，build job 不再保留舊的 zip 檔案，每次都下載新的 zip 以避免錯誤。
 - [x] 修改為可以同時運作
 
 

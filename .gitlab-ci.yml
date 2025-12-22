@@ -53,22 +53,20 @@ build_zip:
       echo "Final ZIP file to be used: ${LATEST_ZIP}"
       DEST_FILE="${ZIP_DIR}/${LATEST_ZIP}"
 
-      if [ -f "${DEST_FILE}" ]; then
-        echo "File '${DEST_FILE}' already exists (from cache or previous run). Skipping download."
-      else
-        echo "Downloading ${DOWNLOAD_URL} to ${DEST_FILE}"
-        curl ${CURL_OPTS} -o "${DEST_FILE}" "${DOWNLOAD_URL}"
-        echo "Download finished."
-      fi
+      echo "Downloading ${DOWNLOAD_URL} to ${DEST_FILE}"
+      curl ${CURL_OPTS} -o "${DEST_FILE}" "${DOWNLOAD_URL}"
+      echo "Download finished."
+      # Save the exact filename to a dotenv artifact to pass to the next stage
+      echo "Saving ZIP_FILE_FROM_BUILD=${LATEST_ZIP} to build.env"
+      echo "ZIP_FILE_FROM_BUILD=${LATEST_ZIP}" > build.env
   artifacts:
     name: "clonezilla-live-zip-${ARCH}"
     paths:
       - "${ZIP_DIR}/"
     expire_in: 14 day
-  cache:
-    key: "${CI_COMMIT_REF_SLUG}-${ARCH}"
-    paths:
-      - "${ZIP_DIR}/"
+    reports:
+      dotenv: build.env
+
 
 .test_template:
   stage: test
@@ -89,21 +87,19 @@ build_zip:
       fi
     - |
       echo "Verifying build artifact (Clonezilla ZIP)..."
-      if ! ls ${ZIP_DIR}/*.zip > /dev/null 2>&1; then
-        echo "Error: Artifact zip file not found in ${ZIP_DIR}/" >&2
-        echo "Listing contents of current directory ('.'):"
-        ls -lA
+      # The ZIP_FILE_FROM_BUILD variable comes from the build_zip job's dotenv report.
+      if [ -z "${ZIP_FILE_FROM_BUILD}" ]; then
+        echo "Error: ZIP_FILE_FROM_BUILD variable not passed from build job." >&2
         exit 1
       fi
-    - |
-      export ZIP_FILE=$(basename $(ls ${ZIP_DIR}/*.zip | head -n1))
-      if [ -z "${ZIP_FILE}" ]; then
-        echo "Error: Failed to find zip file in ${ZIP_DIR}/." >&2
-        echo "Listing contents of ${ZIP_DIR}/ :"
-        ls -l ${ZIP_DIR}/
+      if ! [ -f "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" ]; then
+        echo "Error: Artifact zip file '${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}' not found!" >&2
+        echo "Listing contents of '${ZIP_DIR}/':"
+        ls -l "${ZIP_DIR}/"
         exit 1
       fi
-      echo "Using ZIP file: ${ZIP_FILE}"
+      echo "Using ZIP file from build job: ${ZIP_FILE_FROM_BUILD}"
+      export ZIP_FILE="${ZIP_FILE_FROM_BUILD}"
     - |
       echo "Preparing log directory..."
       export LOG_DIR="./logs"
