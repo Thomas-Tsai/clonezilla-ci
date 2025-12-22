@@ -390,3 +390,30 @@ This script starts a QEMU VM to install Debian from a netinst ISO onto a QCOW2 d
 # Display help
 ./debian-install.sh --help
 ```
+
+## Troubleshooting
+
+### `virt-make-fs` Fails on `clonezilla-zip2qcow.sh`
+
+On some systems, particularly when not running inside the provided Docker container, you may encounter an error when running `./clonezilla-zip2qcow.sh` or other scripts that call it.
+
+**Symptom:**
+
+The script fails with an error message similar to this:
+```
+libguestfs: error: /usr/bin/supermin exited with error status 1.
+...
+ERROR: virt-make-fs failed. Check permissions or libguestfs installation.
+```
+
+**Cause:**
+
+This error is often caused by `libguestfs` (specifically, its `supermin` helper) not having read permissions for the host system's kernel files located in `/boot`. It needs to inspect the host kernel to build a minimal appliance for its tasks.
+
+**Solution:**
+
+You can resolve this by granting read permissions to the kernel files for all users:
+```bash
+sudo chmod +r /boot/vmlinuz-*
+```
+This command makes the kernel images readable, allowing `virt-make-fs` to proceed.
