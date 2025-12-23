@@ -266,9 +266,9 @@ test:liteserver:
       echo "--- Running Lite Server Test ($ARCH) ---"
       
       # Define variables for the test
-      local test_disk="qemu/cloudimages/debian-13-amd64.qcow2"
-      local cmd_path="dev/ocscmd/lite-bt.sh"
-      local log_file="$LOG_DIR/liteserver_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
+      test_disk="qemu/cloudimages/debian-13-amd64.qcow2"
+      cmd_path="dev/ocscmd/lite-bt.sh"
+      log_file="$LOG_DIR/liteserver_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
 
       # Check if required files exist before running
       if ! [ -f "$test_disk" ]; then
