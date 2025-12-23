@@ -491,8 +491,8 @@ LIVE_MEDIA_DEVICE=""
             drive_properties="id=${drive_id},file=${ALL_DISKS[$i]},format=qcow2,if=none"
 
             if [ $i -eq $LIVE_DISK_INDEX ]; then
-                # This is the Live Disk. Mark it as readonly and record its device name.
-                drive_properties+=",readonly=on"
+                # This is the Live Disk. Mark it as readonly, disable locking, and record its device name.
+                drive_properties+=",readonly=on,locking=off"
                 LIVE_MEDIA_DEVICE="${device_name}"
             fi
             
