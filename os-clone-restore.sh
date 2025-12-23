@@ -176,8 +176,8 @@ echo
 echo "--- (Step 2/5) Preparing Source Disk for Backup ---"
 TMPL_BASENAME=$(basename "$TEMPLATE_QCOW")
 BACKUP_SOURCE_DISK="$QEMU_DIR/${TMPL_BASENAME}.vda.qcow2"
-cp "$TEMPLATE_QCOW" "$BACKUP_SOURCE_DISK"
-echo "Copied template to $BACKUP_SOURCE_DISK"
+echo "Creating COW overlay for template disk at $BACKUP_SOURCE_DISK"
+qemu-img create -f qcow2 -b "$TEMPLATE_QCOW" -F qcow2 "$BACKUP_SOURCE_DISK"
 echo "--- Source Disk prepared successfully. ---"
 echo
 

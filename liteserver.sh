@@ -158,11 +158,11 @@ main() {
     for i in "${!SERVER_DISKS[@]}"; do
         original_server_disk="${SERVER_DISKS[$i]}"
         
-        # Create a temporary, writable copy of the server disk to avoid modifying the original
+        # Create a temporary, writable COW overlay of the server disk to avoid modifying the original
         temp_server_disk_name="temp-$(basename "$original_server_disk")"
         temp_server_disk_path="$TMP_DIR/$temp_server_disk_name"
-        info "Creating temporary copy of server disk at: $temp_server_disk_path"
-        cp "$original_server_disk" "$temp_server_disk_path"
+        info "Creating temporary COW overlay for server disk at: $temp_server_disk_path"
+        qemu-img create -f qcow2 -b "$original_server_disk" -F qcow2 "$temp_server_disk_path"
         TEMP_SERVER_DISKS+=("$temp_server_disk_path")
         
         # Prepare a corresponding empty disk for the client

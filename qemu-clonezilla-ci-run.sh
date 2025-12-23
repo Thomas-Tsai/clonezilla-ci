@@ -75,6 +75,10 @@ cleanup() {
         echo "Removing temporary script directory: $HOST_SCRIPT_DIR"
         rm -rf "$HOST_SCRIPT_DIR"
     fi
+    if [ -n "$TMP_COW_DISK" ] && [ -f "$TMP_COW_DISK" ]; then
+        echo "INFO: Removing temporary COW disk: $TMP_COW_DISK"
+        rm -f "$TMP_COW_DISK"
+    fi
 
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
@@ -103,6 +107,7 @@ CMDPATH=""
 CUSTOM_APPEND_ARGS=""
 APPEND_ARGS_FILE=""
 HOST_SCRIPT_DIR="" # Ensure variable is declared for the trap
+TMP_COW_DISK="" # For COW image
 LOG_FILE="" # Initialize LOG_FILE
 CLONEZILLA_ZIP=""
 ZIP_OUTPUT_DIR="./zip"
@@ -442,6 +447,14 @@ if [ ! -d "$PARTIMAG_PATH" ]; then
     echo "Please ensure the directory exists, or specify the correct path with the --image option." >&2
     print_usage
 fi
+
+# --- Create COW overlay for the live disk to prevent file locking issues ---
+TMP_COW_DISK=$(mktemp -u -p "${TMPDIR:-/tmp}" "cow-livedisk-XXXXXX.qcow2")
+echo "INFO: Creating temporary Copy-on-Write overlay for live disk at '$TMP_COW_DISK'..."
+qemu-img create -f qcow2 -b "$LIVE_DISK" -F qcow2 "$TMP_COW_DISK"
+# The rest of the script will use this temporary COW disk.
+LIVE_DISK="$TMP_COW_DISK"
+echo "INFO: Using temporary COW overlay as the live disk."
 
 echo "--- Starting QEMU for CI test ---"
 
