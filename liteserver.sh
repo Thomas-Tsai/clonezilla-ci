@@ -137,7 +137,7 @@ main() {
     # --- Pre-flight Cleanup ---
     info "--- Pre-flight Cleanup: Checking for leftover server processes ---"
     # Identify QEMU processes that are acting as a listen server for this script
-    LEFTOVER_PIDS=$(pgrep -f "qemu-system.*-netdev socket,id=privnet,listen=")
+    LEFTOVER_PIDS=$(pgrep -f "qemu-system.*-netdev socket,id=privnet,listen=" || true)
     if [[ -n "$LEFTOVER_PIDS" ]]; then
         info "Found leftover server process(es) with PIDs: $LEFTOVER_PIDS. Terminating..."
         # Forcefully kill the processes to release file locks
