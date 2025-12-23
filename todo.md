@@ -38,6 +38,34 @@ This directory contains scripts and tools for automating Clonezilla operations i
     - [x] 提供 --help 參數 (done)
     - [x] os_clone_restore 與 data_clone_restore 兩個 使用 tee 來同時輸出到螢幕與log 檔
 
+## liteserver.sh 改進事項：
+開發一個 liteserver.sh 腳本，這個腳本主要用來啟動一個簡易的 clonezilla lite server 來提供 clonezilla server 服務的場景
+場景會先跑起一個 clonezilla lite server，以 qemu-clonezilla-ci-run.sh 來啟動 lite server ，須考量增加網卡的需求
+然後用 qemu-clonezilla-ci-run.sh 啟動一個client 以網路開機方式 來連接這個 lite server 進行備份還原測試
+例如：
+
+client --cmd 參數機本是固定的
+server 提供 --cmd, --cmdpath 參數來讓使用者可以自訂 server 的行為 透過 qemu-clonezilla-ci-run.sh 傳入qemu
+如：./liteserver.sh --zip clone.zip --disk a.qcow2 --disk b.qcow2 --cmdpath dev/ocscmd/lite-bt.sh --keep-temp
+
+整個flow 為
+1. prepare zip
+2. prepare restore qcow2 (restore-a.qcow2, restore-b.qcow2)
+3. start lite server , 需要複數 --disk 搭配一個以上的qcow2磁碟映像檔案 通常是 qemu/cloudimages 裡面的cloud image
+server 啟動：
+$ ./qemu-clonezilla-ci-run.sh -i --zip zip/clonezilla-live-3.3.0-33-amd64.zip --disk a.qcow2  --disk  qemu/cloudimages/debian-sid-amd64.qcow2  --no-ssh-forward --qemu-args "-netdev socket,id=net1,listen=127.0.0.1:14321 -device virtio-net-pci,netdev=net1" --cmd "ip route del default ; ip link set ens5 up; ip a add 192.168.0.1/24 dev ens5 ; ip r add default via 192.168.0.1; ocs-live-feed-img -cbm both -dm start-new-dhcpd -lscm massive-deployment -mdst from-image -g auto -e1 auto -e2 -r -x -j2 -k0 -sc0 -p true -md multicast --clients-to-wait 1 start "debian-13-amd64" vda"
+
+4. start lite client , 對應 --disk 需要的 restore qcow2 磁碟映像檔案
+client 啟動：
+$ ./qemu-clonezilla-ci-run.sh -i --zip zip/clonezilla-live-20251124-resolute-amd64.zip --disk restore-a.qcow2  --disk qemu/restore.qcow2 --cmd "dhclient ens5; ocs-live-get-img 192.168.0.1" --no-ssh-forward --qemu-args "-netdev socket,id=net1,connect=127.0.0.1:14321 -device virtio-net-pci,netdev=net1"
+
+5. verify restore qcow2 // 如果多個硬碟 還不確定要怎麼verify ; 先跳過
+6. kill server
+
+主意：不需要先做任何備份 // Create Image from Source Disk 是不需要的
+不需要 --disk-size 參數
+
+
 ## data-clone-restore.sh 改進事項：
 - [x] 整個 script flow 需要開發，完整flow, 參數說明
 - [x] 增加--help 參數可以讓使用者查詢使用說明

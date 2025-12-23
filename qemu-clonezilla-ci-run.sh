@@ -487,12 +487,17 @@ LIVE_MEDIA_DEVICE=""
             drive_id="drive${i}"
             device_name="${DEVICE_NAMES[$i]}"
             
-            QEMU_DISK_ARGS_ARRAY+=("-drive" "id=${drive_id},file=${ALL_DISKS[$i]},format=qcow2,if=none")
-            QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${drive_id}")
+            # Start building the drive properties string
+            drive_properties="id=${drive_id},file=${ALL_DISKS[$i]},format=qcow2,if=none"
 
             if [ $i -eq $LIVE_DISK_INDEX ]; then
+                # This is the Live Disk. Mark it as readonly and record its device name.
+                drive_properties+=",readonly=on"
                 LIVE_MEDIA_DEVICE="${device_name}"
             fi
+            
+            QEMU_DISK_ARGS_ARRAY+=("-drive" "${drive_properties}")
+            QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${drive_id}")
         else
             echo "Warning: Maximum number of disks (${#DEVICE_NAMES[@]}) exceeded. Ignoring extra disks."
             break

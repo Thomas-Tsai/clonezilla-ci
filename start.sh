@@ -227,5 +227,45 @@ test_btrfs_clone_restore() {
 }
 
 
+# Test for liteserver
+run_liteserver_test() {
+    local TEST_START_TIME=$(date +%s)
+    local TEST_NAME="liteserver_test"
+    local TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
+
+    echo "--- Running Lite Server Test ($ARCH) (Log: $LOG_FILE) ---"
+    
+    # The command to be tested. The zip file comes from the script's global var.
+    # The disk and cmdpath are specific to this test case.
+    ./liteserver.sh \
+        --zip "$CLONEZILLA_ZIP" \
+        --disk "qemu/cloudimages/debian-13-amd64.qcow2" \
+        --cmdpath "dev/ocscmd/lite-bt.sh" 2>&1 | tee -a "$LOG_FILE"
+    
+    local SCRIPT_RESULT="${PIPESTATUS[0]}"
+    local RESULT="$SCRIPT_RESULT"
+    local TEST_END_TIME=$(date +%s)
+    local TEST_DURATION=$((TEST_END_TIME - TEST_START_TIME))
+
+    if [ "$RESULT" -eq 0 ]; then
+        echo "--- Lite Server Test Passed (${TEST_DURATION} seconds) ---"
+    else
+        echo "--- Lite Server Test FAILED (${TEST_DURATION} seconds) ---"
+    fi
+    assertEquals "Lite Server test failed. Check log: $LOG_FILE" 0 "$RESULT"
+}
+
+test_liteserver() {
+    # Check if the required disk for the test exists.
+    local test_disk="qemu/cloudimages/debian-13-amd64.qcow2"
+    if [ -f "$test_disk" ]; then
+        run_liteserver_test
+    else
+        echo "Skipping Lite Server test: required disk not found at ${test_disk}"
+    fi
+}
+
+
 # Load shunit2
 . shunit2

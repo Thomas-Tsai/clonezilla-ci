@@ -258,3 +258,37 @@ test:fs:btrfs:
   extends: .fs_test_template
   variables:
     FS: btrfs
+
+test:liteserver:
+  extends: .test_template
+  script:
+    - |
+      echo "--- Running Lite Server Test ($ARCH) ---"
+      
+      # Define variables for the test
+      local test_disk="qemu/cloudimages/debian-13-amd64.qcow2"
+      local cmd_path="dev/ocscmd/lite-bt.sh"
+      local log_file="$LOG_DIR/liteserver_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
+
+      # Check if required files exist before running
+      if ! [ -f "$test_disk" ]; then
+          echo "Skipping Lite Server test: required disk not found at ${test_disk}"
+          exit 0 # Exit successfully as it's a skip, not a failure
+      fi
+      if ! [ -f "$cmd_path" ]; then
+          echo "Error: Command path script not found at ${cmd_path}" >&2
+          exit 1
+      fi
+
+      echo "--- Testing with disk: ${test_disk} ---"
+      ./liteserver.sh \
+        --zip "${ZIP_DIR}/${ZIP_FILE}" \
+        --disk "$test_disk" \
+        --cmdpath "$cmd_path" 2>&1 | tee -a "$log_file"
+      
+      rc=${PIPESTATUS[0]}
+      if [ $rc -ne 0 ]; then
+          echo "--- Test FAILED for Lite Server ---"
+          exit 1
+      fi
+      echo "--- Test PASSED for Lite Server ---"
