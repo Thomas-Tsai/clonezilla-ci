@@ -508,7 +508,7 @@ LIVE_MEDIA_DEVICE=""
 
             if [ $i -eq $LIVE_DISK_INDEX ]; then
                 # This is the Live Disk. Mark it as readonly, disable locking, and record its device name.
-                drive_properties+=",readonly=on,locking=off"
+                drive_properties+=",readonly=on" # Removed locking=off due to qcow2 format incompatibility
                 LIVE_MEDIA_DEVICE="${device_name}"
             fi
             
