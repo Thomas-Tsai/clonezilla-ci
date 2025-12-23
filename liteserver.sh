@@ -162,7 +162,9 @@ main() {
         temp_server_disk_name="temp-$(basename "$original_server_disk")"
         temp_server_disk_path="$TMP_DIR/$temp_server_disk_name"
         info "Creating temporary COW overlay for server disk at: $temp_server_disk_path"
-        qemu-img create -f qcow2 -b "$original_server_disk" -F qcow2 "$temp_server_disk_path"
+        # Use realpath to ensure the backing file path is absolute, preventing issues in CI environments.
+        backing_file_path=$(realpath "$original_server_disk")
+        qemu-img create -f qcow2 -b "$backing_file_path" -F qcow2 "$temp_server_disk_path"
         TEMP_SERVER_DISKS+=("$temp_server_disk_path")
         
         # Prepare a corresponding empty disk for the client
