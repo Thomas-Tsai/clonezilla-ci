@@ -496,24 +496,39 @@ LIVE_DISK_INDEX=$((${#DISKS[@]}))
 QEMU_DISK_ARGS_ARRAY=()
 LIVE_MEDIA_DEVICE=""
 
-    # Use modern virtio-blk-pci devices for predictable /dev/vdX naming across all architectures.
+    # Use modern virtio-blk-pci devices for predictable /dev/vdX naming.
+    # We use the explicit -blockdev node graph syntax to ensure the qcow2 format
+    # is used and to gain fine-grained control over file locking and read-only status.
     DEVICE_NAMES=('vda' 'vdb' 'vdc' 'vdd' 'vde' 'vdf')
     for i in "${!ALL_DISKS[@]}"; do
         if [ $i -lt ${#DEVICE_NAMES[@]} ]; then
-            drive_id="drive${i}"
+            file_node="file${i}"
+            qcow_node="qcow${i}"
             device_name="${DEVICE_NAMES[$i]}"
-            
-            # Start building the drive properties string
-            drive_properties="id=${drive_id},file=${ALL_DISKS[$i]},format=qcow2,if=none"
+
+            # Define the file protocol node, pointing to the host file.
+            file_opts="\"driver\": \"file\", \"filename\": \"${ALL_DISKS[$i]}\", \"node-name\": \"${file_node}\""
+
+            # Define the qcow2 format node, which reads from the file node.
+            qcow_opts="\"driver\": \"qcow2\", \"file\": \"${file_node}\", \"node-name\": \"${qcow_node}\""
+
 
             if [ $i -eq $LIVE_DISK_INDEX ]; then
-                # This is the Live Disk. Mark it as readonly, disable locking, and record its device name.
-                drive_properties+=",readonly=on" # Removed locking=off due to qcow2 format incompatibility
+                # This is the Live Disk (COW overlay).
+                # Apply 'locking=off' to the file node to prevent backing file lock errors.
+                file_opts+=",\"locking\": \"off\""
+
+                # Apply 'read-only=true' to the qcow2 format node. This makes the block
+                # device read-only for the guest, which is correct for a live medium.
+                qcow_opts+=",\"read-only\": true"
+
                 LIVE_MEDIA_DEVICE="${device_name}"
             fi
-            
-            QEMU_DISK_ARGS_ARRAY+=("-drive" "${drive_properties}")
-            QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${drive_id}")
+
+            # Create the node graph and attach the final qcow_node to the virtio device.
+            QEMU_DISK_ARGS_ARRAY+=("-blockdev" "{${file_opts}}")
+            QEMU_DISK_ARGS_ARRAY+=("-blockdev" "{${qcow_opts}}")
+            QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${qcow_node}")
         else
             echo "Warning: Maximum number of disks (${#DEVICE_NAMES[@]}) exceeded. Ignoring extra disks."
             break
