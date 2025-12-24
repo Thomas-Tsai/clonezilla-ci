@@ -149,7 +149,7 @@ run_liteserver_test() {
     (cd .. && ./liteserver.sh \
         --zip "$CLONEZILLA_ZIP" \
         --disk "qemu/cloudimages/debian-13-amd64.qcow2" \
-        --cmdpath "dev/ocscmd/lite-bt.sh" $NO_SSH_FORWARD_ARG) 2>&1 | tee -a "$LOG_FILE"
+        --cmdpath "dev/ocscmd/lite-bt.sh") 2>&1 | tee -a "$LOG_FILE"
     
     local SCRIPT_RESULT="${PIPESTATUS[0]}"
     local RESULT="$SCRIPT_RESULT"

@@ -119,13 +119,13 @@ test:os:ubuntu:
   extends: .test_template
   script:
     - cd jobs
-    - ./test_os_ubuntu.sh --zip "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+    - ./test_os_ubuntu.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 test:os:debian:
   extends: .test_template
   script:
     - cd jobs
-    - ./test_os_debian.sh --zip "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+    - ./test_os_debian.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 #test:os:fedora:
 #  extends: .test_template
@@ -161,7 +161,7 @@ test:os:windows11:
     - windows
   script:
     - cd jobs
-    - ./test_os_windows.sh --zip "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+    - ./test_os_windows.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 #--- Filesystem Tests ---
 
@@ -169,7 +169,7 @@ test:os:windows11:
   extends: .test_template
   script:
     - cd jobs
-    - ./test_fs_${FS}.sh --zip "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+    - ./test_fs_${FS}.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 test:fs:exfat:
   extends: .fs_test_template
@@ -205,4 +205,4 @@ test:liteserver:
   extends: .test_template
   script:
     - cd jobs
-    - ./test_liteserver.sh --zip "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+    - ./test_liteserver.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
