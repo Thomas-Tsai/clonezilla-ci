@@ -57,8 +57,44 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+# --- Auto-download Clonezilla ZIP if not provided ---
+if [[ -z "$CLONEZILLA_ZIP" ]]; then
+    echo "INFO: --zip not specified. Attempting to auto-download the latest stable Clonezilla Live ZIP for '$ARCH'."
+    CLONEZILLA_LIVE_STABLE_URL="http://free.nchc.org.tw/clonezilla-live/stable/"
+    DEFAULT_DOWNLOAD_DIR="zip"
+    
+    mkdir -p "$DEFAULT_DOWNLOAD_DIR" || { echo "ERROR: Could not create download directory: $DEFAULT_DOWNLOAD_DIR" >&2; exit 1; }
+
+    echo "INFO: Fetching latest filename from $CLONEZILLA_LIVE_STABLE_URL"
+    LATEST_ZIP_FILENAME=$(curl -s "$CLONEZILLA_LIVE_STABLE_URL" | grep -oP "clonezilla-live-\\d+\\.\\d+\\.\\d+-\\d+-${ARCH}\\.zip" | head -n 1)
+
+    if [[ -z "$LATEST_ZIP_FILENAME" ]]; then
+        echo "ERROR: Could not find the latest Clonezilla Live ZIP filename for '$ARCH' from $CLONEZILLA_LIVE_STABLE_URL" >&2
+        exit 1
+    fi
+
+    DOWNLOAD_URL="${CLONEZILLA_LIVE_STABLE_URL}${LATEST_ZIP_FILENAME}"
+    DEST_ZIP_PATH="${DEFAULT_DOWNLOAD_DIR}/${LATEST_ZIP_FILENAME}"
+
+    if [ -f "$DEST_ZIP_PATH" ]; then
+        echo "INFO: Latest ZIP file already exists: $DEST_ZIP_PATH. Skipping download."
+        CLONEZILLA_ZIP="$DEST_ZIP_PATH"
+    else
+        echo "INFO: Downloading $DOWNLOAD_URL to $DEST_ZIP_PATH"
+        if ! wget -q --show-progress -O "$DEST_ZIP_PATH" "$DOWNLOAD_URL"; then
+            echo "ERROR: Failed to download Clonezilla Live ZIP from $DOWNLOAD_URL" >&2
+            rm -f "$DEST_ZIP_PATH" # Clean up partial download
+            exit 1
+        fi
+        CLONEZILLA_ZIP="$DEST_ZIP_PATH"
+        echo "INFO: Download complete."
+    fi
+fi
+# ---
+
 
 # Check for shunit2
+
 if ! command -v shunit2 >/dev/null 2>&1; then
     echo "shunit2 is not installed. Please install it to continue."
     echo "You can download it from https://github.com/kward/shunit2"

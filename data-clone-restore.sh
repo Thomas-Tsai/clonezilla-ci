@@ -187,6 +187,7 @@ if [ -n "$TMP_PATH" ]; then
 else
     WORK_DIR=$(mktemp -d cci_dcr_test.XXXXXXXX)
 fi
+WORK_DIR=$(realpath "$WORK_DIR") # Convert to absolute path
 echo "INFO: Using temporary working directory: $WORK_DIR"
 
 # The cleanup function is called on EXIT. It checks the exit code and the
