@@ -37,7 +37,8 @@ docker run --rm -it \
   -v ./isos:/app/isos \
   -v ./zip:/app/zip \
   clonezilla-ci ./clonezilla-boot.sh --disk /app/qemu/my-disk.qcow2
-```
+
+
 
 ### CI Runner Sudo Configuration
 
@@ -85,7 +86,7 @@ Before using these scripts, ensure the following dependencies are installed on y
 
 ```bash
 sudo apt update
-sudo apt install qemu-utils qemu-system-riscv64 qemu-system-arm64 qemu-system-x86 qemu-system-arm qemu-efi-aarch64 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount  e2fsprogs btrfs-progs xfsprogs ntfs-3g dosfstools exfatprogs
+sudo apt install qemu-utils qemu-system-riscv64 qemu-system-arm64 qemu-system-x86 qemu-system-arm qemu-efi-aarch64 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount  e2fsprogs btrfs-progs xfsprogs ntfs-3g dosfstools exfatprogs bc
 ```
 
 Here's a breakdown of what each package provides:

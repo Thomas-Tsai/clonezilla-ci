@@ -10,6 +10,13 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 相依的套件要補上 qemu-efi-aarch64 qemu-system-arm for usage
 - [ ] 容器化支援, 開發一個 Dockerfile 來建置一個包含所有相依套件的容器映像檔，方便在不同環境中執行這些腳本，要可以支援多架構，與 dev/testData, qemu/cloudimages, isos, zip 等目錄的掛載
 
+## jobs 說明
+先將 start.sh 裡面的測試拆分成多個不同的 jobs 來執行 ，檔案放 jobs/ 目錄底下
+- [x] 產生 jobs 目錄，裡面包含各種不同的 CI jobs 範例，例如 debian.sh, ubuntu.sh, ext4.sh, liteserver-job.sh 等等
+- [x] 用 shunit2 來進行單元測試
+- [x] 用 common.sh 來放置共用的函式
+- [x] 預設需要指定參數 --zip 來指定 clonezilla zip 檔案路徑, --arch 來指定架構 預設為 amd64
+
 ## .gitlab-ci.yml 改進事項：
 - [x] 目前行為是執行 start.sh 來進行所有的單元測試, 我想改為每一個 script 都有自己的單元測試, 並且在 .gitlab-ci.yml 裡面分別執行每一個 script 的單元測試, 這樣可以更清楚知道是哪一個 script 有問題
 - [x] 以 .gitlab-ci.yml 來執行所有在 start.sh 內的測試, 並且產生測試報告
@@ -22,6 +29,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 解決 QEMU port forwarding 衝突問題，在平行 CI jobs 中避免 `tcp::2222-:22` 錯誤。
 - [x] .gitlab-ci.yml 中，build job 不再保留舊的 zip 檔案，每次都下載新的 zip 以避免錯誤。
 - [x] 修改為可以同時運作
+- [ ] 讓 .gitlab-ci.yml專注於流程，要測試的部份改用 jobs/ 目錄底下的 script 來執行
 
 
 ## start.sh 改進事項：

@@ -118,54 +118,14 @@ build_zip:
 test:os:ubuntu:
   extends: .test_template
   script:
-    - |
-      os="ubuntu"
-      echo "--- Running OS Clone/Restore Tests for Ubuntu ($ARCH) ---"
-      grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while IFS= read -r config_line; do
-          release=$(echo "$config_line" | awk '{print $2}')
-          image_name="${os}-${release}-${ARCH}.qcow2"
-          image_path="qemu/cloudimages/${image_name}"
-
-          if [ -f "$image_path" ]; then
-              echo "--- Testing ${image_path} ---"
-              log_file="$LOG_DIR/os_ubuntu_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" --no-ssh-forward 2>&1 | tee -a "$log_file"
-              rc=${PIPESTATUS[0]}
-              if [ $rc -ne 0 ]; then
-                  echo "--- Test FAILED for ${image_path} ---"
-                  exit 1
-              fi
-              echo "--- Test PASSED for ${image_path} ---"
-          else
-              echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
-          fi
-      done
+    - cd jobs
+    - ./test_os_ubuntu.sh --zip "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 test:os:debian:
   extends: .test_template
   script:
-    - |
-      os="debian"
-      echo "--- Running OS Clone/Restore Tests for Debian ($ARCH) ---"
-      grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while IFS= read -r config_line; do
-          release=$(echo "$config_line" | awk '{print $2}')
-          image_name="${os}-${release}-${ARCH}.qcow2"
-          image_path="qemu/cloudimages/${image_name}"
-
-          if [ -f "$image_path" ]; then
-              echo "--- Testing ${image_path} ---"
-              log_file="$LOG_DIR/os_debian_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" --no-ssh-forward 2>&1 | tee -a "$log_file"
-              rc=${PIPESTATUS[0]}
-              if [ $rc -ne 0 ]; then
-                  echo "--- Test FAILED for ${image_path} ---"
-                  exit 1
-              fi
-              echo "--- Test PASSED for ${image_path} ---"
-          else
-              echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
-          fi
-      done
+    - cd jobs
+    - ./test_os_debian.sh --zip "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 #test:os:fedora:
 #  extends: .test_template
@@ -200,38 +160,16 @@ test:os:windows11:
     - clonezilla
     - windows
   script:
-    - |
-      image_path="qemu/cloudimages/windows-11-${ARCH}.qcow2"
-      echo "--- Running OS Clone/Restore Test for Windows 11 ($ARCH) ---"
-      if [ -f "$image_path" ]; then
-          echo "--- Testing ${image_path} ---"
-          log_file="$LOG_DIR/os_windows11_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-          ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/win11_cidata.iso" --no-ssh-forward 2>&1 | tee -a "$log_file"
-          rc=${PIPESTATUS[0]}
-          if [ $rc -ne 0 ]; then
-              echo "--- Test FAILED for ${image_path} ---"
-              exit 1
-          fi
-          echo "--- Test PASSED for ${image_path} ---"
-      else
-          echo "Skipping test for Windows 11: image file not found at ${image_path}"
-      fi
+    - cd jobs
+    - ./test_os_windows.sh --zip "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 #--- Filesystem Tests ---
 
 .fs_test_template:
   extends: .test_template
   script:
-    - |
-      echo "--- Running FS Clone/Restore Test with $FS ($ARCH) ---"
-      log_file="$LOG_DIR/fs_${FS}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-      ./data-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --data dev/testData --fs "$FS" --arch "$ARCH" --no-ssh-forward 2>&1 | tee -a "$log_file"
-      rc=${PIPESTATUS[0]}
-      if [ $rc -ne 0 ]; then
-          echo "--- Test FAILED for filesystem $FS ---"
-          exit 1
-      fi
-      echo "--- Test PASSED for filesystem $FS ---"
+    - cd jobs
+    - ./test_fs_${FS}.sh --zip "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 test:fs:exfat:
   extends: .fs_test_template
@@ -266,33 +204,5 @@ test:fs:btrfs:
 test:liteserver:
   extends: .test_template
   script:
-    - |
-      echo "--- Running Lite Server Test ($ARCH) ---"
-      
-      # Define variables for the test
-      test_disk="qemu/cloudimages/debian-13-amd64.qcow2"
-      cmd_path="dev/ocscmd/lite-bt.sh"
-      log_file="$LOG_DIR/liteserver_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-
-      # Check if required files exist before running
-      if ! [ -f "$test_disk" ]; then
-          echo "Skipping Lite Server test: required disk not found at ${test_disk}"
-          exit 0 # Exit successfully as it's a skip, not a failure
-      fi
-      if ! [ -f "$cmd_path" ]; then
-          echo "Error: Command path script not found at ${cmd_path}" >&2
-          exit 1
-      fi
-
-      echo "--- Testing with disk: ${test_disk} ---"
-      ./liteserver.sh \
-        --zip "${ZIP_DIR}/${ZIP_FILE}" \
-        --disk "$test_disk" \
-        --cmdpath "$cmd_path" 2>&1 | tee -a "$log_file"
-      
-      rc=${PIPESTATUS[0]}
-      if [ $rc -ne 0 ]; then
-          echo "--- Test FAILED for Lite Server ---"
-          exit 1
-      fi
-      echo "--- Test PASSED for Lite Server ---"
+    - cd jobs
+    - ./test_liteserver.sh --zip "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
