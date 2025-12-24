@@ -217,7 +217,7 @@ test:os:windows11:
           echo "Skipping test for Windows 11: image file not found at ${image_path}"
       fi
 
---- Filesystem Tests ---
+#--- Filesystem Tests ---
 
 .fs_test_template:
   extends: .test_template
