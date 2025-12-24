@@ -23,15 +23,10 @@ RUN apt-get update && \
     guestmount \
     # QEMU common utilities
     qemu-utils && \
-    # Install architecture-specific QEMU packages
-    case ${TARGETARCH} in \
-        "amd64") \
-            apt-get install -y --no-install-recommends qemu-system-x86 ;; \
-        "arm64") \
-            apt-get install -y --no-install-recommends qemu-system-arm qemu-efi-aarch64 ;; \
-        *) \
-            echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
-    esac && \
+    # Install all QEMU architecture-specific packages unconditionally
+    qemu-system-x86 \
+    qemu-system-arm \
+    qemu-efi-aarch64 && \
     # Clean up APT cache
     rm -rf /var/lib/apt/lists/*
 

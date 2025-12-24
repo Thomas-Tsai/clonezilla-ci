@@ -183,9 +183,9 @@ echo "---------------------------------"
 
 # Create a temporary working directory for this test run.
 if [ -n "$TMP_PATH" ]; then
-    WORK_DIR=$(mktemp -d -p "$TMP_PATH" -t dcr-test-XXXXXXXX)
+    WORK_DIR=$(mktemp -d -p "$TMP_PATH" cci_dcr_test.XXXXXXXX)
 else
-    WORK_DIR=$(mktemp -d -t dcr-test-XXXXXXXX)
+    WORK_DIR=$(mktemp -d cci_dcr_test.XXXXXXXX)
 fi
 echo "INFO: Using temporary working directory: $WORK_DIR"
 

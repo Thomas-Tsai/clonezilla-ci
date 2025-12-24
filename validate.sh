@@ -130,7 +130,7 @@ if [ ! -f "$DISK_IMAGE" ]; then
 fi
 
 # --- Main Logic ---
-LOG_FILE="logs/validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
+LOG_FILE="logs/cci_validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
 
 # Use a subshell to pass the exit code to the cleanup function
 # The script's main logic is inside this subshell

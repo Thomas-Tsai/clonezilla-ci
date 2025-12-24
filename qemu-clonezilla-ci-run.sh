@@ -75,10 +75,6 @@ cleanup() {
         echo "Removing temporary script directory: $HOST_SCRIPT_DIR"
         rm -rf "$HOST_SCRIPT_DIR"
     fi
-    if [ -n "$TMP_COW_DIR" ] && [ -d "$TMP_COW_DIR" ]; then
-        echo "INFO: Removing temporary COW directory: $TMP_COW_DIR"
-        rm -rf "$TMP_COW_DIR"
-    fi
 
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
@@ -107,7 +103,6 @@ CMDPATH=""
 CUSTOM_APPEND_ARGS=""
 APPEND_ARGS_FILE=""
 HOST_SCRIPT_DIR="" # Ensure variable is declared for the trap
-TMP_COW_DIR="" # For COW image directory
 LOG_FILE="" # Initialize LOG_FILE
 CLONEZILLA_ZIP=""
 ZIP_OUTPUT_DIR="./zip"
@@ -448,17 +443,6 @@ if [ ! -d "$PARTIMAG_PATH" ]; then
     print_usage
 fi
 
-# --- Create COW overlay for the live disk to prevent file locking issues ---
-TMP_COW_DIR=$(mktemp -d -p "${TMPDIR:-/tmp}" "cow-dir-XXXXXX")
-TMP_COW_DISK="$TMP_COW_DIR/livedisk.qcow2"
-echo "INFO: Creating temporary Copy-on-Write overlay for live disk at '$TMP_COW_DISK'..."
-# Use realpath for backing file to be safe
-backing_file_path=$(realpath "$LIVE_DISK")
-qemu-img create -f qcow2 -b "$backing_file_path" -F qcow2 "$TMP_COW_DISK"
-# The rest of the script will use this temporary COW disk.
-LIVE_DISK="$TMP_COW_DISK"
-echo "INFO: Using temporary COW overlay as the live disk."
-
 echo "--- Starting QEMU for CI test ---"
 
 # Determine output redirection
@@ -496,39 +480,24 @@ LIVE_DISK_INDEX=$((${#DISKS[@]}))
 QEMU_DISK_ARGS_ARRAY=()
 LIVE_MEDIA_DEVICE=""
 
-    # Use modern virtio-blk-pci devices for predictable /dev/vdX naming.
-    # We use the explicit -blockdev node graph syntax to ensure the qcow2 format
-    # is used and to gain fine-grained control over file locking and read-only status.
+    # Use modern virtio-blk-pci devices for predictable /dev/vdX naming across all architectures.
     DEVICE_NAMES=('vda' 'vdb' 'vdc' 'vdd' 'vde' 'vdf')
     for i in "${!ALL_DISKS[@]}"; do
         if [ $i -lt ${#DEVICE_NAMES[@]} ]; then
-            file_node="file${i}"
-            qcow_node="qcow${i}"
+            drive_id="drive${i}"
             device_name="${DEVICE_NAMES[$i]}"
-
-            # Define the file protocol node, pointing to the host file.
-            file_opts="\"driver\": \"file\", \"filename\": \"${ALL_DISKS[$i]}\", \"node-name\": \"${file_node}\""
-
-            # Define the qcow2 format node, which reads from the file node.
-            qcow_opts="\"driver\": \"qcow2\", \"file\": \"${file_node}\", \"node-name\": \"${qcow_node}\""
-
+            
+            # Start building the drive properties string
+            drive_properties="id=${drive_id},file=${ALL_DISKS[$i]},format=qcow2,if=none"
 
             if [ $i -eq $LIVE_DISK_INDEX ]; then
-                # This is the Live Disk (COW overlay).
-                # Apply 'locking=off' to the file node to prevent backing file lock errors.
-                file_opts+=",\"locking\": \"off\""
-
-                # Apply 'read-only=true' to the qcow2 format node. This makes the block
-                # device read-only for the guest, which is correct for a live medium.
-                qcow_opts+=",\"read-only\": true"
-
+                # This is the Live Disk. Mark it as readonly, disable locking, and record its device name.
+                drive_properties+=",readonly=on"
                 LIVE_MEDIA_DEVICE="${device_name}"
             fi
-
-            # Create the node graph and attach the final qcow_node to the virtio device.
-            QEMU_DISK_ARGS_ARRAY+=("-blockdev" "{${file_opts}}")
-            QEMU_DISK_ARGS_ARRAY+=("-blockdev" "{${qcow_opts}}")
-            QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${qcow_node}")
+            
+            QEMU_DISK_ARGS_ARRAY+=("-drive" "${drive_properties}")
+            QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${drive_id}")
         else
             echo "Warning: Maximum number of disks (${#DEVICE_NAMES[@]}) exceeded. Ignoring extra disks."
             break

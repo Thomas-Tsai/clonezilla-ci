@@ -180,6 +180,37 @@ This orchestration script is designed for end-to-end testing of filesystem backu
 ./data-clone-restore.sh --help
 ```
 
+### `liteserver.sh`
+
+This script orchestrates a Clonezilla Lite Server test, setting up a server VM and client VM for network-based backup/restore operations. It handles the preparation of server and client Clonezilla Live media, virtual disks, and network configuration to simulate a Lite Server environment.
+
+**Features:**
+-   Supports separate Clonezilla Live ZIP files for the server (`--serverzip`) and client (`--clientzip`).
+-   Automatically creates Copy-on-Write (COW) disk images for the server to preserve original templates.
+-   Prepares corresponding empty disks for clients to restore onto.
+-   Uses `qemu-clonezilla-ci-run.sh` internally for VM orchestration.
+-   Allows custom commands or scripts to define server behavior.
+-   Provides a help message (`-h`/`--help`).
+
+**Usage:**
+```bash
+# Run a Lite Server test with separate server and client Clonezilla ZIPs
+./liteserver.sh \
+  --serverzip ./zip/clonezilla-live-server.zip \
+  --clientzip ./zip/clonezilla-live-client.zip \
+  --disk ./qemu/fedora-base.qcow2 \
+  --cmd "ocs-live-feed-img -g auto -e1 auto -e2 -r -x -j2 -k0 -sc0 -p true -md multicast --clients-to-wait 1 savedisk fedora-image vda"
+
+# Run a Lite Server test, defaulting client ZIP to server ZIP, with a command script
+./liteserver.sh \
+  --serverzip ./zip/clonezilla-live-3.3.0-33-amd64.zip \
+  --disk ./qemu/debian-13-amd64.qcow2 \
+  --cmdpath ./dev/ocscmd/lite-bt.sh
+
+# Display help
+./liteserver.sh --help
+```
+
 ### `os-clone-restore.sh`
 
 This is an orchestration script that automates the full backup, restore, and validation cycle for a Linux distribution. It uses `clonezilla-zip2qcow.sh`, `qemu-clonezilla-ci-run.sh`, and `validate.sh` internally.
@@ -193,7 +224,7 @@ This is an orchestration script that automates the full backup, restore, and val
 
 **Workflow:**
 1.  **Prepare Clonezilla Live Media**: Converts the provided Clonezilla ZIP to QCOW2 format.
-2.  **Prepare Source Disk**: Copies the template QCOW2 image to be used as the source for backup.
+2.  **Prepare Source Disk**: Creates a Copy-on-Write (COW) disk image based on the template QCOW2 image to be used as the source for backup.
 3.  **Backup the Source Disk**: Uses Clonezilla to create a backup image of the source disk.
 4.  **Restore to a New Disk**: Creates a new QCOW2 disk and restores the backup onto it.
 5.  **Validate the Restored Disk**: Boots the restored disk with a cloud-init ISO to verify functionality.

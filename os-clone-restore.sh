@@ -146,7 +146,8 @@ done
 
 # --- Main Workflow ---
 
-TEMP_DIR=$(mktemp -d)
+TEMP_DIR=$(mktemp -d cci_os_clone_restore.XXXXXX)
+echo "INFO: Temporary root directory for this run: $TEMP_DIR"
 BACKUP_SOURCE_DISK="" # Initialize for trap
 RESTORE_DISK=""       # Initialize for trap
 
@@ -155,12 +156,18 @@ trap cleanup_on_exit EXIT
 
 
 echo "--- (Step 1/5) Preparing Clonezilla Live Media ---"
-# The output directory will be named after the zip file, inside ZIP_DIR
-CZ_ZIP_BASENAME=$(basename "$CLONEZILLA_ZIP" .zip)
-CZ_LIVE_DIR="$ZIP_DIR/$CZ_ZIP_BASENAME"
+# Create a unique directory for the extracted Clonezilla media to avoid race conditions in parallel runs.
+CZ_OUTPUT_DIR="$TEMP_DIR/cz_live_media"
+mkdir -p "$CZ_OUTPUT_DIR"
 
-./clonezilla-zip2qcow.sh --zip "$CLONEZILLA_ZIP" -o "$ZIP_DIR" --force --arch "$ARCH"
+# Note: We use --force to ensure a clean state, which is safe here as the output dir is unique to this run.
+./clonezilla-zip2qcow.sh --zip "$CLONEZILLA_ZIP" -o "$CZ_OUTPUT_DIR" --force --arch "$ARCH"
+
 # Define paths to the generated Clonezilla files
+CZ_ZIP_BASENAME=$(basename "$CLONEZILLA_ZIP" .zip)
+# The zip2qcow script creates a subdirectory named after the zip file.
+CZ_LIVE_DIR="$CZ_OUTPUT_DIR/$CZ_ZIP_BASENAME"
+
 CZ_LIVE_QCOW="$CZ_LIVE_DIR/$CZ_ZIP_BASENAME.qcow2"
 CZ_KERNEL="$CZ_LIVE_DIR/${CZ_ZIP_BASENAME}-vmlinuz"
 CZ_INITRD="$CZ_LIVE_DIR/${CZ_ZIP_BASENAME}-initrd.img"
@@ -176,10 +183,10 @@ echo
 echo "--- (Step 2/5) Preparing Source Disk for Backup ---"
 TMPL_BASENAME=$(basename "$TEMPLATE_QCOW")
 BACKUP_SOURCE_DISK="$QEMU_DIR/${TMPL_BASENAME}.vda.qcow2"
-echo "Creating COW overlay for template disk at $BACKUP_SOURCE_DISK"
-# Use realpath to ensure the backing file path is absolute, preventing issues in CI environments.
-backing_file_path=$(realpath "$TEMPLATE_QCOW")
-qemu-img create -f qcow2 -b "$backing_file_path" -F qcow2 "$BACKUP_SOURCE_DISK"
+# Use realpath to ensure the backing file path is absolute for qemu-img
+ABS_TEMPLATE_QCOW=$(realpath "$TEMPLATE_QCOW")
+qemu-img create -f qcow2 -F qcow2 -b "$ABS_TEMPLATE_QCOW" "$BACKUP_SOURCE_DISK" > /dev/null
+echo "Created COW disk $BACKUP_SOURCE_DISK with base $ABS_TEMPLATE_QCOW"
 echo "--- Source Disk prepared successfully. ---"
 echo
 

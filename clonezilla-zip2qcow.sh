@@ -161,7 +161,7 @@ mkdir -p "$OUTPUT_DIR"
 echo "1. Created output directory: $OUTPUT_DIR"
 
 # Create a temporary directory for extraction
-TEMP_DIR=$(mktemp -d -t clonezilla-ci-XXXXXXXX)
+TEMP_DIR=$(mktemp -d cci_zip2qcow.XXXXXXXX)
 if [ ! -d "$TEMP_DIR" ]; then
     echo "ERROR: Could not create the temporary directory." >&2
     exit 1

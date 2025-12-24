@@ -42,6 +42,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
 開發一個 liteserver.sh 腳本，這個腳本主要用來啟動一個簡易的 clonezilla lite server 來提供 clonezilla server 服務的場景
 場景會先跑起一個 clonezilla lite server，以 qemu-clonezilla-ci-run.sh 來啟動 lite server ，須考量增加網卡的需求
 然後用 qemu-clonezilla-ci-run.sh 啟動一個client 以網路開機方式 來連接這個 lite server 進行備份還原測試
+
 例如：
 
 client --cmd 參數機本是固定的
@@ -64,6 +65,12 @@ $ ./qemu-clonezilla-ci-run.sh -i --zip zip/clonezilla-live-20251124-resolute-amd
 
 主意：不需要先做任何備份 // Create Image from Source Disk 是不需要的
 不需要 --disk-size 參數
+- [x] 主要流程
+- [x] LIVE DISK / clonezilla live 同時開會有lock問題. 嘗試 disable lock/ readonly/COW 無效，也許直接備份 clonezilla...qcow2 or zip 比較快, 透過分別指定--serverzip 與 --clientzip 來解決
+- [x] --zip A.zip 參數會變成 --serverzip A.zip 與 --clientzip A.zip 兩個參數
+- [x] 增加--serverzip 參數，可以指定lite server 使用的 clonezilla zip 檔案, 允許與client 相同得zip 檔案
+- [x] 增加--clientzip 參數，可以指定lite client 使用的 clonezilla zip 檔案, 允許與server 相同得zip 檔案
+- [x] 以 COW 方式處理 tmpl 取代 copy qcow2 檔案，減少磁碟空間使用量與加快備份還原速度
 
 
 ## data-clone-restore.sh 改進事項：
@@ -115,6 +122,7 @@ eg: ./qemu-clonezilla-ci-run.sh --disk qemu/restore.qcow2 --live isos/clonezilla
 - [x] 設定參數 CLONE_IMAGE_NAME 來指定 backup / restore 的 image name; 且要同步到 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面; 抑或是以hardcode 常數方式寫死在 dev/ocscmd/clone-first-disk.sh 與 dev/ocscmd/restore-first-disk.sh 裡面
 - [x] 增加參數 --keep-temp 當失敗時，保留中間產生的所有檔案，方便debug
 - [x] image name 如果沒有參數指定，目前預設是固定字串； 建議改成以 os distro 名稱來命名，例如 debian-sid-generic-amd64-daily-20250805-2195.qcow2 就會是 debian-sid-generic-amd64-daily-20250805-2195/
+- [x] 以 COW 方式處理 tmpl 取代 copy qcow2 檔案，減少磁碟空間使用量與加快備份還原速度
 
 ## qemu-clonezilla-ci-run.sh 改進事項：
 qemu-clonezilla-ci-run.sh 需要修改：
