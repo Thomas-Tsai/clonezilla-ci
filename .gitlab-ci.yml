@@ -193,27 +193,31 @@ test:os:debian:
 #          fi
 #      done
 #
-# test:os:windows11:
-#   extends: .test_template
-#   script:
-#     - |
-#       image_path="qemu/cloudimages/windows-11-${ARCH}.qcow2"
-#       echo "--- Running OS Clone/Restore Test for Windows 11 ($ARCH) ---"
-#       if [ -f "$image_path" ]; then
-#           echo "--- Testing ${image_path} ---"
-#           log_file="$LOG_DIR/os_windows11_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-#           ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/win11_cidata.iso" --no-ssh-forward 2>&1 | tee -a "$log_file"
-#           rc=${PIPESTATUS[0]}
-#           if [ $rc -ne 0 ]; then
-#               echo "--- Test FAILED for ${image_path} ---"
-#               exit 1
-#           fi
-#           echo "--- Test PASSED for ${image_path} ---"
-#       else
-#           echo "Skipping test for Windows 11: image file not found at ${image_path}"
-#       fi
+test:os:windows11:
+  extends: .test_template
+  tags:
+    - shell
+    - clonezilla
+    - windows
+  script:
+    - |
+      image_path="qemu/cloudimages/windows-11-${ARCH}.qcow2"
+      echo "--- Running OS Clone/Restore Test for Windows 11 ($ARCH) ---"
+      if [ -f "$image_path" ]; then
+          echo "--- Testing ${image_path} ---"
+          log_file="$LOG_DIR/os_windows11_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
+          ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/win11_cidata.iso" --no-ssh-forward 2>&1 | tee -a "$log_file"
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+              echo "--- Test FAILED for ${image_path} ---"
+              exit 1
+          fi
+          echo "--- Test PASSED for ${image_path} ---"
+      else
+          echo "Skipping test for Windows 11: image file not found at ${image_path}"
+      fi
 
-# --- Filesystem Tests ---
+--- Filesystem Tests ---
 
 .fs_test_template:
   extends: .test_template
