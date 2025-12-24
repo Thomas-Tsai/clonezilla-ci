@@ -85,7 +85,7 @@ Before using these scripts, ensure the following dependencies are installed on y
 
 ```bash
 sudo apt update
-sudo apt install qemu-utils qemu-system-riscv64 qemu-system-arm64 qemu-system-x86 qemu-system-arm qemu-efi-aarch64 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount
+sudo apt install qemu-utils qemu-system-riscv64 qemu-system-arm64 qemu-system-x86 qemu-system-arm qemu-efi-aarch64 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount  e2fsprogs btrfs-progs xfsprogs ntfs-3g dosfstools exfatprogs
 ```
 
 Here's a breakdown of what each package provides:
