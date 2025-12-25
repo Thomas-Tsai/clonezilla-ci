@@ -6,6 +6,8 @@
 # Source the common script
 . "$(dirname "$0")/common.sh"
 
+local NO_SSH_FORWARD_ARG=""
+
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -39,7 +41,7 @@ fi
 
 # --- Test for exfat file system clone and restore ---
 test_exfat_clone_restore() {
-    run_fs_clone_restore "exfat"
+    run_fs_clone_restore "exfat" "$NO_SSH_FORWARD_ARG"
 }
 
 # --- Main execution ---

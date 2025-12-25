@@ -6,6 +6,8 @@
 # Source the common script
 . "$(dirname "$0")/common.sh"
 
+local NO_SSH_FORWARD_ARG=""
+
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -42,7 +44,7 @@ test_windows11_clone_restore() {
     local image_path="$PROJECT_ROOT/qemu/cloudimages/windown-11-${ARCH}.qcow2"
 
     if [ -f "$image_path" ]; then
-        run_os_clone_restore "$image_path" "$PROJECT_ROOT/isos/win11_cidata.iso"
+        run_os_clone_restore "$image_path" "$PROJECT_ROOT/isos/win11_cidata.iso" "$NO_SSH_FORWARD_ARG"
     else
         echo "Skipping test for windown-11-${ARCH}: image file not found at ${image_path}"
     fi

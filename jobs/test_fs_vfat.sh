@@ -6,6 +6,8 @@
 # Source the common script
 . "$(dirname "$0")/common.sh"
 
+local NO_SSH_FORWARD_ARG=""
+
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -39,7 +41,7 @@ fi
 
 # --- Test for vfat file system clone and restore ---
 test_vfat_clone_restore() {
-    run_fs_clone_restore "vfat"
+    run_fs_clone_restore "vfat" "$NO_SSH_FORWARD_ARG"
 }
 
 # --- Main execution ---

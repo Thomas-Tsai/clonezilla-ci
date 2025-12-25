@@ -18,7 +18,7 @@ while [ "$#" -gt 0 ]; do
             shift 2
             ;;
         --no-ssh-forward)
-            NO_SSH_FORWARD_ARG="--no-ssh-forward"
+            # Consume the argument so shunit2 doesn't see it
             shift 1
             ;;
         -h|--help)
@@ -42,7 +42,7 @@ test_liteserver() {
     # Check if the required disk for the test exists.
     local test_disk="$PROJECT_ROOT/qemu/cloudimages/debian-13-amd64.qcow2"
     if [ -f "$test_disk" ]; then
-        run_liteserver_test
+        run_liteserver_test # No --no-ssh-forward parameter is needed here
     else
         echo "Skipping Lite Server test: required disk not found at ${test_disk}"
     fi

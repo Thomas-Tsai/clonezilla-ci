@@ -6,6 +6,8 @@
 # Source the common script
 . "$(dirname "$0")/common.sh"
 
+local NO_SSH_FORWARD_ARG=""
+
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -39,7 +41,7 @@ fi
 
 # --- Test for ext4 file system clone and restore ---
 test_ext4_clone_restore() {
-    run_fs_clone_restore "ext4"
+    run_fs_clone_restore "ext4" "$NO_SSH_FORWARD_ARG"
 }
 
 # --- Main execution ---

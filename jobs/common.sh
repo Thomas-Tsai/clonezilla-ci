@@ -11,7 +11,6 @@ readonly PROJECT_ROOT="$(realpath "$(dirname "$0")/..")"
 SHUNIT_TIMER=1 # Enable test timing
 CLONEZILLA_ZIP=""
 ARCH="amd64"
-NO_SSH_FORWARD_ARG=""
 LOG_DIR="$PROJECT_ROOT/logs"
 testData="$PROJECT_ROOT/dev/testData"
 START_TIME=$(date +%s)
@@ -93,12 +92,13 @@ run_os_clone_restore() {
     local TEST_START_TIME=$(date +%s) # Record start time for this specific test
     local DISK_IMAGE="$1"
     local VALIDATE_ISO="$2"
+    local NO_SSH_FORWARD_PARAM="$3"
     local TEST_NAME="os_clone_restore_$(basename "$DISK_IMAGE" .qcow2)"
     local TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
     local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
 
     echo "--- Running OS $DISK_IMAGE ($ARCH) Clone/Restore Test (Log: $LOG_FILE) ---"
-    (cd .. && ./os-clone-restore.sh --zip "$CLONEZILLA_ZIP" --tmpl "$DISK_IMAGE" --arch "$ARCH" --validate-iso "$VALIDATE_ISO" $NO_SSH_FORWARD_ARG) 2>&1 | tee -a "$LOG_FILE"
+    (cd .. && ./os-clone-restore.sh --zip "$CLONEZILLA_ZIP" --tmpl "$DISK_IMAGE" --arch "$ARCH" --validate-iso "$VALIDATE_ISO" $NO_SSH_FORWARD_PARAM) 2>&1 | tee -a "$LOG_FILE"
     local SCRIPT_RESULT="${PIPESTATUS[0]}"
     local RESULT="$SCRIPT_RESULT"
     local TEST_END_TIME=$(date +%s) # Record end time for this specific test
@@ -116,12 +116,13 @@ run_os_clone_restore() {
 run_fs_clone_restore() {
     local TEST_START_TIME=$(date +%s) # Record start time for this specific test
     local fs="$1"
+    local NO_SSH_FORWARD_PARAM="$2"
     local TEST_NAME="fs_clone_restore_${fs}"
     local TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
     local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
 
     echo "--- Running FS Clone/Restore Test with $fs ($ARCH) (Log: $LOG_FILE) ---"
-    (cd .. && ./data-clone-restore.sh --zip "$CLONEZILLA_ZIP" --data "$testData" --fs "$fs" --arch "$ARCH" $NO_SSH_FORWARD_ARG) 2>&1 | tee -a "$LOG_FILE"
+    (cd .. && ./data-clone-restore.sh --zip "$CLONEZILLA_ZIP" --data "$testData" --fs "$fs" --arch "$ARCH" $NO_SSH_FORWARD_PARAM) 2>&1 | tee -a "$LOG_FILE"
     local SCRIPT_RESULT="${PIPESTATUS[0]}"
     local RESULT="$SCRIPT_RESULT"
     local TEST_END_TIME=$(date +%s) # Record end time for this specific test

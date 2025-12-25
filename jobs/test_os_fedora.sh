@@ -6,6 +6,8 @@
 # Source the common script
 . "$(dirname "$0")/common.sh"
 
+local NO_SSH_FORWARD_ARG=""
+
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -49,7 +51,7 @@ test_fedora_clone_restore() {
         local image_path="$PROJECT_ROOT/qemu/cloudimages/${image_name}"
 
         if [ -f "$image_path" ]; then
-            run_os_clone_restore "$image_path" "$PROJECT_ROOT/isos/cidata.iso" 
+            run_os_clone_restore "$image_path" "$PROJECT_ROOT/isos/cidata.iso" "$NO_SSH_FORWARD_ARG" 
         else
             echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
         fi

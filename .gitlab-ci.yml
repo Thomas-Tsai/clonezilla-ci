@@ -106,6 +106,18 @@ build_zip:
       echo "Preparing log directory..."
       export LOG_DIR="./logs"
       mkdir -p $LOG_DIR
+    - |
+      echo "Setting up test data directory..."
+      if [ -d "/data/dataSets" ]; then
+        # Ensure dev/testData directory exists before creating symlink target
+        mkdir -p dev
+        rm -rf dev/testData # Remove existing placeholder if any
+        ln -s /data/dataSets dev/testData
+        echo "Linked /data/dataSets to dev/testData."
+      else
+        echo "Warning: /data/dataSets not found on runner. Data clone/restore tests might fail."
+      fi
+
   artifacts:
     when: always
     paths:
