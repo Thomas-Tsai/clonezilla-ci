@@ -20,7 +20,7 @@ set -e
 CLONEZILLA_ZIP=""
 SOURCE_DATA_DIR=""
 FILESYSTEM_TYPE="ext4"
-DISK_SIZE="10G"
+DISK_SIZE="100G"
 PARTIMAG_LOCATION="" # Default is to use a temporary directory
 KEEP_TEMP_FILES=false # Default is to clean up temp files
 TMP_PATH="" # Default is to let mktemp decide
