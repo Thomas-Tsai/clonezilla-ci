@@ -64,7 +64,6 @@ build_zip:
 
 
 .test_template:
-  name: "$ARCH-$TYPE-$CI_JOB_NAME"
   stage: test
   allow_failure: true
   variables:
