@@ -1,7 +1,7 @@
 stages:
   - build
   - test
-  - report
+  - deploy
 
 default:
   tags:
@@ -231,8 +231,8 @@ test:liteserver:
     - cd jobs
     - ./test_liteserver.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
-report:
-  stage: report
+pages:
+  stage: deploy
   when: always
   needs:
     - test:os:ubuntu
@@ -246,37 +246,78 @@ report:
     - test:fs:btrfs
     - test:liteserver
   script:
+    - mkdir -p public/logs
+    - if [ -d "logs" ]; then cp -r logs/* public/logs/; fi
     - |
       pipeline_started_ts=$(date -d "$CI_PIPELINE_CREATED_AT" +%s)
       report_job_started_ts=$(date -d "$CI_JOB_STARTED_AT" +%s)
       pipeline_duration=$((report_job_started_ts - pipeline_started_ts))
       pipeline_duration_formatted=$(date -u -d "@${pipeline_duration}" +'%H:%M:%S')
-    - echo "# Clonezilla CI Test Report" > report.md
-    - echo "" >> report.md
-    - echo "## Pipeline Summary" >> report.md
-    - echo "- **Pipeline ID:** [$CI_PIPELINE_ID]($CI_PIPELINE_URL)" >> report.md
-    - echo "- **Commit:** [$CI_COMMIT_SHORT_SHA]($CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA)" >> report.md
-    - echo "- **Branch:** [$CI_COMMIT_REF_NAME]($CI_PROJECT_URL/-/tree/$CI_COMMIT_REF_NAME)" >> report.md
-    - echo "- **Triggered by:** $GITLAB_USER_NAME" >> report.md
-    - echo "- **Pipeline Started:** ${CI_PIPELINE_CREATED_AT}" >> report.md
-    - echo "- **Total Duration:** ${pipeline_duration_formatted} (until report generation)" >> report.md
-    - echo "" >> report.md
-    - echo "## Test Environment" >> report.md
+    - |
+      cat > public/index.html <<- EOM
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Clonezilla CI Test Report</title>
+          <style>
+              body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
+              h1, h2 { color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+              table { border-collapse: collapse; width: 100%; margin-top: 20px; box-shadow: 0 2px 3px rgba(0,0,0,0.1); }
+              th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+              th { background-color: #e8e8f5; }
+              tr:nth-child(even) { background-color: #f9f9f9; }
+              tr:hover { background-color: #f1f1f1; }
+              a { color: #007bff; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+              .summary { background-color: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 3px rgba(0,0,0,0.1); }
+              .summary p { margin: 5px 0; }
+          </style>
+      </head>
+      <body>
+          <h1>Clonezilla CI Test Report</h1>
+          
+          <h2>Pipeline Summary</h2>
+          <div class="summary">
+              <p><strong>Pipeline ID:</strong> <a href="${CI_PIPELINE_URL}">${CI_PIPELINE_ID}</a></p>
+              <p><strong>Commit:</strong> <a href="${CI_PROJECT_URL}/-/commit/${CI_COMMIT_SHA}">${CI_COMMIT_SHORT_SHA}</a></p>
+              <p><strong>Branch:</strong> <a href="${CI_PROJECT_URL}/-/tree/${CI_COMMIT_REF_NAME}">${CI_COMMIT_REF_NAME}</a></p>
+              <p><strong>Triggered by:</strong> ${GITLAB_USER_NAME}</p>
+              <p><strong>Pipeline Started:</strong> ${CI_PIPELINE_CREATED_AT}</p>
+              <p><strong>Total Duration:</strong> ${pipeline_duration_formatted} (until report generation)</p>
+          </div>
+      EOM
     - |
       FIRST_RESULT_FILE=$(find results -name "*.yml" -print -quit)
       if [ -n "$FIRST_RESULT_FILE" ]; then
         ARCH_FROM_FILE=$(grep "arch:" "$FIRST_RESULT_FILE" | cut -d' ' -f2)
         ZIP_FROM_FILE=$(grep "zip:" "$FIRST_RESULT_FILE" | cut -d' ' -f2-)
-        echo "- **Architecture (ARCH):** ${ARCH_FROM_FILE}" >> report.md
-        echo "- **Clonezilla ZIP:** ${ZIP_FROM_FILE}" >> report.md
-      else
-        echo "Could not determine ARCH and ZIP from test artifacts." >> report.md
+        cat >> public/index.html <<- EOM
+          <h2>Test Environment</h2>
+          <div class="summary">
+              <p><strong>Architecture (ARCH):</strong> ${ARCH_FROM_FILE}</p>
+              <p><strong>Clonezilla ZIP:</strong> ${ZIP_FROM_FILE}</p>
+          </div>
+        EOM
       fi
-    - echo "" >> report.md
-    - echo "## Test Results" >> report.md
-    - echo "" >> report.md
-    - echo "| Test Job | Status | Duration | Runner | Filesystem | Start Time (UTC) |" >> report.md
-    - echo "|----------|--------|----------|--------|------------|--------------------|" >> report.md
+    - |
+      cat >> public/index.html <<- EOM
+      <h2>Test Results</h2>
+      <table>
+          <thead>
+              <tr>
+                  <th>Test Job</th>
+                  <th>Status</th>
+                  <th>Duration</th>
+                  <th>Runner</th>
+                  <th>Filesystem</th>
+                  <th>Start Time (UTC)</th>
+                  <th>Log</th>
+              </tr>
+          </thead>
+          <tbody>
+      EOM
     - |
       for file in results/*.yml; do
         if [ -f "$file" ]; then
@@ -286,6 +327,7 @@ report:
           job_started=$(grep "job_started_at:" "$file" | cut -d' ' -f2- || echo "N/A")
           runner_desc=$(grep "runner_description:" "$file" | cut -d':' -f2- | xargs || echo "N/A")
           fs=$(grep "fs:" "$file" | cut -d' ' -f2 || echo "N/A")
+          
           if [ "$job_status" = "success" ]; then
             status_icon="✅"
           elif [ "$job_status" = "failed" ]; then
@@ -294,14 +336,35 @@ report:
             status_icon="❓"
           fi
           job_started_formatted=$(date -d "$job_started" +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$job_started")
-          echo "| $job_name | $status_icon $job_status | $job_duration | $runner_desc | $fs | $job_started_formatted |" >> report.md
+          
+          log_link="<a href='./logs/${job_name}.log'>Log</a>"
+
+          cat >> public/index.html <<- EOM
+              <tr>
+                  <td>${job_name}</td>
+                  <td>${status_icon} ${job_status}</td>
+                  <td>${job_duration}</td>
+                  <td>${runner_desc}</td>
+                  <td>${fs}</td>
+                  <td>${job_started_formatted}</td>
+                  <td>${log_link}</td>
+              </tr>
+          EOM
         fi
       done
-    - echo "" >> report.md
-    - echo "---" >> report.md
-    - echo "For detailed logs, please check the artifacts of each test job." >> report.md
+    - |
+      cat >> public/index.html <<- EOM
+            </tbody>
+        </table>
+        <br>
+        <p><em>For detailed logs, click on the link in the 'Log' column or <a href="./logs/">browse the raw logs directory</a>.</em></p>
+      </body>
+      </html>
+      EOM
   artifacts:
-    name: "test-report-${CI_COMMIT_REF_NAME}"
     paths:
-      - report.md
+      - public
     expire_in: 30 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
