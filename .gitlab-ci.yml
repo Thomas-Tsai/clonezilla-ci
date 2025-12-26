@@ -308,7 +308,7 @@ pages:
               <p><strong>Pipeline Started:</strong> $(printf '%s' "${CI_PIPELINE_CREATED_AT}")</p>
               <p><strong>Total Duration:</strong> $(printf '%s' "${pipeline_duration_formatted}") (until report generation)</p>
           </div>
-EOF
+      EOF
       # Append Test Environment section
       ARCH_FROM_FILE=$(grep "arch:" "$FIRST_RESULT_FILE" | cut -d' ' -f2)
       cat >> "${REPORT_DIR}/index.html" <<EOF
@@ -317,7 +317,7 @@ EOF
             <p><strong>Architecture (ARCH):</strong> '$(printf '%s' "${ARCH_FROM_FILE}")'</p>
             <p><strong>Clonezilla ZIP:</strong> '$(printf '%s' "${ZIP_FILENAME}")'</p>
         </div>
-EOF
+      EOF
       # Append Test Results table header
       cat >> "${REPORT_DIR}/index.html" <<EOF
       <h2>Test Results</h2>
@@ -334,7 +334,7 @@ EOF
               </tr>
           </thead>
           <tbody>
-EOF
+      EOF
       # Loop through results and append table rows
       for file in results/*.yml; do
         if [ -f "$file" ]; then
@@ -367,7 +367,7 @@ EOF
                   <td>$(printf '%s' "${job_started_formatted}")</td>
                   <td>$(printf '%s' "${log_link}")</td>
               </tr>
-EOF
+      EOF
         fi
       done
       # Close the HTML file
@@ -378,7 +378,7 @@ EOF
         <p><em>For detailed logs, click on the link in the 'Log' column or <a href="./logs/">browse the raw logs directory</a>.</em></p>
       </body>
       </html>
-EOF
+      EOF
   artifacts:
     paths:
       - public
