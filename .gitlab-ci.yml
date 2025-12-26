@@ -40,7 +40,15 @@ build_zip:
         fi
 
         echo "Searching for latest zip for arch '${ARCH}' from ${CLONEZILLA_BASE_URL}..."
-        LATEST_ZIP=$(curl ${CURL_OPTS} "${CLONEZILLA_BASE_URL}/" \
+        
+        # Separated curl from grep to make it more robust, especially if grep finds no matches.
+        CURL_OUTPUT=$(curl ${CURL_OPTS} "${CLONEZILLA_BASE_URL}/")
+        if [ $? -ne 0 ]; then
+          echo "Error: curl failed to fetch from ${CLONEZILLA_BASE_URL}" >&2
+          exit 1
+        fi
+
+        LATEST_ZIP=$(echo "${CURL_OUTPUT}" \
           | grep -Eo "href=\"clonezilla-live-[^"]*${ARCH}[^"]*\.zip\"" \
           | cut -d'"' -f2 \
           | sort -V \
