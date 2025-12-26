@@ -49,7 +49,7 @@ build_zip:
         fi
 
         LATEST_ZIP=$(echo "${CURL_OUTPUT}" \
-          | grep -Eo "href=\"clonezilla-live-[^"]*${ARCH}[^"]*\.zip\"" \
+          | grep -Eo "href=\"clonezilla-live-[^\"]*${ARCH}[^\"]*\\.zip\"" \
           | cut -d'"' -f2 \
           | sort -V \
           | tail -n1)
