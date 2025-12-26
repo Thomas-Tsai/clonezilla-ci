@@ -207,6 +207,8 @@ initrd.img,                  --initrd <path>         Path to the initrd file.
 - [x] 自動下載 zip
 - [x] type for debian / ubuntu basd
 - [x] arch : amd64, arm64, riscv64
+- [x] --all 下載所有zip
+- [x] --all --fry-run 列出所有url
 
 ## debian-install.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
