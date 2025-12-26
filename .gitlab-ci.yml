@@ -261,10 +261,9 @@ pages:
 
       ZIP_FILENAME=$(grep "zip:" "$FIRST_RESULT_FILE" | cut -d' ' -f2-)
       ZIP_BASENAME=$(basename "$ZIP_FILENAME" .zip)
-      
-      # --- Determine Report Directory ---
-      REPORT_DIR="public/${ZIP_BASENAME}"
 
+      # --- Generate Current Report ---
+      REPORT_DIR="public/${ZIP_BASENAME}"
       echo "INFO: Generating report in directory: ${REPORT_DIR}"
       mkdir -p "${REPORT_DIR}/logs"
       if [ -d "logs" ] && [ -n "$(ls -A logs)" ]; then cp -r logs/* "${REPORT_DIR}/logs/"; fi
@@ -274,14 +273,14 @@ pages:
       pipeline_duration=$((report_job_started_ts - pipeline_started_ts))
       pipeline_duration_formatted=$(date -u -d "@${pipeline_duration}" +'%H:%M:%S')
 
-      # Start generating index.html
+      # Start generating index.html for the specific report
       cat > "${REPORT_DIR}/index.html" <<EOF
       <!DOCTYPE html>
       <html lang="en">
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Test Report: '$(printf '%s' "${ZIP_BASENAME}")'</title>
+          <title>Test Report: $(printf '%s' "${ZIP_BASENAME}")</title>
           <style>
               body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
               h1, h2 { color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
@@ -297,8 +296,8 @@ pages:
           </style>
       </head>
       <body>
-          <h1>Test Report: '$(printf '%s' "${ZIP_BASENAME}")'</h1>
-          
+          <h1>Test Report: $(printf '%s' "${ZIP_BASENAME}")</h1>
+          <h2><a href="../">Back to Report Index</a></h2>
           <h2>Pipeline Summary</h2>
           <div class="summary">
               <p><strong>Pipeline ID:</strong> <a href="$(printf '%s' "${CI_PIPELINE_URL}")">$(printf '%s' "${CI_PIPELINE_ID}")</a></p>
@@ -309,16 +308,14 @@ pages:
               <p><strong>Total Duration:</strong> $(printf '%s' "${pipeline_duration_formatted}") (until report generation)</p>
           </div>
       EOF
-      # Append Test Environment section
       ARCH_FROM_FILE=$(grep "arch:" "$FIRST_RESULT_FILE" | cut -d' ' -f2)
       cat >> "${REPORT_DIR}/index.html" <<EOF
         <h2>Test Environment</h2>
         <div class="summary">
-            <p><strong>Architecture (ARCH):</strong> '$(printf '%s' "${ARCH_FROM_FILE}")'</p>
-            <p><strong>Clonezilla ZIP:</strong> '$(printf '%s' "${ZIP_FILENAME}")'</p>
+            <p><strong>Architecture (ARCH):</strong> $(printf '%s' "${ARCH_FROM_FILE}")</p>
+            <p><strong>Clonezilla ZIP:</strong> $(printf '%s' "${ZIP_FILENAME}")</p>
         </div>
       EOF
-      # Append Test Results table header
       cat >> "${REPORT_DIR}/index.html" <<EOF
       <h2>Test Results</h2>
       <table>
@@ -335,7 +332,6 @@ pages:
           </thead>
           <tbody>
       EOF
-      # Loop through results and append table rows
       for file in results/*.yml; do
         if [ -f "$file" ]; then
           job_name=$(grep "job_name:" "$file" | cut -d' ' -f2)
@@ -345,16 +341,8 @@ pages:
           runner_desc=$(grep "runner_description:" "$file" | cut -d':' -f2- | xargs || echo "N/A")
           fs=$(grep "fs:" "$file" | cut -d' ' -f2 || echo "N/A")
           
-          if [ "$job_status" = "success" ]; then
-            status_icon="✅"
-          elif [ "$job_status" = "failed" ]; then
-            status_icon="❌"
-          else
-            status_icon="❓"
-          fi
+          if [ "$job_status" = "success" ]; then status_icon="✅"; elif [ "$job_status" = "failed" ]; then status_icon="❌"; else status_icon="❓"; fi
           job_started_formatted=$(date -d "$job_started" +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$job_started")
-          
-          # Links are relative to the current directory (e.g., public/clonezilla-live-amd64/)
           log_link="<a href='./logs/${job_name}.log'>Log</a>"
 
           cat >> "${REPORT_DIR}/index.html" <<EOF
@@ -370,7 +358,6 @@ pages:
       EOF
         fi
       done
-      # Close the HTML file
       cat >> "${REPORT_DIR}/index.html" <<EOF
             </tbody>
         </table>
@@ -379,6 +366,93 @@ pages:
       </body>
       </html>
       EOF
+      
+      # --- Generate Historical Index ---
+      echo "INFO: Updating historical report index..."
+      REPORTS_JSON_URL="${CI_PAGES_URL}/reports.json"
+      echo "INFO: Downloading previous reports index from ${REPORTS_JSON_URL}"
+      if ! curl -fSs "${REPORTS_JSON_URL}" -o public/reports.json; then
+        echo "INFO: No previous reports.json found. Starting a new one."
+        echo "[]" > public/reports.json
+      fi
+
+      OVERALL_STATUS="success"
+      if grep -q "job_status: failed" results/*.yml; then OVERALL_STATUS="failed"; fi
+      
+      CURRENT_REPORT_JSON=$(jq -n \
+        --arg zip_basename "$ZIP_BASENAME" \
+        --arg pipeline_iid "$CI_PIPELINE_IID" \
+        --arg pipeline_url "$CI_PIPELINE_URL" \
+        --arg commit_sha "$CI_COMMIT_SHORT_SHA" \
+        --arg commit_url "${CI_PROJECT_URL}/-/commit/${CI_COMMIT_SHA}" \
+        --arg commit_ref "$CI_COMMIT_REF_NAME" \
+        --arg status "$OVERALL_STATUS" \
+        --arg date "$(date -u -Iseconds)" \
+        '{zip_name: $zip_basename, pipeline: {id: $pipeline_iid, url: $pipeline_url}, commit: {sha: $commit_sha, ref: $commit_ref, url: $commit_url}, status: $status, date: $date, report_url: ($zip_basename + "/")}')
+
+      UPDATED_REPORTS_JSON=$(jq --argjson new_report "${CURRENT_REPORT_JSON}" \
+        '. | map(select(.pipeline.id != $new_report.pipeline.id)) | [$new_report] + .' \
+        public/reports.json)
+      echo "${UPDATED_REPORTS_JSON}" > public/reports.json
+
+      # Generate a new root index.html from reports.json
+      cat > public/index.html << 'EOF'
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Clonezilla CI Test Reports</title>
+          <style>
+              body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
+              h1 { color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+              table { border-collapse: collapse; width: 100%; margin-top: 20px; box-shadow: 0 2px 3px rgba(0,0,0,0.1); }
+              th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+              th { background-color: #e8e8f5; }
+              tr:nth-child(even) { background-color: #f9f9f9; }
+              tr:hover { background-color: #f1f1f1; }
+              a { color: #007bff; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+              .status-success { color: green; font-weight: bold; }
+              .status-failed { color: red; font-weight: bold; }
+          </style>
+      </head>
+      <body>
+          <h1>Clonezilla CI Test Reports</h1>
+          <table>
+              <thead>
+                  <tr>
+                      <th>Clonezilla Version</th>
+                      <th>Date</th>
+                      <th>Status</th>
+                      <th>Pipeline</th>
+                      <th>Commit</th>
+                      <th>Report</th>
+                  </tr>
+              </thead>
+              <tbody>
+      EOF
+
+      jq -r '
+        .[] |
+        "<tr>
+            <td>" + .zip_name + "</td>
+            <td>" + .date + "</td>
+            <td><span class=\"status-" + .status + "\">" + .status + "</span></td>
+            <td><a href=\"" + .pipeline.url + "\" target=\"_blank\">" + .pipeline.id + "</a></td>
+            <td><a href=\"" + .commit.url + "\" target=\"_blank\">" + .commit.sha + " (" + .commit.ref + ")</a></td>
+            <td><a href=\"" + .report_url + "\">View Report</a></td>
+         </tr>"
+      ' public/reports.json >> public/index.html
+
+      cat >> public/index.html << 'EOF'
+              </tbody>
+          </table>
+      </body>
+      </html>
+      EOF
+
+      echo "INFO: public/index.html and public/reports.json generated successfully."
   artifacts:
     paths:
       - public
