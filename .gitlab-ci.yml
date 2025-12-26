@@ -16,6 +16,7 @@ variables:
   CURL_OPTS: "-fsSL"
 
 build_zip:
+  name: "Build: $ARCH-$TYPE"
   stage: build
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -64,6 +65,7 @@ build_zip:
 
 
 .test_template:
+  name: "$ARCH-$TYPE-$CI_JOB_NAME"
   stage: test
   allow_failure: true
   variables:
@@ -233,6 +235,7 @@ test:liteserver:
     - ./test_liteserver.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 pages:
+  name: "Report: $ARCH-$TYPE"
   stage: deploy
   needs:
     - test:os:ubuntu
