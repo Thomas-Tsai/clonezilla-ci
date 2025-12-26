@@ -11,7 +11,7 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [ ] 容器化支援, 開發一個 Dockerfile 來建置一個包含所有相依套件的容器映像檔，方便在不同環境中執行這些腳本，要可以支援多架構，與 dev/testData, qemu/cloudimages, isos, zip 等目錄的掛載
 
 ## .gitlab-ci.yml 改進事項：
-- [x] 目前行為是執行 start.sh 來進行所有的單元測試, 我想改為每一個 script 都有自己的單元測試, 並且在 .gitlab-ci.yml 裡面分別執行每一個 script 的單元測試, 這樣可以更清楚知道是哪一個 script 有問題
+- [x] 目前行為是執行 start.sh 來進行所有的單元測試, 我想改為每一個 script 都自己的單元測試, 並且在 .gitlab-ci.yml 裡面分別執行每一個 script 的單元測試, 這樣可以更清楚知道是哪一個 script 有問題
 - [x] 以 .gitlab-ci.yml 來執行所有在 start.sh 內的測試, 並且產生測試報告
 - [x] 支援多架構測試, 例如 amd64, arm64, riscv64 等架構的測試 可以搭配不同的pipelines 來執行不同架構的測試
 - [x] 支援多架構測試, 例如 amd64, arm64, riscv64 等架構的測試 可以搭配不同的 variables 來執行不同架構的 pipelines 測試
@@ -23,7 +23,11 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] .gitlab-ci.yml 中，build job 不再保留舊的 zip 檔案，每次都下載新的 zip 以避免錯誤。
 - [x] 修改為可以同時運作
 - [x] 讓 .gitlab-ci.yml專注於流程，要測試的部份改用 jobs/ 目錄底下的 script 來執行
-- [ ] 產生報告，報告內容包含 測試結果、VARIABLES、測試的 ARCH, ZIP  等
+- [x] 產生報告，報告內容包含 測試結果、VARIABLES、測試的 ARCH, ZIP  等
+- [x] 產生測試報告，報告內容包含測試結果、Pipeline 變數、測試架構 (ARCH) 和使用的 Clonezilla ZIP 檔案。報告中也包含了 Pipeline 啟動時間、總執行時間、每個 Job 的啟動時間與執行時間。
+- [x] 報告內容增加 Runner 資訊，詳細顯示每個測試 Job 執行於哪一台 Runner。
+- [x] 將 `build_zip` Job 中的下載邏輯與 `download-clonezilla.sh` 腳本整合，支援透過 `ARCH` 和 `TYPE` 變數自動下載，同時保留 `CLONEZILLA_ZIP_URL` 的直接指定功能。
+- [x] 修復 `build_zip` Job 中下載邏輯的錯誤，使其在無法找到或下載 zip 檔時能輸出更清晰的錯誤訊息。
 
 
 ## start.sh 改進事項：
@@ -40,12 +44,16 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] 提供 --help 參數 (done)
 - [x] os_clone_restore 與 data_clone_restore 兩個 使用 tee 來同時輸出到螢幕與log 檔
 
-## jobs 說明
+## jobs/** script 改進事項：
 先將 start.sh 裡面的測試拆分成多個不同的 jobs 來執行 ，檔案放 jobs/ 目錄底下
 - [x] 產生 jobs 目錄，裡面包含各種不同的 CI jobs 範例，例如 debian.sh, ubuntu.sh, ext4.sh, liteserver-job.sh 等等
 - [x] 用 shunit2 來進行單元測試
 - [x] 用 common.sh 來放置共用的函式
 - [x] 預設需要指定參數 --zip 來指定 clonezilla zip 檔案路徑, --arch 來指定架構 預設為 amd64
+- [x] 新增 `download-clonezilla.sh` 腳本，提供自動偵測並下載指定架構及類型 Clonezilla Live zip 檔的功能。
+- [x] 將 `jobs/common.sh` 中的自動下載邏輯替換為呼叫 `download-clonezilla.sh` 腳本，並支援 `--type` 參數。
+- [x] 更新 `jobs/**` 下所有測試腳本的參數解析，使其支援傳遞 `--type` 參數。
+- [x] 在 `jobs/common.sh` 中新增檢查，強制所有測試腳本必須從 `jobs/` 目錄內執行，否則將顯示錯誤並退出。
 
 ## liteserver.sh 改進事項：
 開發一個 liteserver.sh 腳本，這個腳本主要用來啟動一個簡易的 clonezilla lite server 來提供 clonezilla server 服務的場景
@@ -63,7 +71,7 @@ server 提供 --cmd, --cmdpath 參數來讓使用者可以自訂 server 的行�
 2. prepare restore qcow2 (restore-a.qcow2, restore-b.qcow2)
 3. start lite server , 需要複數 --disk 搭配一個以上的qcow2磁碟映像檔案 通常是 qemu/cloudimages 裡面的cloud image
 server 啟動：
-$ ./qemu-clonezilla-ci-run.sh -i --zip zip/clonezilla-live-3.3.0-33-amd64.zip --disk a.qcow2  --disk  qemu/cloudimages/debian-sid-amd64.qcow2  --no-ssh-forward --qemu-args "-netdev socket,id=net1,listen=127.0.0.1:14321 -device virtio-net-pci,netdev=net1" --cmd "ip route del default ; ip link set ens5 up; ip a add 192.168.0.1/24 dev ens5 ; ip r add default via 192.168.0.1; ocs-live-feed-img -cbm both -dm start-new-dhcpd -lscm massive-deployment -mdst from-image -g auto -e1 auto -e2 -r -x -j2 -k0 -sc0 -p true -md multicast --clients-to-wait 1 start "debian-13-amd64" vda"
+$ ./qemu-clonezilla-ci-run.sh -i --zip zip/clonezilla-live-3.3.0-33-amd64.zip --disk a.qcow2  --disk  qemu/cloudimages/debian-sid-amd64.qcow2  --no-ssh-forward --qemu-args "-netdev socket,id=net1,listen=127.0.0.1:14321 -device virtio-net-pci,netdev=net1" --cmd "ip route del default ; ip link set ens5 up; ip a add 192.168.0.1/24 dev ens5 ; ip r add default via 192.168.0.1; ocs-live-feed-img -cbm both -dm start-new-dhcpd -lscm massive-deployment -mdst from-image -g auto -e1 auto -e2 -r -x -j2 -k0 -sc0 -p true -md multicast --clients-to-wait 1 start \"debian-13-amd64\" vda"
 
 4. start lite client , 對應 --disk 需要的 restore qcow2 磁碟映像檔案
 client 啟動：
@@ -174,6 +182,7 @@ initrd.img,                  --initrd <path>         Path to the initrd file.
 -drive file=mtd.img,format=raw,id=mtddev0 \
 -device mtd-ram,id=mtd0,drive=mtddev0,size=0x4000000 \ # Or similar mtd device
 要怎麼安全的合併到 qemu-clonezilla-ci-run.sh
+- [x] 修正 `qemu-clonezilla-ci-run.sh`，針對 `arm64` 架構，在 kernel append arguments 中指定 `console=ttyAMA0,38400n8` 以確保正常運作。
 
 ## clonezilla-zip2qcow.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
@@ -182,6 +191,7 @@ initrd.img,                  --initrd <path>         Path to the initrd file.
 ./clonezilla-zip2qcow.sh --zip clonezilla_image.zip --output outputdir/ --size 10G --force
 - [x] 4. 在步驟 Copying Kernel/Initrd files to the target directory，檔案名稱prefix採用clonezilla zip 的base name 來命名，而不是固定用 vmlinuz 與 initrd.img
 - [x] 自動下載最新的zip 檔案，當沒有指定 --zip 參數時，自動下載最新的 clonezilla zip 檔案，預設下載stable amd64 版本
+- [x] 修改 `clonezilla-zip2qcow.sh` 中的自動下載邏輯，改用 `download-clonezilla.sh` 腳本，並支援 `--type` 參數來指定下載的 Clonezilla 版本類型。
 
 ## clonezilla-boot.sh 改進事項：
 - [x] rename clonezilla-iso-boot.sh 為 clonezilla-boot.sh
@@ -190,6 +200,13 @@ initrd.img,                  --initrd <path>         Path to the initrd file.
 - [x] 3. 自動下載 clonezilla iso 檔案，當沒有指定 --iso 參數時，自動下載最新的 clonezilla iso 檔案，預設下載stable amd64 iso 版本
 - [x] 增加參數 --zip 行為類似 qemu-clonezilla-ci-run.sh 的用 clonezilla-zip2qcow.sh , 自動解壓縮 zip 檔案取得 vmlinux, initrd.img, clonezilla-live-xxxx.qcow2, 並以qemu開機，用console 顯示。主要用來確認可以用clonezilla iso zip 開機就好，不需要額外指定append args 與 ocs cmd
 - [x] --disk 換成optional 參數, 如果有指定就掛載qcow2 磁碟映像檔案, 沒有指定就不掛載
+- [x] 修改 `clonezilla-boot.sh` 中的自動下載邏輯，改用 `download-clonezilla.sh` 腳本，並支援 `--type` 參數來指定下載的 Clonezilla 版本類型。
+- [x] 修正 `clonezilla-boot.sh`，針對 `arm64` 架構，在 kernel append arguments 中指定 `console=ttyAMA0,38400n8` 以確保正常運作。
+
+## clonezilla-download.sh
+- [x] 自動下載 zip
+- [x] type for debian / ubuntu basd
+- [x] arch : amd64, arm64, riscv64
 
 ## debian-install.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
@@ -217,6 +234,3 @@ cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/c
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
 - [x] 增加選用參數 --keeplog 來保留log 檔案，預設會刪除log 檔案
 - [x] 自動判斷是否 --enable-kvm
-
-## dev/cloudinit/prepareiso.sh 改進事項：
-- [x] comment the code in english

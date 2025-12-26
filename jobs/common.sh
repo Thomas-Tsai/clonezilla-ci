@@ -7,10 +7,18 @@
 # This assumes common.sh is always in the 'jobs' subdirectory of the project root.
 readonly PROJECT_ROOT="$(realpath "$(dirname "$0")/..")"
 
+# Enforce execution from the 'jobs/' directory
+if [[ "$(basename "$PWD")" != "jobs" ]]; then
+    echo "ERROR: This script must be run from within the 'jobs/' directory." >&2
+    echo "Please 'cd jobs/' first, then execute the script (e.g., './test_fs_btrfs.sh')." >&2
+    exit 1
+fi
+
 # --- Configurable variables ---
 SHUNIT_TIMER=1 # Enable test timing
 CLONEZILLA_ZIP=""
 ARCH="amd64"
+TYPE="stable"
 LOG_DIR="$PROJECT_ROOT/logs"
 testData="$PROJECT_ROOT/dev/testData"
 START_TIME=$(date +%s)
@@ -25,41 +33,34 @@ usage() {
     echo "  -h, --help      Display this help message and exit."
     echo "  --zip <file>    Specify the Clonezilla zip file to use."
     echo "  --arch <arch>   Specify the architecture to test (e.g., amd64, arm64). Defaults to amd64."
+    echo "  --type <type>   Specify the release type for auto-download (e.g., stable, testing). Defaults to stable."
 }
 
 # --- Auto-download Clonezilla ZIP if not provided ---
 autodownload_clonezilla_zip() {
     if [[ -z "$CLONEZILLA_ZIP" ]]; then
-        echo "INFO: --zip not specified. Attempting to auto-download the latest stable Clonezilla Live ZIP for '$ARCH'."
-        CLONEZILLA_LIVE_STABLE_URL="http://free.nchc.org.tw/clonezilla-live/stable/"
-        DEFAULT_DOWNLOAD_DIR="$PROJECT_ROOT/zip"
+        echo "INFO: --zip not specified. Attempting to auto-download."
         
-        mkdir -p "$DEFAULT_DOWNLOAD_DIR" || { echo "ERROR: Could not create download directory: $DEFAULT_DOWNLOAD_DIR" >&2; exit 1; }
-
-        echo "INFO: Fetching latest filename from $CLONEZILLA_LIVE_STABLE_URL"
-        LATEST_ZIP_FILENAME=$(curl -s "$CLONEZILLA_LIVE_STABLE_URL" | grep -oP "clonezilla-live-\d+\.\d+\.\d+-\d+-${ARCH}\.zip" | head -n 1)
-
-        if [[ -z "$LATEST_ZIP_FILENAME" ]]; then
-            echo "ERROR: Could not find the latest Clonezilla Live ZIP filename for '$ARCH' from $CLONEZILLA_LIVE_STABLE_URL" >&2
+        # The download script is in the project root
+        local DOWNLOAD_SCRIPT="$PROJECT_ROOT/download-clonezilla.sh"
+        if [ ! -x "$DOWNLOAD_SCRIPT" ]; then
+            echo "ERROR: Download helper script not found or not executable: $DOWNLOAD_SCRIPT" >&2
             exit 1
         fi
-
-        DOWNLOAD_URL="${CLONEZILLA_LIVE_STABLE_URL}${LATEST_ZIP_FILENAME}"
-        DEST_ZIP_PATH="${DEFAULT_DOWNLOAD_DIR}/${LATEST_ZIP_FILENAME}"
-
-        if [ -f "$DEST_ZIP_PATH" ]; then
-            echo "INFO: Latest ZIP file already exists: $DEST_ZIP_PATH. Skipping download."
-            CLONEZILLA_ZIP=$(realpath "$DEST_ZIP_PATH")
-        else
-            echo "INFO: Downloading $DOWNLOAD_URL to $DEST_ZIP_PATH"
-            if ! wget -q --show-progress -O "$DEST_ZIP_PATH" "$DOWNLOAD_URL"; then
-                echo "ERROR: Failed to download Clonezilla Live ZIP from $DOWNLOAD_URL" >&2
-                rm -f "$DEST_ZIP_PATH" # Clean up partial download
-                exit 1
-            fi
-            CLONEZILLA_ZIP=$(realpath "$DEST_ZIP_PATH")
-            echo "INFO: Download complete."
+        
+        echo "INFO: Calling download script with arch='$ARCH', type='$TYPE'..."
+        local DEFAULT_DOWNLOAD_DIR="$PROJECT_ROOT/zip"
+        local DOWNLOADED_ZIP_PATH
+        DOWNLOADED_ZIP_PATH=$("$DOWNLOAD_SCRIPT" --arch "$ARCH" --type "$TYPE" -o "$DEFAULT_DOWNLOAD_DIR")
+        
+        if [ $? -ne 0 ] || [ -z "$DOWNLOADED_ZIP_PATH" ] || [ ! -f "$DOWNLOADED_ZIP_PATH" ]; then
+            echo "ERROR: Failed to auto-download Clonezilla zip using $DOWNLOAD_SCRIPT." >&2
+            exit 1
         fi
+        
+        # Set the global CLONEZILLA_ZIP variable to the absolute path
+        CLONEZILLA_ZIP=$(realpath "$DOWNLOADED_ZIP_PATH")
+        echo "INFO: Auto-download complete. Using ZIP: $CLONEZILLA_ZIP"
     fi
 }
 # ---

@@ -17,6 +17,10 @@ while [ "$#" -gt 0 ]; do
             ARCH="$2"
             shift 2
             ;;
+        --type)
+            TYPE="$2"
+            shift 2
+            ;;
         --no-ssh-forward)
             # Consume the argument so shunit2 doesn't see it
             shift 1

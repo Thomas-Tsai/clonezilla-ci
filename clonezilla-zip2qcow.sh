@@ -21,6 +21,7 @@ CLONEZILLA_ZIP=""
 OUTPUT_BASE_DIR="."
 IMAGE_SIZE="2G" # Default image size
 ARCH="amd64"
+TYPE="stable"
 CLONEZILLA_LIVE_STABLE_URL="http://free.nchc.org.tw/clonezilla-live/stable/"
 DEFAULT_DOWNLOAD_DIR="zip"
 
@@ -32,7 +33,7 @@ print_usage() {
     echo ""
     echo "This script converts a Clonezilla Live ZIP file into a QCOW2 disk image"
     echo "and extracts the kernel and initrd files. If no ZIP file is provided via --zip,"
-    echo "it will automatically download the latest stable version for the specified architecture."
+    echo "it will automatically download the latest version for the specified architecture and type."
     echo ""
     echo "Arguments:"
     echo "  --zip <path>        Path to the source Clonezilla Live ZIP file. (Optional)"
@@ -41,25 +42,30 @@ print_usage() {
     echo "  -o, --output <dir>  Base directory to create the output folder in. (Default: current directory)"
     echo "  -s, --size <size>   Size of the QCOW2 image to be created (e.g., '2G'). (Default: 2G)"
     echo "  --arch <arch>       Architecture for auto-download (e.g., amd64, arm64). Default: amd64."
+    echo "  --type <type>       Release type for auto-download (e.g., stable, testing). Default: stable."
     echo "  -f, --force         Force overwrite of the output directory if it already exists."
     echo "  -h, --help          Display this help message and exit."
     echo ""
     echo "Example:"
     echo "  $0 --zip ./zip/clonezilla-live-3.1.2-9-amd64.zip --output ./zip/ --force"
     echo "  $0 --arch arm64 --output ./zip/ # Auto-download for ARM64"
+    echo "  $0 --arch amd64 --type testing # Auto-download latest testing for AMD64"
 }
 
 # --- Prerequisite Check ---
 command -v unzip >/dev/null 2>&1 || { echo >&2 "ERROR: The 'unzip' command is required. Please install it."; exit 1; }
 command -v virt-make-fs >/dev/null 2>&1 || { echo >&2 "ERROR: The 'virt-make-fs' command (from libguestfs-tools) is required. Please install it."; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo >&2 "ERROR: The 'curl' command is required. Please install it."; exit 1; }
-command -v wget >/dev/null 2>&1 || { echo >&2 "ERROR: The 'wget' command is required. Please install it."; exit 1; }
 
 # --- Argument Parsing ---
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --arch)
             ARCH="$2"
+            shift 2
+            ;;
+        --type)
+            TYPE="$2"
             shift 2
             ;;
         --zip)
@@ -94,34 +100,26 @@ done
 
 # Auto-download Clonezilla Live ZIP if not provided
 if [[ -z "$CLONEZILLA_ZIP" ]]; then
-    echo "The --zip argument was not provided. Attempting to auto-download the latest stable $ARCH Clonezilla Live ZIP."
-
-    mkdir -p "$DEFAULT_DOWNLOAD_DIR" || { echo "ERROR: Could not create download directory: $DEFAULT_DOWNLOAD_DIR" >&2; exit 1; }
-
-    echo "Fetching latest Clonezilla Live stable $ARCH ZIP from $CLONEZILLA_LIVE_STABLE_URL"
-    LATEST_ZIP_FILENAME=$(curl -s "$CLONEZILLA_LIVE_STABLE_URL" | grep -oP "clonezilla-live-\d+\.\d+\.\d+-\d+-${ARCH}\.zip" | head -n 1)
-
-    if [[ -z "$LATEST_ZIP_FILENAME" ]]; then
-        echo "ERROR: Could not find the latest Clonezilla Live ZIP filename from $CLONEZILLA_LIVE_STABLE_URL" >&2
+    echo "INFO: The --zip argument was not provided. Attempting to auto-download."
+    
+    DOWNLOAD_SCRIPT="./download-clonezilla.sh"
+    if [ ! -x "$DOWNLOAD_SCRIPT" ]; then
+        echo "ERROR: Download helper script not found or not executable: $DOWNLOAD_SCRIPT" >&2
         exit 1
     fi
-
-    DOWNLOAD_URL="${CLONEZILLA_LIVE_STABLE_URL}${LATEST_ZIP_FILENAME}"
-    DEST_ZIP_PATH="${DEFAULT_DOWNLOAD_DIR}/${LATEST_ZIP_FILENAME}"
-
-    if [ -f "$DEST_ZIP_PATH" ]; then
-        echo "Latest ZIP file already exists: $DEST_ZIP_PATH. Skipping download."
-        CLONEZILLA_ZIP="$DEST_ZIP_PATH"
-    else
-        echo "Downloading $DOWNLOAD_URL to $DEST_ZIP_PATH"
-        if ! wget -q --show-progress -O "$DEST_ZIP_PATH" "$DOWNLOAD_URL"; then
-            echo "ERROR: Failed to download Clonezilla Live ZIP from $DOWNLOAD_URL" >&2
-            rm -f "$DEST_ZIP_PATH" # Clean up partial download
-            exit 1
-        fi
-        CLONEZILLA_ZIP="$DEST_ZIP_PATH"
-        echo "Download complete: $CLONEZILLA_ZIP"
+    
+    echo "INFO: Calling download script with arch='$ARCH', type='$TYPE'..."
+    # Run the download script, capturing the output path.
+    # The new script downloads to the specified dir, defaulting to './zip'.
+    DOWNLOADED_ZIP_PATH=$("$DOWNLOAD_SCRIPT" --arch "$ARCH" --type "$TYPE" -o "$DEFAULT_DOWNLOAD_DIR")
+    
+    if [ $? -ne 0 ] || [ -z "$DOWNLOADED_ZIP_PATH" ] || [ ! -f "$DOWNLOADED_ZIP_PATH" ]; then
+        echo "ERROR: Failed to auto-download Clonezilla zip using $DOWNLOAD_SCRIPT." >&2
+        exit 1
     fi
+    
+    CLONEZILLA_ZIP="$DOWNLOADED_ZIP_PATH"
+    echo "INFO: Auto-download complete. Using ZIP: $CLONEZILLA_ZIP"
 fi
 
 if [ ! -f "$CLONEZILLA_ZIP" ]; then

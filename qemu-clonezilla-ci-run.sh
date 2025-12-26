@@ -518,7 +518,12 @@ else
     if [ "$ARCH" = "amd64" ]; then
         APPEND_ARGS+=" edd=on"
     fi
-    APPEND_ARGS+=" locales=en_US.UTF-8 keyboard-layouts=us live-getty console=ttyS0,38400n81"
+    
+    CONSOLE_ARG="console=ttyS0,38400n81" # Default console for amd64, riscv64
+    if [ "$ARCH" = "arm64" ]; then
+        CONSOLE_ARG="console=ttyAMA0,38400n8"
+    fi
+    APPEND_ARGS+=" locales=en_US.UTF-8 keyboard-layouts=us live-getty ${CONSOLE_ARG}"
     APPEND_ARGS+=" live-media=/dev/${LIVE_MEDIA_DEVICE}1 live-media-path=/live toram"
     APPEND_ARGS+=" ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\""
     APPEND_ARGS+=" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\""

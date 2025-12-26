@@ -7,16 +7,24 @@
 #           attempt to download the latest stable AMD64 version.
 # ----------------------------------------------------------------------
 
+#!/bin/bash
+# ----------------------------------------------------------------------
+# QEMU Clonezilla Boot Script
+#
+# Function: Use QEMU to boot a Clonezilla Live ISO or ZIP for interactive use.
+#           If no media is specified, it will automatically download the
+#           latest version for the specified architecture and type.
+# ----------------------------------------------------------------------
+
 # --- Prerequisites Check ---
 command -v curl >/dev/null 2>&1 || { echo >&2 "ERROR: 'curl' is required for auto-downloading. Please install it."; exit 1; }
-command -v wget >/dev/null 2>&1 || { echo >&2 "ERROR: 'wget' is required for auto-downloading. Please install it."; exit 1; }
 
 # --- Default values ---
 ISO_PATH=""
 DISK_IMAGE="" # Optional
 PARTIMAG_PATH="partimag"
-DOWNLOAD_DIR="isos"
 ARCH="amd64"
+TYPE="stable"
 CLONEZILLA_ZIP=""
 ZIP_OUTPUT_DIR="zip"
 ZIP_IMAGE_SIZE="2G"
@@ -30,7 +38,7 @@ print_usage() {
     echo ""
     echo "This script boots a QEMU VM from Clonezilla media for interactive use."
     echo "You can boot from an ISO or a ZIP file. If neither is provided, it will"
-    echo "attempt to download the latest stable Clonezilla ZIP for the specified architecture."
+    echo "attempt to download the latest Clonezilla ZIP for the specified architecture and type."
     echo ""
     echo "Boot Media Options (choose one):"
     echo "  --iso <path>          Path to the Clonezilla Live ISO file."
@@ -40,6 +48,7 @@ print_usage() {
     echo "  --disk <path>         Path to a QCOW2 disk image to attach (optional)."
     echo "  --partimag <path>     Path to the shared directory for Clonezilla images. (Default: $PARTIMAG_PATH)"
     echo "  --arch <arch>         Target architecture (amd64, arm64, riscv64). Default: amd64."
+    echo "  --type <type>         Release type for auto-download (stable, testing, etc.). Default: stable."
     echo "  -h, --help            Display this help message and exit."
     echo ""
     echo "Zip Extraction Options (used with --zip or auto-download):"
@@ -51,6 +60,9 @@ print_usage() {
     echo "  # Boot with auto-downloaded Clonezilla ZIP and attach a disk"
     echo "  $0 --disk ./qemu/my-disk.qcow2"
     echo ""
+    echo "  # Boot with auto-downloaded 'testing' amd64 version"
+    echo "  $0 --arch amd64 --type testing"
+    echo ""
     echo "  # Boot from a specific ISO without any extra disk"
     echo "  $0 --iso ./isos/my-clonezilla.iso"
     echo ""
@@ -58,52 +70,11 @@ print_usage() {
     echo "  $0 --zip ./zip/my-clonezilla.zip"
 }
 
-
-# Function to download the latest Clonezilla stable ZIP for the specified architecture
-download_latest_clonezilla_zip() {
-    echo "--- Auto-downloading latest Clonezilla ZIP ($ARCH) ---"
-    
-    local stable_url="https://sourceforge.net/projects/clonezilla/files/clonezilla_live_stable/"
-    echo "1. Finding the latest version from SourceForge..."
-    
-    local latest_version
-    latest_version=$(curl -sL "$stable_url" | grep -oP 'href="/projects/clonezilla/files/clonezilla_live_stable/\K[0-9.-]+(?=/")' | sort -V | tail -n 1)
-    
-    if [ -z "$latest_version" ]; then
-        echo "ERROR: Could not determine the latest version from SourceForge." >&2
-        exit 1
-    fi
-    echo "Latest version found: $latest_version"
-    
-    local zip_filename="clonezilla-live-${latest_version}-${ARCH}.zip"
-    local download_url="${stable_url}${latest_version}/${zip_filename}/download"
-    local target_zip_path="${DOWNLOAD_DIR}/${zip_filename}"
-    
-    if [ -f "$target_zip_path" ]; then
-        echo "2. ZIP file already exists: $target_zip_path. Skipping download."
-        CLONEZILLA_ZIP="$target_zip_path"
-        return 0
-    fi
-    
-    echo "2. Downloading ZIP: $zip_filename"
-    mkdir -p "$DOWNLOAD_DIR"
-    wget --show-progress -c -O "$target_zip_path" "$download_url"
-    
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Download failed. Please try again or specify a file manually." >&2
-        rm -f "$target_zip_path"
-        exit 1
-    fi
-    
-    echo "Download complete: $target_zip_path"
-    CLONEZILLA_ZIP="$target_zip_path"
-}
-
-
 # --- Argument Parsing ---
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --arch) ARCH="$2"; shift 2 ;;
+        --type) TYPE="$2"; shift 2 ;;
         --iso) ISO_PATH="$2"; shift 2 ;;
         --zip) CLONEZILLA_ZIP="$2"; shift 2 ;;
         --zip-output) ZIP_OUTPUT_DIR="$2"; shift 2 ;;
@@ -125,7 +96,25 @@ fi
 
 # If no boot media was provided, trigger the download
 if [[ -z "$ISO_PATH" && -z "$CLONEZILLA_ZIP" ]]; then
-    download_latest_clonezilla_zip
+    echo "INFO: No boot media specified. Attempting to auto-download."
+    
+    DOWNLOAD_SCRIPT="./download-clonezilla.sh"
+    if [ ! -x "$DOWNLOAD_SCRIPT" ]; then
+        echo "ERROR: Download helper script not found or not executable: $DOWNLOAD_SCRIPT" >&2
+        exit 1
+    fi
+    
+    echo "INFO: Calling download script with arch='$ARCH', type='$TYPE'..."
+    # Run the download script, capturing the output path.
+    DOWNLOADED_ZIP_PATH=$("$DOWNLOAD_SCRIPT" --arch "$ARCH" --type "$TYPE" -o "$ZIP_OUTPUT_DIR")
+    
+    if [ $? -ne 0 ] || [ -z "$DOWNLOADED_ZIP_PATH" ] || [ ! -f "$DOWNLOADED_ZIP_PATH" ]; then
+        echo "ERROR: Failed to auto-download Clonezilla zip using $DOWNLOAD_SCRIPT." >&2
+        exit 1
+    fi
+    
+    CLONEZILLA_ZIP="$DOWNLOADED_ZIP_PATH"
+    echo "INFO: Auto-download complete. Using ZIP: $CLONEZILLA_ZIP"
 fi
 
 # --- Automatic ZIP Extraction ---
@@ -193,12 +182,22 @@ QEMU_ARGS=("$QEMU_BINARY" "-m" "4096" "-smp" "2")
 # --- Add boot media ---
 if [ -n "$CLONEZILLA_ZIP" ]; then
     echo "Booting from ZIP..."
+
+    # Set console based on architecture for ZIP boot
+    CONSOLE_ARG="console=ttyS0,38400n81"
+    if [ "$ARCH" = "arm64" ]; then
+        CONSOLE_ARG="console=ttyAMA0,38400n8"
+    fi
+    
+    # Construct append arguments
+    APPEND_ARGS="boot=live config union=overlay noswap nomodeset noninteractive locales=en_US.UTF-8 keyboard-layouts=us live-getty ${CONSOLE_ARG} live-media=/dev/vda1 live-media-path=/live toram ocs_prerun1=\"mkdir -p /home/partimag\" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\" noeject noprompt"
+
     # Booting from extracted kernel, initrd and live media qcow2
     QEMU_ARGS+=(
         "-kernel" "$KERNEL_PATH"
         "-initrd" "$INITRD_PATH"
         "-drive" "id=livemedia,file=$LIVE_DISK,format=qcow2,if=virtio"
-        "-append" "boot=live config union=overlay noswap nomodeset noninteractive locales=en_US.UTF-8 keyboard-layouts=us live-getty console=ttyS0,38400n81 live-media=/dev/vda1 live-media-path=/live toram ocs_prerun1=\"mkdir -p /home/partimag\" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\" noeject noprompt"
+        "-append" "$APPEND_ARGS"
     )
 elif [ -n "$ISO_PATH" ]; then
     echo "Booting from ISO..."

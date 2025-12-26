@@ -11,6 +11,7 @@ default:
 variables:
   # Default architecture. Can be overridden in the "Run pipeline" page.
   ARCH: "amd64"
+  TYPE: "stable"
   ZIP_DIR: "zip"
   CURL_OPTS: "-fsSL"
 
@@ -20,53 +21,33 @@ build_zip:
   allow_failure: false
   script:
     - mkdir -p "${ZIP_DIR}"
+    - chmod +x download-clonezilla.sh
     - |
-      # If a specific CLONEZILLA_ZIP_URL is provided, use it directly.
+      LATEST_ZIP=""
+      # Priority 1: Direct URL from CI/CD variable
       if [ -n "${CLONEZILLA_ZIP_URL}" ]; then
-        echo "Using provided CLONEZILLA_ZIP_URL: ${CLONEZILLA_ZIP_URL}"
+        echo "INFO: Using provided CLONEZILLA_ZIP_URL: ${CLONEZILLA_ZIP_URL}"
         LATEST_ZIP=$(basename "${CLONEZILLA_ZIP_URL}")
-        DOWNLOAD_URL="${CLONEZILLA_ZIP_URL}"
-      # Otherwise, determine the base URL from ARCH and find the latest version.
-      else
-        if [ "${ARCH}" = "amd64" ]; then
-          CLONEZILLA_BASE_URL="https://free.nchc.org.tw/clonezilla-live/stable"
-        elif [ "${ARCH}" = "arm64" ]; then
-          CLONEZILLA_BASE_URL="https://free.nchc.org.tw/clonezilla-live/experimental/arm/3.3.0-27/"
-        elif [ "${ARCH}" = "riscv64" ]; then
-          CLONEZILLA_BASE_URL="https://free.nchc.org.tw/clonezilla-live/experimental/riscv64/3.3.1-12/"
-        else
-          echo "Error: Unsupported ARCH '${ARCH}'. Please use amd64, arm64, or riscv64." >&2
-          exit 1
-        fi
-
-        echo "Searching for latest zip for arch '${ARCH}' from ${CLONEZILLA_BASE_URL}..."
-        
-        # Separated curl from grep to make it more robust, especially if grep finds no matches.
-        CURL_OUTPUT=$(curl ${CURL_OPTS} "${CLONEZILLA_BASE_URL}/")
+        DEST_FILE="${ZIP_DIR}/${LATEST_ZIP}"
+        echo "Downloading ${CLONEZILLA_ZIP_URL} to ${DEST_FILE}..."
+        curl ${CURL_OPTS} -o "${DEST_FILE}" "${CLONEZILLA_ZIP_URL}"
         if [ $? -ne 0 ]; then
-          echo "Error: curl failed to fetch from ${CLONEZILLA_BASE_URL}" >&2
-          exit 1
+            echo "ERROR: Download from CLONEZILLA_ZIP_URL failed." >&2
+            exit 1
         fi
-
-        LATEST_ZIP=$(echo "${CURL_OUTPUT}" \
-          | grep -Eo "href=\"clonezilla-live-[^\"]*${ARCH}[^\"]*\\.zip\"" \
-          | cut -d'"' -f2 \
-          | sort -V \
-          | tail -n1)
-
-        if [ -z "${LATEST_ZIP}" ]; then
-          echo "Error: Could not find a Clonezilla ZIP for architecture '${ARCH}' at ${CLONEZILLA_BASE_URL}" >&2
-          exit 1
+      # Priority 2: Use the download script with ARCH and TYPE
+      else
+        echo "INFO: CLONEZILLA_ZIP_URL not set. Using download-clonezilla.sh with ARCH=${ARCH} and TYPE=${TYPE}."
+        # The download script outputs the full path of the downloaded file
+        DOWNLOADED_ZIP_PATH=$(./download-clonezilla.sh --arch "$ARCH" --type "$TYPE" -o "$ZIP_DIR")
+        if [ $? -ne 0 ] || [ -z "$DOWNLOADED_ZIP_PATH" ] || [ ! -f "$DOWNLOADED_ZIP_PATH" ]; then
+            echo "ERROR: Failed to auto-download Clonezilla zip using download-clonezilla.sh." >&2
+            exit 1
         fi
-        DOWNLOAD_URL="${CLONEZILLA_BASE_URL}/${LATEST_ZIP}"
+        LATEST_ZIP=$(basename "$DOWNLOADED_ZIP_PATH")
       fi
-
+    - |
       echo "Final ZIP file to be used: ${LATEST_ZIP}"
-      DEST_FILE="${ZIP_DIR}/${LATEST_ZIP}"
-
-      echo "Downloading ${DOWNLOAD_URL} to ${DEST_FILE}"
-      curl ${CURL_OPTS} -o "${DEST_FILE}" "${DOWNLOAD_URL}"
-      echo "Download finished."
       # Save the exact filename to a dotenv artifact to pass to the next stage
       echo "Saving ZIP_FILE_FROM_BUILD=${LATEST_ZIP} to build.env"
       echo "ZIP_FILE_FROM_BUILD=${LATEST_ZIP}" > build.env

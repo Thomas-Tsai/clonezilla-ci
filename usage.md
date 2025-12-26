@@ -113,6 +113,40 @@ Here's a breakdown of what each package provides:
 
 Here is a breakdown of the available scripts and their functions.
 
+### `download-clonezilla.sh`
+
+A powerful, standalone script to automatically find and download the latest Clonezilla Live ZIP file based on architecture and release type. This script is the core download engine used by other scripts in this project.
+
+**Features:**
+-   Supports `amd64`, `arm64`, and `riscv64` architectures.
+-   For `amd64`, supports different release types: `stable`, `testing`, `alternative-stable`, `alternative-testing`.
+-   For `arm64` and `riscv64`, automatically finds the latest experimental version.
+-   `--dry-run` option to see the final URL without downloading.
+
+**Usage:**
+```
+Usage: ./download-clonezilla.sh --arch <ARCH> [--type <TYPE>] [-o <OUTPUT_DIR>] [--dry-run]
+
+Automatically finds and downloads the latest Clonezilla Live zip file.
+
+Options:
+  --arch <ARCH>      Architecture: amd64, arm64, riscv64 (required).
+  --type <TYPE>      For amd64 architecture: stable, testing, alternative-stable,
+                     alternative-testing (default: stable).
+  -o, --output <DIR> Directory to save the downloaded file (default: .).
+  --dry-run          Print the final URL and exit without downloading.
+  -h, --help         Display this help message and exit.
+```
+
+**Usage Examples:**
+```bash
+# Download the latest 'testing' release for amd64 to the 'zip/' directory
+./download-clonezilla.sh --arch amd64 --type testing -o zip/
+
+# See the URL for the latest arm64 release without downloading
+./download-clonezilla.sh --arch arm64 --dry-run
+```
+
 ### `start.sh`
 
 The main test runner script for the Clonezilla CI test suite. It orchestrates the execution of various OS and filesystem clone/restore tests using `shunit2`.
@@ -321,6 +355,8 @@ VM and Task Options:
   --append-args-file <path> Path to a file containing custom kernel append arguments.
   --qemu-args <args>      A string of extra arguments to pass to the QEMU command. Can be specified multiple times.
   --log-dir <path>        Directory to store log files (default: ./logs).
+  --arch <arch>           Target architecture (amd64, arm64, riscv64). Default: amd64.
+  --no-ssh-forward        Disable TCP port 2222 forwarding for SSH.
   -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal).
   -h, --help              Display this help message and exit.
 
@@ -343,15 +379,21 @@ Example (Restore with extracted files):
 
 ### `clonezilla-zip2qcow.sh`
 
-This utility converts an official Clonezilla live ZIP distribution into a QCOW2 disk image, and extracts the kernel and initrd files. It uses long options for clarity, provides a help message, validates arguments, and names output files based on the ZIP\'s base name.
+This utility converts a Clonezilla Live ZIP into a QCOW2 disk image and extracts the necessary kernel and initrd files. If no ZIP file is provided, it automatically downloads the appropriate version using `download-clonezilla.sh`.
+
+**Features:**
+- Uses long options for clarity (`--zip`, `--output`, `--size`, `--arch`, `--type`, `--force`).
+- Auto-downloads the correct Clonezilla version if `--zip` is omitted.
+- Supports specifying architecture and release type for downloads.
+- Names output files based on the ZIP's base name for better organization.
 
 **Usage:**
 ```bash
-# Basic usage, outputs to a directory named after the zip in the current folder
-./clonezilla-zip2qcow.sh --zip ./isos/clonezilla-live-3.1.2-9-amd64.zip
+# Convert a specific zip file, forcing overwrite
+./clonezilla-zip2qcow.sh --zip ./zip/clonezilla-live-amd64.zip --output ./zip/ --force
 
-# Specify output directory and force overwrite
-./clonezilla-zip2qcow.sh --zip ./isos/clonezilla-live-3.1.2-9-amd64.zip --output ./isos/ --force
+# Auto-download the latest 'testing' version for amd64 and convert it
+./clonezilla-zip2qcow.sh --arch amd64 --type testing --output ./zip/
 
 # Display help
 ./clonezilla-zip2qcow.sh --help
@@ -359,21 +401,22 @@ This utility converts an official Clonezilla live ZIP distribution into a QCOW2 
 
 ### `clonezilla-boot.sh`
 
-This script boots a QEMU VM from Clonezilla media for interactive use. It can boot from a ZIP file or an ISO. If no boot media is specified, it attempts to automatically download the latest stable ZIP for the chosen architecture. The user disk is optional.
+This script boots a QEMU VM from Clonezilla media for interactive use. It can boot from a ZIP file or an ISO. If no boot media is provided, it automatically downloads the latest version for the specified architecture and type.
 
 **Features:**
 - Boot from ISO (`--iso`) or ZIP (`--zip`).
-- **Auto-downloads** the latest stable Clonezilla Live ZIP if no media is provided.
+- **Auto-downloads** the correct Clonezilla version using `download-clonezilla.sh`.
+- Supports specifying architecture (`--arch`) and release type (`--type`) for downloads.
 - Attaching a user disk with `--disk` is optional.
-- Forwards port 2222 to the VM's port 22.
+- Forwards host port 2222 to the VM's port 22 for SSH access.
 
 **Usage:**
 ```bash
-# Boot with auto-downloaded Clonezilla ZIP and attach a disk
+# Boot with auto-downloaded 'stable' amd64 ZIP and attach a disk
 ./clonezilla-boot.sh --disk ./qemu/my-disk.qcow2
 
-# Boot from a specific ISO without attaching any extra disk
-./clonezilla-boot.sh --iso ./isos/my-clonezilla.iso
+# Boot with auto-downloaded 'testing' arm64 version
+./clonezilla-boot.sh --arch arm64 --type testing
 
 # Boot from a specific ZIP file
 ./clonezilla-boot.sh --zip ./zip/clonezilla-live-stable-amd64.zip
@@ -422,7 +465,6 @@ This script starts a QEMU VM to install Debian from a netinst ISO onto a QCOW2 d
 # Display help
 ./debian-install.sh --help
 ```
-
 ## Troubleshooting
 
 ### `virt-make-fs` Fails on `clonezilla-zip2qcow.sh`

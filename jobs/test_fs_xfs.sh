@@ -19,6 +19,10 @@ while [ "$#" -gt 0 ]; do
             ARCH="$2"
             shift 2
             ;;
+        --type)
+            TYPE="$2"
+            shift 2
+            ;;
         --no-ssh-forward)
             NO_SSH_FORWARD_ARG="--no-ssh-forward"
             shift 1
