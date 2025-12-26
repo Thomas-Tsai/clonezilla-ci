@@ -55,6 +55,7 @@ Required Options:
 
 Optional Options:
   --arch <arch>             Target architecture (amd64, arm64, riscv64). Default: amd64.
+  --no-ssh-forward      Disable SSH port forwarding in QEMU (for parallel CI runs).
   --keep-temp               Keep temporary files (e.g., restored client disks) on failure or completion.
   -h, --help                Display this help message and exit.
 
@@ -96,6 +97,10 @@ while [[ $# -gt 0 ]]; do
         --arch)
             ARCH="$2"
             shift 2
+            ;;
+        --no-ssh-forward)
+            # Accept and ignore, as internal calls already use this flag.
+            shift 1
             ;;
         -h|--help)
             usage
