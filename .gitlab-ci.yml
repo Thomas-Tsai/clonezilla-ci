@@ -267,7 +267,7 @@ pages:
 
       echo "INFO: Generating report in directory: ${REPORT_DIR}"
       mkdir -p "${REPORT_DIR}/logs"
-      if [ -d "logs" ]; then cp -r logs/* "${REPORT_DIR}/logs/"; fi
+      if [ -d "logs" ] && [ -n "$(ls -A logs)" ]; then cp -r logs/* "${REPORT_DIR}/logs/"; fi
 
       pipeline_started_ts=$(date -d "$CI_PIPELINE_CREATED_AT" +%s)
       report_job_started_ts=$(date -d "$CI_JOB_STARTED_AT" +%s)
