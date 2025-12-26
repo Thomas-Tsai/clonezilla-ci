@@ -234,7 +234,6 @@ test:liteserver:
 
 pages:
   stage: deploy
-  when: always
   needs:
     - test:os:ubuntu
     - test:os:debian
@@ -247,24 +246,42 @@ pages:
     - test:fs:btrfs
     - test:liteserver
   script:
-    - REPORT_DIR="public/$ARCH"
-    - mkdir -p "${REPORT_DIR}/logs"
-    - if [ -d "logs" ]; then cp -r logs/* "${REPORT_DIR}/logs/"; fi
     - |
+      set -e
+      # First, we must determine the ZIP name to create the directory.
+      # It's in the results artifacts from the test stage.
+      FIRST_RESULT_FILE=$(find results -name "*.yml" -print -quit)
+      if [ -z "$FIRST_RESULT_FILE" ]; then
+        echo "ERROR: No result files found from test stage. Cannot determine ZIP name." >&2
+        # Create a fallback report at the root
+        mkdir -p public
+        echo "<h1>Error: Test results not found. Cannot generate report.</h1>" > public/index.html
+        exit 1
+      fi
+
+      ZIP_FILENAME=$(grep "zip:" "$FIRST_RESULT_FILE" | cut -d' ' -f2-)
+      ZIP_BASENAME=$(basename "$ZIP_FILENAME" .zip)
+      
+      # --- Determine Report Directory ---
+      REPORT_DIR="public/${ZIP_BASENAME}"
+
+      echo "INFO: Generating report in directory: ${REPORT_DIR}"
+      mkdir -p "${REPORT_DIR}/logs"
+      if [ -d "logs" ]; then cp -r logs/* "${REPORT_DIR}/logs/"; fi
+
       pipeline_started_ts=$(date -d "$CI_PIPELINE_CREATED_AT" +%s)
       report_job_started_ts=$(date -d "$CI_JOB_STARTED_AT" +%s)
       pipeline_duration=$((report_job_started_ts - pipeline_started_ts))
       pipeline_duration_formatted=$(date -u -d "@${pipeline_duration}" +'%H:%M:%S')
-    - |
-      # NOTE: We use 'cat >' to create the file and 'cat >>' to append.
-      # The report for each arch is now self-contained in its directory.
+
+      # Start generating index.html
       cat > "${REPORT_DIR}/index.html" <<- EOM
       <!DOCTYPE html>
       <html lang="en">
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Clonezilla CI Test Report (${ARCH})</title>
+          <title>Test Report: ${ZIP_BASENAME}</title>
           <style>
               body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
               h1, h2 { color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
@@ -280,7 +297,7 @@ pages:
           </style>
       </head>
       <body>
-          <h1>Clonezilla CI Test Report (${ARCH})</h1>
+          <h1>Test Report: ${ZIP_BASENAME}</h1>
           
           <h2>Pipeline Summary</h2>
           <div class="summary">
@@ -292,20 +309,18 @@ pages:
               <p><strong>Total Duration:</strong> ${pipeline_duration_formatted} (until report generation)</p>
           </div>
       EOM
-    - |
-      FIRST_RESULT_FILE=$(find results -name "*.yml" -print -quit)
-      if [ -n "$FIRST_RESULT_FILE" ]; then
-        ARCH_FROM_FILE=$(grep "arch:" "$FIRST_RESULT_FILE" | cut -d' ' -f2)
-        ZIP_FROM_FILE=$(grep "zip:" "$FIRST_RESULT_FILE" | cut -d' ' -f2-)
-        cat >> "${REPORT_DIR}/index.html" <<- EOM
-          <h2>Test Environment</h2>
-          <div class="summary">
-              <p><strong>Architecture (ARCH):</strong> ${ARCH_FROM_FILE}</p>
-              <p><strong>Clonezilla ZIP:</strong> ${ZIP_FROM_FILE}</p>
-          </div>
-        EOM
-      fi
-    - |
+
+      # Append Test Environment section
+      ARCH_FROM_FILE=$(grep "arch:" "$FIRST_RESULT_FILE" | cut -d' ' -f2)
+      cat >> "${REPORT_DIR}/index.html" <<- EOM
+        <h2>Test Environment</h2>
+        <div class="summary">
+            <p><strong>Architecture (ARCH):</strong> ${ARCH_FROM_FILE}</p>
+            <p><strong>Clonezilla ZIP:</strong> ${ZIP_FILENAME}</p>
+        </div>
+      EOM
+
+      # Append Test Results table header
       cat >> "${REPORT_DIR}/index.html" <<- EOM
       <h2>Test Results</h2>
       <table>
@@ -322,7 +337,8 @@ pages:
           </thead>
           <tbody>
       EOM
-    - |
+
+      # Loop through results and append table rows
       for file in results/*.yml; do
         if [ -f "$file" ]; then
           job_name=$(grep "job_name:" "$file" | cut -d' ' -f2)
@@ -341,7 +357,7 @@ pages:
           fi
           job_started_formatted=$(date -d "$job_started" +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$job_started")
           
-          # Links are now relative to the arch-specific directory
+          # Links are relative to the current directory (e.g., public/clonezilla-live-amd64/)
           log_link="<a href='./logs/${job_name}.log'>Log</a>"
 
           cat >> "${REPORT_DIR}/index.html" <<- EOM
@@ -357,7 +373,8 @@ pages:
           EOM
         fi
       done
-    - |
+
+      # Close the HTML file
       cat >> "${REPORT_DIR}/index.html" <<- EOM
             </tbody>
         </table>
