@@ -10,41 +10,42 @@ This directory contains scripts and tools for automating Clonezilla operations i
 - [x] 相依的套件要補上 qemu-efi-aarch64 qemu-system-arm for usage
 - [ ] 容器化支援, 開發一個 Dockerfile 來建置一個包含所有相依套件的容器映像檔，方便在不同環境中執行這些腳本，要可以支援多架構，與 dev/testData, qemu/cloudimages, isos, zip 等目錄的掛載
 
+## .gitlab-ci.yml 改進事項：
+- [x] 目前行為是執行 start.sh 來進行所有的單元測試, 我想改為每一個 script 都有自己的單元測試, 並且在 .gitlab-ci.yml 裡面分別執行每一個 script 的單元測試, 這樣可以更清楚知道是哪一個 script 有問題
+- [x] 以 .gitlab-ci.yml 來執行所有在 start.sh 內的測試, 並且產生測試報告
+- [x] 支援多架構測試, 例如 amd64, arm64, riscv64 等架構的測試 可以搭配不同的pipelines 來執行不同架構的測試
+- [x] 支援多架構測試, 例如 amd64, arm64, riscv64 等架構的測試 可以搭配不同的 variables 來執行不同架構的 pipelines 測試
+variable arch=amd64 zip=https://.../clonezilla-live-xxxx-amd64.zip
+variable arch=riscv64 zip=https://.../clonezilla-live-xxxx-riscv64.zip
+variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
+- [x] 每一個 script 的測試結果都要產生 並上傳到 gitlab artifacts 裡面, 方便後續下載查看; 目前都會放到 logs/ 目錄裡面, 有些是以檔案形式產生，也一併上傳
+- [x] 解決 QEMU port forwarding 衝突問題，在平行 CI jobs 中避免 `tcp::2222-:22` 錯誤。
+- [x] .gitlab-ci.yml 中，build job 不再保留舊的 zip 檔案，每次都下載新的 zip 以避免錯誤。
+- [x] 修改為可以同時運作
+- [x] 讓 .gitlab-ci.yml專注於流程，要測試的部份改用 jobs/ 目錄底下的 script 來執行
+- [ ] 產生報告，報告內容包含 測試結果、VARIABLES、測試的 ARCH, ZIP  等
+
+
+## start.sh 改進事項：
+- [x] 開發一個 start.sh 腳本，這個腳本主要用來啟動一個完整的 clonezilla ci 流程, 使用 shunit2 來進行單元測試, 並且產生測試報告
+- [x] check shunit2 並提示安裝 (done)
+- [x] 實做單元測試，主要包含兩種類型 (done)
+- [x] 作業系統測試，利用 os-clone-restore.sh 以不同的 linux distro 進行 clonezilla 備份還原測試 (done)
+- [x] 檔案系統測試，利用 data-clone-restore.sh 以不同的檔案系統類型進行 clonezilla 備份還原測試 (done)
+- [x] zip檔不要寫死在程式碼裡面，可以在檔案前面進行定義 也可以用參數帶入 (done)
+- [x] 每一個測試的log 檔案要分開存放到 /log/XXX，方便debug (done)
+- [x] 我加了SHUNIT_TIMER=1 # Enable test timing 希望可以在log 裡面看到每一個測試花費的時間, 但目前沒有看到相關資訊, 需要修正
+- [x] 支援 --arch 參數，並從 qemu/cloudimages/cloud_images.conf 讀取對應架構的 cloud image，如果沒有就忽略 (done)
+- [x] 移除作業系統測試中 hardcode 的 release version，改為測試所有支援的 release (done)
+- [x] 提供 --help 參數 (done)
+- [x] os_clone_restore 與 data_clone_restore 兩個 使用 tee 來同時輸出到螢幕與log 檔
+
 ## jobs 說明
 先將 start.sh 裡面的測試拆分成多個不同的 jobs 來執行 ，檔案放 jobs/ 目錄底下
 - [x] 產生 jobs 目錄，裡面包含各種不同的 CI jobs 範例，例如 debian.sh, ubuntu.sh, ext4.sh, liteserver-job.sh 等等
 - [x] 用 shunit2 來進行單元測試
 - [x] 用 common.sh 來放置共用的函式
 - [x] 預設需要指定參數 --zip 來指定 clonezilla zip 檔案路徑, --arch 來指定架構 預設為 amd64
-
-## .gitlab-ci.yml 改進事項：
-- [x] 目前行為是執行 start.sh 來進行所有的單元測試, 我想改為每一個 script 都有自己的單元測試, 並且在 .gitlab-ci.yml 裡面分別執行每一個 script 的單元測試, 這樣可以更清楚知道是哪一個 script 有問題
-- [x] 以 .gitlab-ci.yml 來執行所有在 start.sh 內的測試, 並且產生測試報告
-- [x] 支援多架構測試, 例如 amd64, arm64, riscv64 等架構的測試 可以搭配不同的pipelines 來執行不同架構的測試
-- [x] 支援多架構測試, 例如 amd64, arm64, riscv64 等架構的測試 可以搭配不同的 variables 來執行不同架構的 pipelines 測試
-      variable arch=amd64 zip=https://.../clonezilla-live-xxxx-amd64.zip
-      variable arch=riscv64 zip=https://.../clonezilla-live-xxxx-riscv64.zip
-      variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
-- [x] 每一個 script 的測試結果都要產生 並上傳到 gitlab artifacts 裡面, 方便後續下載查看; 目前都會放到 logs/ 目錄裡面, 有些是以檔案形式產生，也一併上傳
-- [x] 解決 QEMU port forwarding 衝突問題，在平行 CI jobs 中避免 `tcp::2222-:22` 錯誤。
-- [x] .gitlab-ci.yml 中，build job 不再保留舊的 zip 檔案，每次都下載新的 zip 以避免錯誤。
-- [x] 修改為可以同時運作
-- [ ] 讓 .gitlab-ci.yml專注於流程，要測試的部份改用 jobs/ 目錄底下的 script 來執行
-
-
-## start.sh 改進事項：
-開發一個 start.sh 腳本，這個腳本主要用來啟動一個完整的 clonezilla ci 流程, 使用 shunit2 來進行單元測試, 並且產生測試報告
-- [x] check shunit2 並提示安裝 (done)
-- [x] 實做單元測試，主要包含兩種類型 (done)
-    - [x] 作業系統測試，利用 os-clone-restore.sh 以不同的 linux distro 進行 clonezilla 備份還原測試 (done)
-    - [x] 檔案系統測試，利用 data-clone-restore.sh 以不同的檔案系統類型進行 clonezilla 備份還原測試 (done)
-    - [x] zip檔不要寫死在程式碼裡面，可以在檔案前面進行定義 也可以用參數帶入 (done)
-    - [x] 每一個測試的log 檔案要分開存放到 /log/XXX，方便debug (done)
-    - [x] 我加了SHUNIT_TIMER=1 # Enable test timing 希望可以在log 裡面看到每一個測試花費的時間, 但目前沒有看到相關資訊, 需要修正
-    - [x] 支援 --arch 參數，並從 qemu/cloudimages/cloud_images.conf 讀取對應架構的 cloud image，如果沒有就忽略 (done)
-    - [x] 移除作業系統測試中 hardcode 的 release version，改為測試所有支援的 release (done)
-    - [x] 提供 --help 參數 (done)
-    - [x] os_clone_restore 與 data_clone_restore 兩個 使用 tee 來同時輸出到螢幕與log 檔
 
 ## liteserver.sh 改進事項：
 開發一個 liteserver.sh 腳本，這個腳本主要用來啟動一個簡易的 clonezilla lite server 來提供 clonezilla server 服務的場景
@@ -87,17 +88,17 @@ $ ./qemu-clonezilla-ci-run.sh -i --zip zip/clonezilla-live-20251124-resolute-amd
 - [x] 參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
 - [x] 實作主要流程:
-    - [x] 1. 使用 clonezilla-zip2qcow.sh 將 clonezilla zip 轉成 qcow2 檔案
-    - [x] 2. 備份前準備，將--data 目錄複製到 qcow2 裡面, 需要進行檔案的checksum 記錄供還原時驗證
-    - [x] 3. 使用 qemu-clonezilla-ci-run.sh 備份 qcow2 到 partimag/
-    - [x] 4. 使用 qemu-clonezilla-ci-run.sh 還原 clonezilla qcow2 到 restore.qcow2    - [x] 5. 驗證 restore.qcow2 是否能正常還原出正確的檔案內容，與備份前的checksum 進行比對
+- [x] 1. 使用 clonezilla-zip2qcow.sh 將 clonezilla zip 轉成 qcow2 檔案
+- [x] 2. 備份前準備，將--data 目錄複製到 qcow2 裡面, 需要進行檔案的checksum 記錄供還原時驗證
+- [x] 3. 使用 qemu-clonezilla-ci-run.sh 備份 qcow2 到 partimag/
+- [x] 4. 使用 qemu-clonezilla-ci-run.sh 還原 clonezilla qcow2 到 restore.qcow2    - [x] 5. 驗證 restore.qcow2 是否能正常還原出正確的檔案內容，與備份前的checksum 進行比對
 - [x] 增加參數設定partimag 目錄位置
 - [x] 增加參數錯誤時保留temp檔案，方便debug
 - [x] 嘗試增加檔案系統類型支援 ext2, ext3, xfs, btrfs, exfat 
 - [ ] 先忽略 嘗試 以其他方式 增加檔案系統類型支援 fat16, fat12, hfs, hfsplus, ufs, reiserfs, jfs, apfs, 需要先確認可行性
 - [x] checksum 不要列出所有檔案，只列出有錯誤的部份，所有檔案檢查結果另外存log檔案, 完成, 尚未確認
 - [x] 步驟5 驗證方式不要tar/copy 整個目錄，可以直接mount qcow2 檔案然後進行檔案比對
-      例如：guestmount -a source.qcow2 -m /dev/sda1 --ro /tmp/XXXX/mnt/ ; md5sum -c ....
+例如：guestmount -a source.qcow2 -m /dev/sda1 --ro /tmp/XXXX/mnt/ ; md5sum -c ....
 - [x] 指定tmp路徑，預設使用 /tmp/dcr-xxxxxx , 並於完成後刪除; --tmp_path /home/debian/tmp/ 參數指定tmp 路徑
 - [x] 檔案的checksum 記錄供還原時驗證, 希望設計為可以保留checksum 檔案, 以便後續可以用來驗證其他 qcow2 檔案，減少步驟2的時間, 可以設定位置於當前目錄下的 dcr_checksums.txt 檔案
 - [x] 還原失敗時，保留相關檔案，方便debug
@@ -143,14 +144,14 @@ to
 
 - [x] 2. 目前APPAND ARGS 是寫死的，需要改成可以由使用者輸入參數來決定要不要加入override APPAND ARGS, 提供一個參數複寫APPAND ARGS
 - [x] 3. 增加參數 cmdpath 用來替換 執行 cmd 的方式。目前只能執行簡易指令，我想要執行一個script file, 所以用一個 參數 cmdpath 來指定 script file 的路徑，然後把 script file 複製到 clonezilla live 的 ramdisk 裡面，最後在 cmd 裡面執行這個 script file。
-  例如：
-  ./qemu-clonezilla-ci-run.sh --disk restore.qcow2 --live live.qcow2  --kernel ./clonezilla/vmlinuz --initrd ./clonezilla/initrd.img --cmdpath "/root/myscript.sh" --image "./partimag"
-  裡面的 myscript.sh 內容可以是：
-  ```
-  #!/bin/bash
-  sudo /usr/sbin/ocs-sr -g auto -p poweroff restoredisk ask_user sda
-  ```
-  然後 qemu-clonezilla-ci-run.sh 裡面會把 myscript.sh 複製到 ramdisk 裡面，然後在 boot 的參數裡面執行 /root/myscript.sh
+例如：
+./qemu-clonezilla-ci-run.sh --disk restore.qcow2 --live live.qcow2  --kernel ./clonezilla/vmlinuz --initrd ./clonezilla/initrd.img --cmdpath "/root/myscript.sh" --image "./partimag"
+裡面的 myscript.sh 內容可以是：
+```
+#!/bin/bash
+sudo /usr/sbin/ocs-sr -g auto -p poweroff restoredisk ask_user sda
+```
+然後 qemu-clonezilla-ci-run.sh 裡面會把 myscript.sh 複製到 ramdisk 裡面，然後在 boot 的參數裡面執行 /root/myscript.sh
 reference https://clonezilla.nchc.org.tw/clonezilla-live/doc/fine-print.php?path=99_Misc/00_live-boot-parameters.doc#00_live-boot-parameters.doc
 - [x] 4. 一樣cmdpath的邏輯，我也想要讓APPAND ARGS 可以從一個檔案讀取進來，而不是只能用參數帶進來
 - [x] 5. 發現沒有--help 參數可以讓使用者查詢使用說明，請加上--help 參數; 且參數錯誤也沒有充分說明錯誤原因，請補上錯誤訊息說明
@@ -163,16 +164,16 @@ Error: Missing command. Please provide either --cmd or --cmdpath.
 - [x] 於完成時間顯示總共花費時間紀錄到log 檔案
 - [x] 增加參數設定log目錄，預設為當前目錄下的 logs/ 目錄 (done)
 - [x] 增加zip參數，呼叫 clonezilla-zip2qcow.sh 自動轉換zip 為 qcow2; 參數範例 --zip path/to/clonezilla.zip --output zip/ --size 2G
-      解壓縮之後會產生需要的檔案 vmlinux initrd.img clonezilla-live-xxxx.qcow2 就是 
-      clonezilla-live-xxxx.qcow2,  --live <path>           Path to the Clonezilla live QCOW2 media.
-      vmlinux,                     --kernel <path>         Path to the kernel file (e.g., vmlinuz).
-      initrd.img,                  --initrd <path>         Path to the initrd file.
-      且不要重複進行解壓縮，如果三個檔案都已經存在，就跳過這個步驟
-      如果只有部份檔案，就還是需要使用 clonezilla-zip2qcow.sh 來解壓縮 with --force 參數來強制覆蓋
+解壓縮之後會產生需要的檔案 vmlinux initrd.img clonezilla-live-xxxx.qcow2 就是 
+clonezilla-live-xxxx.qcow2,  --live <path>           Path to the Clonezilla live QCOW2 media.
+vmlinux,                     --kernel <path>         Path to the kernel file (e.g., vmlinuz).
+initrd.img,                  --initrd <path>         Path to the initrd file.
+且不要重複進行解壓縮，如果三個檔案都已經存在，就跳過這個步驟
+如果只有部份檔案，就還是需要使用 clonezilla-zip2qcow.sh 來解壓縮 with --force 參數來強制覆蓋
 - [x] 增加額外qemu參數，例如要設定mtddevice 等參數，以便支援更多硬體裝置模擬，例如
-    -drive file=mtd.img,format=raw,id=mtddev0 \
-    -device mtd-ram,id=mtd0,drive=mtddev0,size=0x4000000 \ # Or similar mtd device
-    要怎麼安全的合併到 qemu-clonezilla-ci-run.sh
+-drive file=mtd.img,format=raw,id=mtddev0 \
+-device mtd-ram,id=mtd0,drive=mtddev0,size=0x4000000 \ # Or similar mtd device
+要怎麼安全的合併到 qemu-clonezilla-ci-run.sh
 
 ## clonezilla-zip2qcow.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。

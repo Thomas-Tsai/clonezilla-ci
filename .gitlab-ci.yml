@@ -1,6 +1,7 @@
 stages:
   - build
   - test
+  - report
 
 default:
   tags:
@@ -40,7 +41,7 @@ build_zip:
 
         echo "Searching for latest zip for arch '${ARCH}' from ${CLONEZILLA_BASE_URL}..."
         LATEST_ZIP=$(curl ${CURL_OPTS} "${CLONEZILLA_BASE_URL}/" \
-          | grep -Eo "href=\"clonezilla-live-[^\"]*${ARCH}[^\"]*\\.zip\"" \
+          | grep -Eo "href=\"clonezilla-live-[^"]*${ARCH}[^"]*\.zip\"" \
           | cut -d'"' -f2 \
           | sort -V \
           | tail -n1)
@@ -117,11 +118,30 @@ build_zip:
       else
         echo "Warning: /data/dataSets not found on runner. Data clone/restore tests might fail."
       fi
+  after_script:
+    - |
+      mkdir -p results
+      job_started_ts=$(date -d "$CI_JOB_STARTED_AT" +%s)
+      job_finished_ts=$(date -d "$CI_JOB_FINISHED_AT" +%s)
+      duration=$((job_finished_ts - job_started_ts))
+      duration_formatted=$(date -u -d "@${duration}" +'%H:%M:%S')
+
+      echo "job_name: $CI_JOB_NAME" > "results/${CI_JOB_NAME}.yml"
+      echo "job_status: $CI_JOB_STATUS" >> "results/${CI_JOB_NAME}.yml"
+      echo "job_started_at: $CI_JOB_STARTED_AT" >> "results/${CI_JOB_NAME}.yml"
+      echo "job_duration: $duration_formatted" >> "results/${CI_JOB_NAME}.yml"
+      echo "arch: $ARCH" >> "results/${CI_JOB_NAME}.yml"
+      echo "zip: $ZIP_FILE_FROM_BUILD" >> "results/${CI_JOB_NAME}.yml"
+      echo "runner_description: $CI_RUNNER_DESCRIPTION" >> "results/${CI_JOB_NAME}.yml"
+      if [ -n "$FS" ]; then
+        echo "fs: $FS" >> "results/${CI_JOB_NAME}.yml"
+      fi
 
   artifacts:
     when: always
     paths:
       - logs/
+      - results/
     expire_in: 5 days
   timeout: 4h
 
@@ -218,3 +238,78 @@ test:liteserver:
   script:
     - cd jobs
     - ./test_liteserver.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+
+report:
+  stage: report
+  when: always
+  needs:
+    - test:os:ubuntu
+    - test:os:debian
+    - test:os:windows11
+    - test:fs:exfat
+    - test:fs:ntfs
+    - test:fs:vfat
+    - test:fs:ext4
+    - test:fs:xfs
+    - test:fs:btrfs
+    - test:liteserver
+  script:
+    - |
+      pipeline_started_ts=$(date -d "$CI_PIPELINE_CREATED_AT" +%s)
+      report_job_started_ts=$(date -d "$CI_JOB_STARTED_AT" +%s)
+      pipeline_duration=$((report_job_started_ts - pipeline_started_ts))
+      pipeline_duration_formatted=$(date -u -d "@${pipeline_duration}" +'%H:%M:%S')
+    - echo "# Clonezilla CI Test Report" > report.md
+    - echo "" >> report.md
+    - echo "## Pipeline Summary" >> report.md
+    - echo "- **Pipeline ID:** [$CI_PIPELINE_ID]($CI_PIPELINE_URL)" >> report.md
+    - echo "- **Commit:** [$CI_COMMIT_SHORT_SHA]($CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA)" >> report.md
+    - echo "- **Branch:** [$CI_COMMIT_REF_NAME]($CI_PROJECT_URL/-/tree/$CI_COMMIT_REF_NAME)" >> report.md
+    - echo "- **Triggered by:** $GITLAB_USER_NAME" >> report.md
+    - echo "- **Pipeline Started:** ${CI_PIPELINE_CREATED_AT}" >> report.md
+    - echo "- **Total Duration:** ${pipeline_duration_formatted} (until report generation)" >> report.md
+    - echo "" >> report.md
+    - echo "## Test Environment" >> report.md
+    - |
+      FIRST_RESULT_FILE=$(find results -name "*.yml" -print -quit)
+      if [ -n "$FIRST_RESULT_FILE" ]; then
+        ARCH_FROM_FILE=$(grep "arch:" "$FIRST_RESULT_FILE" | cut -d' ' -f2)
+        ZIP_FROM_FILE=$(grep "zip:" "$FIRST_RESULT_FILE" | cut -d' ' -f2-)
+        echo "- **Architecture (ARCH):** ${ARCH_FROM_FILE}" >> report.md
+        echo "- **Clonezilla ZIP:** ${ZIP_FROM_FILE}" >> report.md
+      else
+        echo "Could not determine ARCH and ZIP from test artifacts." >> report.md
+      fi
+    - echo "" >> report.md
+    - echo "## Test Results" >> report.md
+    - echo "" >> report.md
+    - echo "| Test Job | Status | Duration | Runner | Filesystem | Start Time (UTC) |" >> report.md
+    - echo "|----------|--------|----------|--------|------------|--------------------|" >> report.md
+    - |
+      for file in results/*.yml; do
+        if [ -f "$file" ]; then
+          job_name=$(grep "job_name:" "$file" | cut -d' ' -f2)
+          job_status=$(grep "job_status:" "$file" | cut -d' ' -f2)
+          job_duration=$(grep "job_duration:" "$file" | cut -d' ' -f2 || echo "N/A")
+          job_started=$(grep "job_started_at:" "$file" | cut -d' ' -f2- || echo "N/A")
+          runner_desc=$(grep "runner_description:" "$file" | cut -d':' -f2- | xargs || echo "N/A")
+          fs=$(grep "fs:" "$file" | cut -d' ' -f2 || echo "N/A")
+          if [ "$job_status" = "success" ]; then
+            status_icon="✅"
+          elif [ "$job_status" = "failed" ]; then
+            status_icon="❌"
+          else
+            status_icon="❓"
+          fi
+          job_started_formatted=$(date -d "$job_started" +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$job_started")
+          echo "| $job_name | $status_icon $job_status | $job_duration | $runner_desc | $fs | $job_started_formatted |" >> report.md
+        fi
+      done
+    - echo "" >> report.md
+    - echo "---" >> report.md
+    - echo "For detailed logs, please check the artifacts of each test job." >> report.md
+  artifacts:
+    name: "test-report-${CI_COMMIT_REF_NAME}"
+    paths:
+      - report.md
+    expire_in: 30 days
