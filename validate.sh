@@ -15,6 +15,7 @@ SUCCESS_KEYWORD="ReStOrE"
 DEFAULT_TIMEOUT=480 # seconds
 KEEP_LOG=0          # 0 for false (delete log), 1 for true (keep log)
 ARCH="amd64"
+SSH_FORWARD_ENABLED=1
 QEMU_PID=0
 TIMEOUT_PID=0
 
@@ -43,10 +44,11 @@ print_usage() {
     echo "  --disk <path>   Path to the QCOW2 disk image to validate."
     echo ""
     echo "Optional Arguments:"
-    echo "  --timeout <sec> Maximum time in seconds to wait for QEMU to finish. (Default: $DEFAULT_TIMEOUT)"
-    echo "  --arch <arch>   Target architecture (amd64, arm64, riscv64). Default: amd64."
-    echo "  --keeplog       Do not delete the log file after execution."
-    echo "  -h, --help      Display this help message and exit."
+    echo "  --timeout <sec>     Maximum time in seconds to wait for QEMU to finish. (Default: $DEFAULT_TIMEOUT)"
+    echo "  --arch <arch>       Target architecture (amd64, arm64, riscv64). Default: amd64."
+    echo "  --no-ssh-forward  Disable TCP port 2222 forwarding for SSH."
+    echo "  --keeplog         Do not delete the log file after execution."
+    echo "  -h, --help          Display this help message and exit."
     echo ""
     echo "Example:"
     echo "  $0 --iso isos/cidata.iso --disk ./qemu/restore.qcow2 --timeout 600 --keeplog"
@@ -81,6 +83,10 @@ cleanup() {
 # --- Argument Parsing ---
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --no-ssh-forward)
+            SSH_FORWARD_ENABLED=0
+            shift 1
+            ;;
         --arch)
             ARCH="$2"
             shift 2
@@ -178,8 +184,17 @@ LOG_FILE="logs/cci_validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
         "-m" "4096"
         "-cdrom" "$ISO_PATH"
         "-nographic"
-        "-nic" "user,hostfwd=tcp::2222-:22"
     )
+
+    # Networking
+    NETDEV_ARGS="user"
+    if [ "$SSH_FORWARD_ENABLED" -eq 1 ]; then
+        NETDEV_ARGS+=",hostfwd=tcp::2222-:22"
+        echo "INFO: SSH port forwarding enabled (host 2222 -> guest 22)."
+    else
+        echo "INFO: SSH port forwarding disabled."
+    fi
+    QEMU_ARGS+=("-nic" "$NETDEV_ARGS")
 
     # Use modern virtio-blk-pci for all architectures for consistent /dev/vdX naming.
     QEMU_ARGS+=("-drive" "id=drive0,file=$DISK_IMAGE,format=qcow2,if=none")
