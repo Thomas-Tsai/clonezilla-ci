@@ -140,26 +140,57 @@ run_fs_clone_restore() {
 # Test for liteserver
 run_liteserver_test() {
     local TEST_START_TIME=$(date +%s)
-    local TEST_NAME="liteserver_test"
+    local TEST_NAME="liteserver_test_${ARCH}"
     local TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
     local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
 
     echo "--- Running Lite Server Test ($ARCH) (Log: $LOG_FILE) ---"
+
+    # Dynamically find a debian disk for the current architecture
+    local os="debian"
+    local config_file="$PROJECT_ROOT/qemu/cloudimages/cloud_images.conf"
+    local test_disk_path=""
+    local RESULT=0 # Default to success (for skip case)
+
+    if [ -f "$config_file" ]; then
+        # Find the first available debian image for the given architecture
+        local config_line
+        config_line=$(grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" "$config_file" | head -n 1)
+
+        if [ -n "$config_line" ]; then
+            local release
+            release=$(echo "$config_line" | awk '{print $2}')
+            local image_name="${os}-${release}-${ARCH}.qcow2"
+            test_disk_path="$PROJECT_ROOT/qemu/cloudimages/${image_name}"
+        fi
+    fi
+
+    if [ -f "$test_disk_path" ]; then
+        echo "INFO: Using disk image '$test_disk_path' for liteserver test."
+        # The command to be tested. The zip file comes from the script's global var.
+        (cd .. && ./liteserver.sh \
+            --zip "$CLONEZILLA_ZIP" \
+            --arch "$ARCH" \
+            --disk "$test_disk_path" \
+            --cmdpath "dev/ocscmd/lite-bt.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
+        
+        local SCRIPT_RESULT="${PIPESTATUS[0]}"
+        RESULT="$SCRIPT_RESULT"
+    else
+        echo "WARNING: Skipping Lite Server test for arch '$ARCH'. No suitable Debian disk image found."
+        # Mark test as skipped by ensuring RESULT is 0.
+        RESULT=0
+    fi
     
-    # The command to be tested. The zip file comes from the script's global var.
-    # The disk and cmdpath are specific to this test case.
-    (cd .. && ./liteserver.sh \
-        --zip "$CLONEZILLA_ZIP" \
-        --disk "qemu/cloudimages/debian-13-amd64.qcow2" \
-        --cmdpath "dev/ocscmd/lite-bt.sh") 2>&1 | tee -a "$LOG_FILE"
-    
-    local SCRIPT_RESULT="${PIPESTATUS[0]}"
-    local RESULT="$SCRIPT_RESULT"
     local TEST_END_TIME=$(date +%s)
     local TEST_DURATION=$((TEST_END_TIME - TEST_START_TIME))
 
     if [ "$RESULT" -eq 0 ]; then
-        echo "--- Lite Server Test Passed (${TEST_DURATION} seconds) ---"
+        if [ ! -f "$test_disk_path" ]; then
+            echo "--- Lite Server Test SKIPPED (${TEST_DURATION} seconds) ---"
+        else
+            echo "--- Lite Server Test Passed (${TEST_DURATION} seconds) ---"
+        fi
     else
         echo "--- Lite Server Test FAILED (${TEST_DURATION} seconds) ---"
     fi
