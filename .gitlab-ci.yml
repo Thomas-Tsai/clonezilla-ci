@@ -275,13 +275,13 @@ pages:
       pipeline_duration_formatted=$(date -u -d "@${pipeline_duration}" +'%H:%M:%S')
 
       # Start generating index.html
-      cat > "${REPORT_DIR}/index.html" <<- EOM
+      cat > "${REPORT_DIR}/index.html" <<-'EOF'
       <!DOCTYPE html>
       <html lang="en">
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Test Report: ${ZIP_BASENAME}</title>
+          <title>Test Report: '$(printf '%s' "${ZIP_BASENAME}")'</title>
           <style>
               body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
               h1, h2 { color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
@@ -297,31 +297,31 @@ pages:
           </style>
       </head>
       <body>
-          <h1>Test Report: ${ZIP_BASENAME}</h1>
+          <h1>Test Report: '$(printf '%s' "${ZIP_BASENAME}")'</h1>
           
           <h2>Pipeline Summary</h2>
           <div class="summary">
-              <p><strong>Pipeline ID:</strong> <a href="${CI_PIPELINE_URL}">${CI_PIPELINE_ID}</a></p>
-              <p><strong>Commit:</strong> <a href="${CI_PROJECT_URL}/-/commit/${CI_COMMIT_SHA}">${CI_COMMIT_SHORT_SHA}</a></p>
-              <p><strong>Branch:</strong> <a href="${CI_PROJECT_URL}/-/tree/${CI_COMMIT_REF_NAME}">${CI_COMMIT_REF_NAME}</a></p>
-              <p><strong>Triggered by:</strong> ${GITLAB_USER_NAME}</p>
-              <p><strong>Pipeline Started:</strong> ${CI_PIPELINE_CREATED_AT}</p>
-              <p><strong>Total Duration:</strong> ${pipeline_duration_formatted} (until report generation)</p>
+              <p><strong>Pipeline ID:</strong> <a href="$(printf '%s' "${CI_PIPELINE_URL}")">$(printf '%s' "${CI_PIPELINE_ID}")</a></p>
+              <p><strong>Commit:</strong> <a href="$(printf '%s' "${CI_PROJECT_URL}")/-/commit/$(printf '%s' "${CI_COMMIT_SHA}")">$(printf '%s' "${CI_COMMIT_SHORT_SHA}")</a></p>
+              <p><strong>Branch:</strong> <a href="$(printf '%s' "${CI_PROJECT_URL}")/-/tree/$(printf '%s' "${CI_COMMIT_REF_NAME}")">$(printf '%s' "${CI_COMMIT_REF_NAME}")</a></p>
+              <p><strong>Triggered by:</strong> $(printf '%s' "${GITLAB_USER_NAME}")</p>
+              <p><strong>Pipeline Started:</strong> $(printf '%s' "${CI_PIPELINE_CREATED_AT}")</p>
+              <p><strong>Total Duration:</strong> $(printf '%s' "${pipeline_duration_formatted}") (until report generation)</p>
           </div>
-      EOM
+EOF
 
       # Append Test Environment section
       ARCH_FROM_FILE=$(grep "arch:" "$FIRST_RESULT_FILE" | cut -d' ' -f2)
-      cat >> "${REPORT_DIR}/index.html" <<- EOM
+      cat >> "${REPORT_DIR}/index.html" <<-'EOF'
         <h2>Test Environment</h2>
         <div class="summary">
-            <p><strong>Architecture (ARCH):</strong> ${ARCH_FROM_FILE}</p>
-            <p><strong>Clonezilla ZIP:</strong> ${ZIP_FILENAME}</p>
+            <p><strong>Architecture (ARCH):</strong> '$(printf '%s' "${ARCH_FROM_FILE}")'</p>
+            <p><strong>Clonezilla ZIP:</strong> '$(printf '%s' "${ZIP_FILENAME}")'</p>
         </div>
-      EOM
+EOF
 
       # Append Test Results table header
-      cat >> "${REPORT_DIR}/index.html" <<- EOM
+      cat >> "${REPORT_DIR}/index.html" <<-'EOF'
       <h2>Test Results</h2>
       <table>
           <thead>
@@ -336,7 +336,7 @@ pages:
               </tr>
           </thead>
           <tbody>
-      EOM
+EOF
 
       # Loop through results and append table rows
       for file in results/*.yml; do
@@ -360,29 +360,29 @@ pages:
           # Links are relative to the current directory (e.g., public/clonezilla-live-amd64/)
           log_link="<a href='./logs/${job_name}.log'>Log</a>"
 
-          cat >> "${REPORT_DIR}/index.html" <<- EOM
+          cat >> "${REPORT_DIR}/index.html" <<-'EOF'
               <tr>
-                  <td>${job_name}</td>
-                  <td>${status_icon} ${job_status}</td>
-                  <td>${job_duration}</td>
-                  <td>${runner_desc}</td>
-                  <td>${fs}</td>
-                  <td>${job_started_formatted}</td>
-                  <td>${log_link}</td>
+                  <td>$(printf '%s' "${job_name}")</td>
+                  <td>$(printf '%s' "${status_icon}") $(printf '%s' "${job_status}")</td>
+                  <td>$(printf '%s' "${job_duration}")</td>
+                  <td>$(printf '%s' "${runner_desc}")</td>
+                  <td>$(printf '%s' "${fs}")</td>
+                  <td>$(printf '%s' "${job_started_formatted}")</td>
+                  <td>$(printf '%s' "${log_link}")</td>
               </tr>
-          EOM
+EOF
         fi
       done
 
       # Close the HTML file
-      cat >> "${REPORT_DIR}/index.html" <<- EOM
+      cat >> "${REPORT_DIR}/index.html" <<-'EOF'
             </tbody>
         </table>
         <br>
         <p><em>For detailed logs, click on the link in the 'Log' column or <a href="./logs/">browse the raw logs directory</a>.</em></p>
       </body>
       </html>
-      EOM
+EOF
   artifacts:
     paths:
       - public
