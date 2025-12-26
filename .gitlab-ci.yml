@@ -275,7 +275,7 @@ pages:
       pipeline_duration_formatted=$(date -u -d "@${pipeline_duration}" +'%H:%M:%S')
 
       # Start generating index.html
-      cat > "${REPORT_DIR}/index.html" <<-'EOF'
+      cat > "${REPORT_DIR}/index.html" <<EOF
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -309,19 +309,17 @@ pages:
               <p><strong>Total Duration:</strong> $(printf '%s' "${pipeline_duration_formatted}") (until report generation)</p>
           </div>
 EOF
-
       # Append Test Environment section
       ARCH_FROM_FILE=$(grep "arch:" "$FIRST_RESULT_FILE" | cut -d' ' -f2)
-      cat >> "${REPORT_DIR}/index.html" <<-'EOF'
+      cat >> "${REPORT_DIR}/index.html" <<EOF
         <h2>Test Environment</h2>
         <div class="summary">
             <p><strong>Architecture (ARCH):</strong> '$(printf '%s' "${ARCH_FROM_FILE}")'</p>
             <p><strong>Clonezilla ZIP:</strong> '$(printf '%s' "${ZIP_FILENAME}")'</p>
         </div>
 EOF
-
       # Append Test Results table header
-      cat >> "${REPORT_DIR}/index.html" <<-'EOF'
+      cat >> "${REPORT_DIR}/index.html" <<EOF
       <h2>Test Results</h2>
       <table>
           <thead>
@@ -337,7 +335,6 @@ EOF
           </thead>
           <tbody>
 EOF
-
       # Loop through results and append table rows
       for file in results/*.yml; do
         if [ -f "$file" ]; then
@@ -360,7 +357,7 @@ EOF
           # Links are relative to the current directory (e.g., public/clonezilla-live-amd64/)
           log_link="<a href='./logs/${job_name}.log'>Log</a>"
 
-          cat >> "${REPORT_DIR}/index.html" <<-'EOF'
+          cat >> "${REPORT_DIR}/index.html" <<EOF
               <tr>
                   <td>$(printf '%s' "${job_name}")</td>
                   <td>$(printf '%s' "${status_icon}") $(printf '%s' "${job_status}")</td>
@@ -373,9 +370,8 @@ EOF
 EOF
         fi
       done
-
       # Close the HTML file
-      cat >> "${REPORT_DIR}/index.html" <<-'EOF'
+      cat >> "${REPORT_DIR}/index.html" <<EOF
             </tbody>
         </table>
         <br>
