@@ -12,7 +12,7 @@
 ISO_PATH=""
 DISK_IMAGE=""
 SUCCESS_KEYWORD="ReStOrE"
-DEFAULT_TIMEOUT=480 # seconds
+DEFAULT_TIMEOUT=1200 # seconds
 KEEP_LOG=0          # 0 for false (delete log), 1 for true (keep log)
 ARCH="amd64"
 SSH_FORWARD_ENABLED=1
