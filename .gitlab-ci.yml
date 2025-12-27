@@ -136,7 +136,7 @@ build_zip:
       - logs/
       - results/
     expire_in: 5 days
-  timeout: 4h
+  timeout: 1h
 
 # --- OS Tests ---
 
