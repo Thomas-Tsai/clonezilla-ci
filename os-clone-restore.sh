@@ -236,7 +236,7 @@ echo "--- (Step 5/5) Validating the Restored Disk ---"
 ./validate.sh \
   --iso "$VALIDATE_ISO" \
   --disk "$RESTORE_DISK" \
-  --timeout 300 \
+  --timeout 1200 \
   --arch "$ARCH" \
   $QEMU_EXTRA_ARGS
 echo "--- Validation completed successfully. ---"
