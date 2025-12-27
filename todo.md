@@ -43,6 +43,7 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] 移除作業系統測試中 hardcode 的 release version，改為測試所有支援的 release (done)
 - [x] 提供 --help 參數 (done)
 - [x] os_clone_restore 與 data_clone_restore 兩個 使用 tee 來同時輸出到螢幕與log 檔
+- [ ] 增加timeout機制
 
 ## jobs/** script 改進事項：
 先將 start.sh 裡面的測試拆分成多個不同的 jobs 來執行 ，檔案放 jobs/ 目錄底下
@@ -88,7 +89,7 @@ $ ./qemu-clonezilla-ci-run.sh -i --zip zip/clonezilla-live-20251124-resolute-amd
 - [x] 增加--serverzip 參數，可以指定lite server 使用的 clonezilla zip 檔案, 允許與client 相同得zip 檔案
 - [x] 增加--clientzip 參數，可以指定lite client 使用的 clonezilla zip 檔案, 允許與server 相同得zip 檔案
 - [x] 以 COW 方式處理 tmpl 取代 copy qcow2 檔案，減少磁碟空間使用量與加快備份還原速度
-
+- [ ] client 要 loop 去等server ready
 
 ## data-clone-restore.sh 改進事項：
 - [x] 整個 script flow 需要開發，完整flow, 參數說明

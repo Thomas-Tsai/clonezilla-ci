@@ -248,32 +248,57 @@ pages:
   script:
     - |
       set -e
-      # First, we must determine the ZIP name to create the directory.
-      # It's in the results artifacts from the test stage.
+      # --- 1. 設定 Git 和 Branch 名稱 ---
+      REPORTS_BRANCH="test-reports"
+      # 設定 Git 使用者資訊，用於 commit
+      git config --global user.name "GitLab CI Bot"
+      git config --global user.email "gitlab-ci-bot@${CI_PROJECT_NAMESPACE}.gitlab.io"
+      # 建立含有 token 的遠端 URL，用於 push
+      GIT_REMOTE_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+
+      # --- 2. 複製 reports branch 到一個暫存目錄 ---
+      echo "INFO: Cloning branch '${REPORTS_BRANCH}' into 'reports_repo'..."
+      git clone --branch "${REPORTS_BRANCH}" "${GIT_REMOTE_URL}" reports_repo || {
+        echo "INFO: Branch '${REPORTS_BRANCH}' not found. Creating it from scratch.";
+        # 如果 branch 不存在，就建立一個空的 repo
+        mkdir reports_repo
+        cd reports_repo
+        git init
+        git remote add origin "${GIT_REMOTE_URL}"
+        git checkout -b "${REPORTS_BRANCH}"
+        cd ..
+      }
+    - |
+      # --- 3. 產生報告內容 (與原先邏輯類似) ---
+      # 找出 ZIP 名稱
       FIRST_RESULT_FILE=$(find results -name "*.yml" -print -quit)
       if [ -z "$FIRST_RESULT_FILE" ]; then
-        echo "ERROR: No result files found from test stage. Cannot determine ZIP name." >&2
-        # Create a fallback report at the root
+        echo "ERROR: No result files found. Cannot generate report." >&2
+        echo "<h1>Error: Test results not found.</h1>" > reports_repo/index.html
+        cd reports_repo
+        git add index.html
+        git commit -m "Fail: No test results found in pipeline ${CI_PIPELINE_IID}"
+        git push origin "${REPORTS_BRANCH}"
+        cd ..
         mkdir -p public
-        echo "<h1>Error: Test results not found. Cannot generate report.</h1>" > public/index.html
+        mv reports_repo/* public/
         exit 1
       fi
-
       ZIP_FILENAME=$(grep "zip:" "$FIRST_RESULT_FILE" | cut -d' ' -f2-)
       ZIP_BASENAME=$(basename "$ZIP_FILENAME" .zip)
 
-      # --- Generate Current Report ---
-      REPORT_DIR="public/${ZIP_BASENAME}"
+      # 在 reports_repo 內建立報告目錄
+      REPORT_DIR="reports_repo/${ZIP_BASENAME}"
       echo "INFO: Generating report in directory: ${REPORT_DIR}"
       mkdir -p "${REPORT_DIR}/logs"
       if [ -d "logs" ] && [ -n "$(ls -A logs)" ]; then cp -r logs/* "${REPORT_DIR}/logs/"; fi
 
+      # 產生單次報告的 index.html
       pipeline_started_ts=$(date -d "$CI_PIPELINE_CREATED_AT" +%s)
       report_job_started_ts=$(date -d "$CI_JOB_STARTED_AT" +%s)
       pipeline_duration=$((report_job_started_ts - pipeline_started_ts))
       pipeline_duration_formatted=$(date -u -d "@${pipeline_duration}" +'%H:%M:%S')
 
-      # Start generating index.html for the specific report
       cat > "${REPORT_DIR}/index.html" <<EOF
       <!DOCTYPE html>
       <html lang="en">
@@ -366,14 +391,14 @@ pages:
       </body>
       </html>
       EOF
-      
-      # --- Generate Historical Index ---
+    - |
+      # --- 4. 更新歷史總覽頁面 ---
       echo "INFO: Updating historical report index..."
-      REPORTS_JSON_URL="${CI_PAGES_URL}/reports.json"
-      echo "INFO: Downloading previous reports index from ${REPORTS_JSON_URL}"
-      if ! curl -fSs "${REPORTS_JSON_URL}" -o public/reports.json; then
+      # 從 reports_repo 讀取舊的 json，而不是用 curl 下載
+      REPORTS_JSON_PATH="reports_repo/reports.json"
+      if [ ! -f "${REPORTS_JSON_PATH}" ]; then
         echo "INFO: No previous reports.json found. Starting a new one."
-        echo "[]" > public/reports.json
+        echo "[]" > "${REPORTS_JSON_PATH}"
       fi
 
       OVERALL_STATUS="success"
@@ -392,11 +417,11 @@ pages:
 
       UPDATED_REPORTS_JSON=$(jq --argjson new_report "${CURRENT_REPORT_JSON}" \
         '. | map(select(.pipeline.id != $new_report.pipeline.id)) | [$new_report] + .' \
-        public/reports.json)
-      echo "${UPDATED_REPORTS_JSON}" > public/reports.json
+        "${REPORTS_JSON_PATH}")
+      echo "${UPDATED_REPORTS_JSON}" > "${REPORTS_JSON_PATH}"
 
-      # Generate a new root index.html from reports.json
-      cat > public/index.html << 'EOF'
+      # 從更新後的 reports.json 產生新的根 index.html
+      cat > reports_repo/index.html << 'EOF'
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -443,20 +468,39 @@ pages:
             <td><a href=\"" + .commit.url + "\" target=\"_blank\">" + .commit.sha + " (" + .commit.ref + ")</a></td>
             <td><a href=\"" + .report_url + "\">View Report</a></td>
          </tr>"
-      ' public/reports.json >> public/index.html
+      ' "${REPORTS_JSON_PATH}" >> reports_repo/index.html
 
-      cat >> public/index.html << 'EOF'
+      cat >> reports_repo/index.html << 'EOF'
               </tbody>
           </table>
       </body>
       </html>
       EOF
+    - |
+      # --- 5. Commit and Push to the reports branch ---
+      cd reports_repo
+      echo "INFO: Committing and pushing changes to '${REPORTS_BRANCH}' branch..."
+      git add .
+      # 檢查是否有變動
+      if git diff --staged --quiet; then
+        echo "INFO: No changes detected in reports. Nothing to commit."
+      else
+        git commit -m "Update test reports for pipeline ${CI_PIPELINE_IID}" -m "Clonezilla version: ${ZIP_BASENAME}"
+        git push origin "${REPORTS_BRANCH}"
+      fi
+      cd ..
 
-      echo "INFO: public/index.html and public/reports.json generated successfully."
+    - |
+      # --- 6. 準備 GitLab Pages 的 artifact ---
+      echo "INFO: Preparing 'public' directory for GitLab Pages artifact..."
+      mkdir -p public
+      # 將 reports_repo 的內容移動到 public
+      mv reports_repo/* public/
+
   artifacts:
     paths:
       - public
     expire_in: 30 days
   rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: always
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || CI_COMMIT_BRANCH == "test-reports"'
+      when: on_success
