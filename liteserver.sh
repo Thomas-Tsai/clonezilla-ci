@@ -186,21 +186,36 @@ trap cleanup EXIT
 main() {
     # --- Pre-flight Cleanup ---
     info "--- Pre-flight Cleanup: Checking for leftover server processes ---"
-    # Identify QEMU processes that are acting as a listen server for this script
-    LEFTOVER_PIDS=$(pgrep -f "qemu-system.*-netdev socket,id=privnet,listen=" || true)
-    if [[ -n "$LEFTOVER_PIDS" ]]; then
-        info "Found leftover server process(es) with PIDs: $LEFTOVER_PIDS. Terminating..."
-        # Forcefully kill the processes to release file locks
-        echo "$LEFTOVER_PIDS" | xargs kill -9
-        sleep 2 # Brief pause to allow OS to reclaim resources
-        info "Termination of leftover processes complete."
-    else
-        info "No leftover server processes found. Proceeding normally."
-    fi
+    # Iterate over temp directories from potentially failed previous runs
+    find . -maxdepth 1 -name 'cci_liteserver_*' -type d 2>/dev/null | while read -r dir; do
+        PID_FILE="$dir/liteserver.pid"
+        if [[ -f "$PID_FILE" ]]; then
+            PID=$(cat "$PID_FILE")
+            # Check if a process with that PID is still running. We check for the script name to be sure.
+            if ! ps -p "$PID" -o comm= | grep -q "liteserver.sh"; then
+                # The script that created this directory is no longer running.
+                # This means any QEMU process using this directory is an orphan.
+                info "Found orphan temp directory '$dir' from finished process $PID."
+
+                # Find any QEMU process that has the directory name in its command line.
+                LEFTOVER_PIDS=$(pgrep -f "qemu-system.*$dir" || true)
+
+                if [[ -n "$LEFTOVER_PIDS" ]]; then
+                    info "Found leftover QEMU process(es) for '$dir': $LEFTOVER_PIDS. Terminating..."
+                    echo "$LEFTOVER_PIDS" | xargs kill -9
+                fi
+
+                info "Removing orphan temp directory '$dir'."
+                rm -rf "$dir"
+            fi
+        fi
+    done
+    info "Pre-flight cleanup check complete."
 
     # --- Phase 0: Preparation ---
     info "--- Phase 0: Preparation ---"
     TMP_DIR=$(mktemp -d -p "$PWD" "cci_liteserver_XXXXXX")
+    echo $$ > "$TMP_DIR/liteserver.pid"
     info "Temporary directory created at: $TMP_DIR"
 
     # Process Server ZIP
@@ -316,7 +331,7 @@ main() {
         "--initrd" "$CLIENT_CZ_INITRD"
         "--image" "$PARTIMAG_DIR"
         "--no-ssh-forward"
-        "--cmd" "dhclient ens5; ocs-live-get-img 192.168.0.1"
+        "--cmdpath" "dev/ocscmd/lite-client.sh"
         "--arch" "$ARCH"
         "--qemu-args" "-netdev socket,id=privnet,connect=:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
     )
