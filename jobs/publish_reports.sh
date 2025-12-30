@@ -110,7 +110,9 @@ echo '<h2>Test Results</h2>
         </tr>
     </thead>
     <tbody>' >> "${REPORT_DIR}/index.html"
+echo 'DEBUG: About to start for loop'
 for file in results/*.yml; do
+echo "DEBUG: Processing file: $file"
   if [ -f "$file" ]; then
     job_name=$(grep "job_name:" "$file" | cut -d' ' -f2)
     job_status=$(grep "job_status:" "$file" | cut -d' ' -f2)
@@ -136,6 +138,7 @@ for file in results/*.yml; do
     EOF
   fi
 done
+echo 'DEBUG: Finished for loop'
 cat >> "${REPORT_DIR}/index.html" <<-EOF
       </tbody>
   </table>
