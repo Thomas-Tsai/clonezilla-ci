@@ -165,8 +165,17 @@ cleanup() {
     info "--- Running final cleanup ---"
 
     if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
-        info "Forcefully terminating leftover server PID $SERVER_PID..."
-        kill -9 "$SERVER_PID" 2>/dev/null
+        info "Terminating server process group (PGID $SERVER_PID)..."
+        # Kill the entire process group started by the server script.
+        # A simple kill (SIGTERM) is sent first.
+        kill -- "-$SERVER_PID" 2>/dev/null
+        sleep 2 # Give it a moment to terminate gracefully
+
+        # If it's still there, force kill with SIGKILL
+        if kill -0 "$SERVER_PID" 2>/dev/null; then
+            info "Server process group (PGID $SERVER_PID) still alive. Force killing..."
+            kill -9 -- "-$SERVER_PID" 2>/dev/null
+        fi
     fi
 
     if [ "$KEEP_TEMP" = true ]; then
@@ -294,7 +303,7 @@ main() {
     PRIVATE_PORT=$((10000 + (RANDOM % 50000)))
     info "Using private network port: $PRIVATE_PORT"
 
-    trap 'info "Forcefully terminating server PID $SERVER_PID..."; kill -9 $SERVER_PID 2>/dev/null; cleanup' EXIT
+    # The main cleanup trap, defined at the top of the script, is sufficient.
 
     # Prepare server command args
     SERVER_QEMU_RUN_ARGS=(
@@ -344,9 +353,7 @@ main() {
     ./qemu-clonezilla-ci-run.sh "${CLIENT_QEMU_RUN_ARGS[@]}"
     
     info "Client has finished."
-    info "Forcefully terminating server PID $SERVER_PID..."
-    kill -9 "$SERVER_PID"
-    trap cleanup EXIT
+    # The cleanup trap, triggered on script exit, will handle terminating the server.
     info "Server/Client phase complete."
 
     # --- Phase 2: Validate Restored Disk ---
