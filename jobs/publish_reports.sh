@@ -96,8 +96,7 @@ cat >> "${REPORT_DIR}/index.html" <<-EOF
       <p><strong>Clonezilla ZIP:</strong> $(printf '%s' "${ZIP_FILENAME}")</p>
   </div>
 EOF
-cat >> "${REPORT_DIR}/index.html" <<-EOF
-<h2>Test Results</h2>
+echo '<h2>Test Results</h2>
 <table>
     <thead>
         <tr>
@@ -110,8 +109,7 @@ cat >> "${REPORT_DIR}/index.html" <<-EOF
             <th>Log</th>
         </tr>
     </thead>
-    <tbody>
-EOF
+    <tbody>' >> "${REPORT_DIR}/index.html"
 for file in results/*.yml; do
   if [ -f "$file" ]; then
     job_name=$(grep "job_name:" "$file" | cut -d' ' -f2)
