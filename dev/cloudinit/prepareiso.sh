@@ -30,7 +30,7 @@ users:
     # 'live' is the password, encrypted.
     passwd: \$6\$rounds=4096\$vh.Uh1TE8PdKhShg\$09s3YBUsBbwgEX0dbYm/RpX1fFkynxy2j4xyHLbAiMuzghdVTybAcvPhM5R18Agp.Omv7vzemBXR5AiDZvQqi.
     lock_passwd: false
-    groups: sudo, admin
+    groups: [sudo, admin]
     shell: /bin/bash
     ssh_pwauth: True
     chpasswd: { expire: False }
