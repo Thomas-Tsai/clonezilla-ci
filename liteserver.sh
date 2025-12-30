@@ -165,16 +165,26 @@ cleanup() {
     info "--- Running final cleanup ---"
 
     if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
-        info "Terminating server process group (PGID $SERVER_PID)..."
-        # Kill the entire process group started by the server script.
-        # A simple kill (SIGTERM) is sent first.
-        kill -- "-$SERVER_PID" 2>/dev/null
+        info "Terminating server process (PID $SERVER_PID) and its children..."
+        # Get all children of the server script PID
+        CHILD_PIDS=$(pgrep -P "$SERVER_PID" || true)
+
+        # Terminate children gracefully first, then the parent
+        if [[ -n "$CHILD_PIDS" ]]; then
+            kill $CHILD_PIDS 2>/dev/null
+        fi
+        kill "$SERVER_PID" 2>/dev/null
         sleep 2 # Give it a moment to terminate gracefully
 
-        # If it's still there, force kill with SIGKILL
+        # If parent is still there, it or some children might be stuck. Force kill.
         if kill -0 "$SERVER_PID" 2>/dev/null; then
-            info "Server process group (PGID $SERVER_PID) still alive. Force killing..."
-            kill -9 -- "-$SERVER_PID" 2>/dev/null
+            info "Server process (PID $SERVER_PID) or its children still alive. Force killing..."
+            # Re-fetch PIDs in case new children spawned, though unlikely.
+            CHILD_PIDS=$(pgrep -P "$SERVER_PID" || true)
+            if [[ -n "$CHILD_PIDS" ]]; then
+                kill -9 $CHILD_PIDS 2>/dev/null
+            fi
+            kill -9 "$SERVER_PID" 2>/dev/null
         fi
     fi
 
