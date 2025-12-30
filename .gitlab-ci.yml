@@ -351,32 +351,33 @@ pages:
           </thead>
           <tbody>
       EOF
-      for file in results/*.yml; do
-        if [ -f "$file" ]; then
-          job_name=$(grep "job_name:" "$file" | cut -d' ' -f2)
-          job_status=$(grep "job_status:" "$file" | cut -d' ' -f2)
-          job_duration=$(grep "job_duration:" "$file" | cut -d' ' -f2 || echo "N/A")
-          job_started=$(grep "job_started_at:" "$file" | cut -d' ' -f2- || echo "N/A")
-          runner_desc=$(grep "runner_description:" "$file" | cut -d':' -f2- | xargs || echo "N/A")
-          fs=$(grep "fs:" "$file" | cut -d' ' -f2 || echo "N/A")
-          
-          if [ "$job_status" = "success" ]; then status_icon="✅"; elif [ "$job_status" = "failed" ]; then status_icon="❌"; else status_icon="❓"; fi
-          job_started_formatted=$(date -d "$job_started" +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$job_started")
-          log_link="<a href='./logs/${job_name}.log'>Log</a>"
+      # DEBUG: Commenting out for loop
+      # for file in results/*.yml; do
+      #   if [ -f "$file" ]; then
+      #     job_name=$(grep "job_name:" "$file" | cut -d' ' -f2)
+      #     job_status=$(grep "job_status:" "$file" | cut -d' ' -f2)
+      #     job_duration=$(grep "job_duration:" "$file" | cut -d' ' -f2 || echo "N/A")
+      #     job_started=$(grep "job_started_at:" "$file" | cut -d' ' -f2- || echo "N/A")
+      #     runner_desc=$(grep "runner_description:" "$file" | cut -d':' -f2- | xargs || echo "N/A")
+      #     fs=$(grep "fs:" "$file" | cut -d' ' -f2 || echo "N/A")
+      #     
+      #     if [ "$job_status" = "success" ]; then status_icon="✅"; elif [ "$job_status" = "failed" ]; then status_icon="❌"; else status_icon="❓"; fi
+      #     job_started_formatted=$(date -d "$job_started" +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$job_started")
+      #     log_link="<a href='./logs/${job_name}.log'>Log</a>"
 
-          cat >> "${REPORT_DIR}/index.html" <<-EOF
-              <tr>
-                  <td>$(printf '%s' "${job_name}")</td>
-                  <td>$(printf '%s' "${status_icon}") $(printf '%s' "${job_status}")</td>
-                  <td>$(printf '%s' "${job_duration}")</td>
-                  <td>$(printf '%s' "${runner_desc}")</td>
-                  <td>$(printf '%s' "${fs}")</td>
-                  <td>$(printf '%s' "${job_started_formatted}")</td>
-                  <td>$(printf '%s' "${log_link}")</td>
-              </tr>
-          EOF
-        fi
-      done
+      #     cat >> "${REPORT_DIR}/index.html" <<-EOF
+      #         <tr>
+      #             <td>$(printf '%s' "${job_name}")</td>
+      #             <td>$(printf '%s' "${status_icon}") $(printf '%s' "${job_status}")</td>
+      #             <td>$(printf '%s' "${job_duration}")</td>
+      #             <td>$(printf '%s' "${runner_desc}")</td>
+      #             <td>$(printf '%s' "${fs}")</td>
+      #             <td>$(printf '%s' "${job_started_formatted}")</td>
+      #             <td>$(printf '%s' "${log_link}")</td>
+      #         </tr>
+      #     EOF
+      #   fi
+      # done
       cat >> "${REPORT_DIR}/index.html" <<-EOF
             </tbody>
         </table>
