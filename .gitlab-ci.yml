@@ -299,7 +299,7 @@ pages:
       pipeline_duration=$((report_job_started_ts - pipeline_started_ts))
       pipeline_duration_formatted=$(date -u -d "@${pipeline_duration}" +'%H:%M:%S')
 
-      cat > "${REPORT_DIR}/index.html" <<EOF
+      cat > "${REPORT_DIR}/index.html" <<-EOF
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -332,16 +332,16 @@ pages:
               <p><strong>Pipeline Started:</strong> $(printf '%s' "${CI_PIPELINE_CREATED_AT}")</p>
               <p><strong>Total Duration:</strong> $(printf '%s' "${pipeline_duration_formatted}") (until report generation)</p>
           </div>
-      EOF
+EOF
       ARCH_FROM_FILE=$(grep "arch:" "$FIRST_RESULT_FILE" | cut -d' ' -f2)
-      cat >> "${REPORT_DIR}/index.html" <<EOF
+      cat >> "${REPORT_DIR}/index.html" <<-EOF
         <h2>Test Environment</h2>
         <div class="summary">
             <p><strong>Architecture (ARCH):</strong> $(printf '%s' "${ARCH_FROM_FILE}")</p>
             <p><strong>Clonezilla ZIP:</strong> $(printf '%s' "${ZIP_FILENAME}")</p>
         </div>
-      EOF
-      cat >> "${REPORT_DIR}/index.html" <<EOF
+EOF
+      cat >> "${REPORT_DIR}/index.html" <<-EOF
       <h2>Test Results</h2>
       <table>
           <thead>
@@ -356,7 +356,7 @@ pages:
               </tr>
           </thead>
           <tbody>
-      EOF
+EOF
       for file in results/*.yml; do
         if [ -f "$file" ]; then
           job_name=$(grep "job_name:" "$file" | cut -d' ' -f2)
@@ -370,7 +370,7 @@ pages:
           job_started_formatted=$(date -d "$job_started" +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$job_started")
           log_link="<a href='./logs/${job_name}.log'>Log</a>"
 
-          cat >> "${REPORT_DIR}/index.html" <<EOF
+          cat >> "${REPORT_DIR}/index.html" <<-EOF
               <tr>
                   <td>$(printf '%s' "${job_name}")</td>
                   <td>$(printf '%s' "${status_icon}") $(printf '%s' "${job_status}")</td>
@@ -380,17 +380,17 @@ pages:
                   <td>$(printf '%s' "${job_started_formatted}")</td>
                   <td>$(printf '%s' "${log_link}")</td>
               </tr>
-      EOF
+EOF
         fi
       done
-      cat >> "${REPORT_DIR}/index.html" <<EOF
+      cat >> "${REPORT_DIR}/index.html" <<-EOF
             </tbody>
         </table>
         <br>
         <p><em>For detailed logs, click on the link in the 'Log' column or <a href="./logs/">browse the raw logs directory</a>.</em></p>
       </body>
       </html>
-      EOF
+EOF
     - |
       # --- 4. 更新歷史總覽頁面 ---
       echo "INFO: Updating historical report index..."
@@ -422,7 +422,7 @@ pages:
 
       # --- Generate index.html (main page with latest 50) ---
       echo "INFO: Generating index.html with latest 50 reports..."
-      cat > reports_repo/index.html << 'EOF'
+      cat > reports_repo/index.html <<- 'EOF'
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -461,7 +461,7 @@ pages:
               <tbody>
 EOF
       jq -r '
-        .[0:50][] |
+        .[0:50] | .[] |
         "<tr>
             <td>" + .zip_name + "</td>
             <td>" + .date + "</td>
@@ -471,7 +471,7 @@ EOF
             <td><a href=\"" + .report_url + "\">View Report</a></td>
          </tr>"
       ' "${REPORTS_JSON_PATH}" >> reports_repo/index.html
-      cat >> reports_repo/index.html << 'EOF'
+      cat >> reports_repo/index.html <<- 'EOF'
               </tbody>
           </table>
       </body>
@@ -480,7 +480,7 @@ EOF
 
       # --- Generate history.html and monthly archives ---
       echo "INFO: Generating monthly archives..."
-      cat > reports_repo/history.html << 'EOF'
+      cat > reports_repo/history.html <<- 'EOF'
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -508,7 +508,7 @@ EOF
           ARCHIVE_FILENAME="history-${month}.html"
           echo "INFO: Generating archive for ${month} -> ${ARCHIVE_FILENAME}"
           echo "<li><a href=\"${ARCHIVE_FILENAME}\">Test reports from ${month}</a></li>" >> reports_repo/history.html
-          cat > "reports_repo/${ARCHIVE_FILENAME}" << EOF
+          cat > "reports_repo/${ARCHIVE_FILENAME}" <<- EOF
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -553,14 +553,14 @@ EOF
                 <td><a href=\"" + .report_url + "\">View Report</a></td>
              </tr>"
           ' "${REPORTS_JSON_PATH}" >> "reports_repo/${ARCHIVE_FILENAME}"
-          cat >> "reports_repo/${ARCHIVE_FILENAME}" << 'EOF'
+          cat >> "reports_repo/${ARCHIVE_FILENAME}" <<- 'EOF'
         </tbody>
     </table>
 </body>
 </html>
 EOF
       done
-      cat >> reports_repo/history.html << 'EOF'
+      cat >> reports_repo/history.html <<- 'EOF'
     </ul>
 </body>
 </html>
@@ -578,7 +578,6 @@ EOF
         git push origin "${REPORTS_BRANCH}"
       fi
       cd ..
-
     - |
       # --- 6. 準備 GitLab Pages 的 artifact ---
       echo "INFO: Preparing 'public' directory for GitLab Pages artifact..."
