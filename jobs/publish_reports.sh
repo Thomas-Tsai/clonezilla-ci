@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -x
 
 # This script contains all the logic for the GitLab Pages deploy job.
 
