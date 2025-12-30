@@ -32,8 +32,6 @@ users:
     lock_passwd: false
     groups: [sudo, admin]
     shell: /bin/bash
-    ssh_pwauth: True
-    chpasswd: { expire: False }
     sudo: ALL=(ALL) NOPASSWD:ALL
 #    ssh_authorized_keys:
 #      - sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBOX+Ey0IIW5VLEwv+ICverplg== debian-lab
