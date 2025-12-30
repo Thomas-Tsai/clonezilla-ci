@@ -265,9 +265,8 @@ pages:
         git checkout -b "${REPORTS_BRANCH}"
         cd ..
       }
-    - |
+
       # --- 3. 準備報告資料 ---
-      # 找出 ZIP 名稱
       FIRST_RESULT_FILE=$(find results -name "*.yml" -print -quit)
       if [ -z "$FIRST_RESULT_FILE" ]; then
         echo "ERROR: No result files found. Cannot generate report." >&2
@@ -284,13 +283,11 @@ pages:
       ZIP_FILENAME=$(grep "zip:" "$FIRST_RESULT_FILE" | cut -d' ' -f2-)
       ZIP_BASENAME=$(basename "$ZIP_FILENAME" .zip)
 
-      # 在 reports_repo 內建立單次執行的報告目錄
       REPORT_DIR="reports_repo/${ZIP_BASENAME}"
       echo "INFO: Generating report in directory: ${REPORT_DIR}"
       mkdir -p "${REPORT_DIR}/logs"
       if [ -d "logs" ] && [ -n "$(ls -A logs)" ]; then cp -r logs/* "${REPORT_DIR}/logs/"; fi
 
-      # 產生單次報告的 index.html (此邏輯沿用舊版)
       pipeline_started_ts=$(date -d "$CI_PIPELINE_CREATED_AT" +%s)
       report_job_started_ts=$(date -d "$CI_JOB_STARTED_AT" +%s)
       pipeline_duration=$((report_job_started_ts - pipeline_started_ts))
@@ -388,11 +385,11 @@ pages:
       </body>
       </html>
       EOF
-    - |
+
       # --- 4. 更新並產生歷史總覽頁面 ---
       chmod +x jobs/generate_report.sh
       jobs/generate_report.sh "$ZIP_BASENAME"
-    - |
+
       # --- 5. Commit and Push to the reports branch ---
       cd reports_repo
       echo "INFO: Committing and pushing changes to '${REPORTS_BRANCH}' branch..."
@@ -405,7 +402,7 @@ pages:
         git push origin "${REPORTS_BRANCH}"
       fi
       cd ..
-    - |
+
       # --- 6. 準備 GitLab Pages 的 artifact ---
       echo "INFO: Preparing 'public' directory for GitLab Pages artifact..."
       mkdir -p public
