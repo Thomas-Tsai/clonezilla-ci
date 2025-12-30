@@ -237,3 +237,4 @@ cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/c
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
 - [x] 增加選用參數 --keeplog 來保留log 檔案，預設會刪除log 檔案
 - [x] 自動判斷是否 --enable-kvm
+- [ ] 初步確認 riscv64 debian, ubuntu os clone restore 進行於 validate fail. 剛剛實際測試 目前 validate.sh 確實會fail; 初步測試以-cdrom 會有問題 會找不到cdrom device; 改用 qemu-system-riscv64 -m 4096 -nographic -nic user,hostfwd=tcp::2222-:22 -drive id=drive0,file=qemu/debian-13-riscv64.qcow2,format=qcow2,if=none -device virtio-blk-pci,drive=drive0 -object rng-random,filename=/dev/urandom,id=rng -device virtio-rng-device,rng=rng -machine virt -kernel /usr/lib/u-boot/qemu-riscv64_smode/uboot.elf -append "root=LABEL=rootfs console=ttyS0" -drive if=none,id=seed,media=cdrom,file=isos/cidata.iso -device virtio-blk-device,drive=seed 可以正常進行cloud init ; 但是cloud init 輸出的訊息沒有看到...但是確認有作用

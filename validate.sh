@@ -182,7 +182,6 @@ LOG_FILE="logs/cci_validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
     QEMU_ARGS=(
         "$QEMU_BINARY"
         "-m" "4096"
-        "-cdrom" "$ISO_PATH"
         "-nographic"
     )
 
@@ -196,9 +195,19 @@ LOG_FILE="logs/cci_validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
     fi
     QEMU_ARGS+=("-nic" "$NETDEV_ARGS")
 
-    # Use modern virtio-blk-pci for all architectures for consistent /dev/vdX naming.
+    # Use modern virtio-blk-pci for the main disk for consistent /dev/vdX naming.
     QEMU_ARGS+=("-drive" "id=drive0,file=$DISK_IMAGE,format=qcow2,if=none")
     QEMU_ARGS+=("-device" "virtio-blk-pci,drive=drive0")
+
+    # For riscv64, the CD-ROM must be attached as a virtio-blk device because the
+    # standard IDE CD-ROM is not well-supported. For other architectures, -cdrom
+    # is sufficient and simpler.
+    if [[ "$ARCH" == "riscv64" ]]; then
+        QEMU_ARGS+=("-drive" "if=none,id=seed,media=cdrom,file=$ISO_PATH")
+        QEMU_ARGS+=("-device" "virtio-blk-device,drive=seed")
+    else
+        QEMU_ARGS+=("-cdrom" "$ISO_PATH")
+    fi
 
     # For architectures that require it, set the boot order.
     # RISC-V boot is typically handled by the bootloader/kernel, so we don't set -boot.

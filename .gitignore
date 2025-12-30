@@ -1,7 +1,5 @@
-zip/*.zip
-zip/*.qcow2
-qemu/*.qcow2
-qemu/cloudimages/*.qcow2
+*.zip
+*.qcow2
 isos/*.iso
 logs/*
 dev/testData/*
