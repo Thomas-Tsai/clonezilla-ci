@@ -420,7 +420,8 @@ pages:
         "${REPORTS_JSON_PATH}")
       echo "${UPDATED_REPORTS_JSON}" > "${REPORTS_JSON_PATH}"
 
-      # 從更新後的 reports.json 產生新的根 index.html
+      # --- Generate index.html (main page with latest 50) ---
+      echo "INFO: Generating index.html with latest 50 reports..."
       cat > reports_repo/index.html << 'EOF'
       <!DOCTYPE html>
       <html lang="en">
@@ -431,6 +432,7 @@ pages:
           <style>
               body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
               h1 { color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+              h2 { font-size: 1.2em; color: #555; }
               table { border-collapse: collapse; width: 100%; margin-top: 20px; box-shadow: 0 2px 3px rgba(0,0,0,0.1); }
               th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
               th { background-color: #e8e8f5; }
@@ -443,7 +445,8 @@ pages:
           </style>
       </head>
       <body>
-          <h1>Clonezilla CI Test Reports</h1>
+          <h1>Clonezilla CI Test Reports (Latest 50)</h1>
+          <h2><a href="history.html">View Full History</a></h2>
           <table>
               <thead>
                   <tr>
@@ -456,10 +459,9 @@ pages:
                   </tr>
               </thead>
               <tbody>
-      EOF
-
+EOF
       jq -r '
-        .[] |
+        .[0:50][] |
         "<tr>
             <td>" + .zip_name + "</td>
             <td>" + .date + "</td>
@@ -469,13 +471,100 @@ pages:
             <td><a href=\"" + .report_url + "\">View Report</a></td>
          </tr>"
       ' "${REPORTS_JSON_PATH}" >> reports_repo/index.html
-
       cat >> reports_repo/index.html << 'EOF'
               </tbody>
           </table>
       </body>
       </html>
-      EOF
+EOF
+
+      # --- Generate history.html and monthly archives ---
+      echo "INFO: Generating monthly archives..."
+      cat > reports_repo/history.html << 'EOF'
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Test Report History</title>
+          <style>
+              body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
+              h1 { color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+              h2 { font-size: 1.2em; color: #555; }
+              ul { list-style-type: none; padding: 0; }
+              li { background-color: white; margin: 5px 0; padding: 10px; border-radius: 3px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+              a { color: #007bff; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+          </style>
+      </head>
+      <body>
+          <h1>Test Report History</h1>
+          <h2><a href="index.html">Back to Latest Reports</a></h2>
+          <ul>
+EOF
+
+      UNIQUE_MONTHS=$(jq -r '.[].date[0:7]' "${REPORTS_JSON_PATH}" | sort -r | uniq)
+      for month in $UNIQUE_MONTHS; do
+          ARCHIVE_FILENAME="history-${month}.html"
+          echo "INFO: Generating archive for ${month} -> ${ARCHIVE_FILENAME}"
+          echo "<li><a href=\"${ARCHIVE_FILENAME}\">Test reports from ${month}</a></li>" >> reports_repo/history.html
+          cat > "reports_repo/${ARCHIVE_FILENAME}" << EOF
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <title>Test Reports for ${month}</title>
+          <style>
+              body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
+              h1 { color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+              table { border-collapse: collapse; width: 100%; margin-top: 20px; box-shadow: 0 2px 3px rgba(0,0,0,0.1); }
+              th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+              th { background-color: #e8e8f5; }
+              tr:nth-child(even) { background-color: #f9f9f9; }
+              a { color: #007bff; text-decoration: none; }
+              .status-success { color: green; font-weight: bold; }
+              .status-failed { color: red; font-weight: bold; }
+          </style>
+      </head>
+      <body>
+          <h1>Test Reports for ${month}</h1>
+          <h2><a href="history.html">Back to History Index</a></h2>
+          <table>
+              <thead>
+                  <tr>
+                      <th>Clonezilla Version</th>
+                      <th>Date</th>
+                      <th>Status</th>
+                      <th>Pipeline</th>
+                      <th>Commit</th>
+                      <th>Report</th>
+                  </tr>
+              </thead>
+              <tbody>
+EOF
+          jq -r --arg month "$month" '
+            .[] | select(.date | startswith($month)) |
+            "<tr>
+                <td>" + .zip_name + "</td>
+                <td>" + .date + "</td>
+                <td><span class=\"status-" + .status + "\">" + .status + "</span></td>
+                <td><a href=\"" + .pipeline.url + "\" target=\"_blank\">" + .pipeline.id + "</a></td>
+                <td><a href=\"" + .commit.url + "\" target=\"_blank\">" + .commit.sha + " (" + .commit.ref + ")</a></td>
+                <td><a href=\"" + .report_url + "\">View Report</a></td>
+             </tr>"
+          ' "${REPORTS_JSON_PATH}" >> "reports_repo/${ARCHIVE_FILENAME}"
+          cat >> "reports_repo/${ARCHIVE_FILENAME}" << 'EOF'
+        </tbody>
+    </table>
+</body>
+</html>
+EOF
+      done
+      cat >> reports_repo/history.html << 'EOF'
+    </ul>
+</body>
+</html>
+EOF
     - |
       # --- 5. Commit and Push to the reports branch ---
       cd reports_repo
