@@ -332,7 +332,7 @@ pages:
               <p><strong>Pipeline Started:</strong> $(printf '%s' "${CI_PIPELINE_CREATED_AT}")</p>
               <p><strong>Total Duration:</strong> $(printf '%s' "${pipeline_duration_formatted}") (until report generation)</p>
           </div>
-EOF
+      EOF
       ARCH_FROM_FILE=$(grep "arch:" "$FIRST_RESULT_FILE" | cut -d' ' -f2)
       cat >> "${REPORT_DIR}/index.html" <<-EOF
         <h2>Test Environment</h2>
