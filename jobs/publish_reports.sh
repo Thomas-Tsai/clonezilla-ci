@@ -14,15 +14,16 @@ GIT_REMOTE_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_P
 # Step 2: Clone reports branch
 echo "--- 2. Cloning reports branch ---"
 echo "INFO: Cloning branch '${REPORTS_BRANCH}' into 'reports_repo'..."
-git clone --branch "${REPORTS_BRANCH}" "${GIT_REMOTE_URL}" reports_repo || {
-  echo "INFO: Branch '${REPORTS_BRANCH}' not found. Creating it from scratch.";
+if ! git clone --branch "${REPORTS_BRANCH}" "${GIT_REMOTE_URL}" reports_repo 2>/dev/null; then
+  echo "INFO: Branch '${REPORTS_BRANCH}' not found or clone failed. Creating it from scratch.";
+  rm -rf reports_repo
   mkdir reports_repo
   cd reports_repo
   git init
   git remote add origin "${GIT_REMOTE_URL}"
   git checkout -b "${REPORTS_BRANCH}"
   cd ..
-}
+fi
 
 # Step 3: Prepare report data and generate per-run report
 echo "--- 3. Preparing report data ---"
