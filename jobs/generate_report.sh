@@ -25,16 +25,17 @@ if grep -q "job_status: failed" results/*.yml; then OVERALL_STATUS="failed"; fi
 CURRENT_REPORT_JSON=$(jq -n \
   --arg zip_basename "$ZIP_BASENAME" \
   --arg pipeline_iid "$CI_PIPELINE_IID" \
+  --arg pipeline_id "${CI_PIPELINE_ID:-$CI_PIPELINE_IID}" \
   --arg pipeline_url "$CI_PIPELINE_URL" \
   --arg commit_sha "$CI_COMMIT_SHORT_SHA" \
   --arg commit_url "${CI_PROJECT_URL}/-/commit/${CI_COMMIT_SHA}" \
   --arg commit_ref "$CI_COMMIT_REF_NAME" \
   --arg status "$OVERALL_STATUS" \
   --arg date "$(date -u -Iseconds)" \
-  '{zip_name: $zip_basename, pipeline: {id: $pipeline_iid, url: $pipeline_url}, commit: {sha: $commit_sha, ref: $commit_ref, url: $commit_url}, status: $status, date: $date, report_url: ($zip_basename + "/")}')
+  '{zip_name: $zip_basename, pipeline: {iid: $pipeline_iid, id: $pipeline_id, url: $pipeline_url}, commit: {sha: $commit_sha, ref: $commit_ref, url: $commit_url}, status: $status, date: $date, report_url: ($zip_basename + "/" + $pipeline_iid + "/")}')
 
 UPDATED_REPORTS_JSON=$(jq --argjson new_report "${CURRENT_REPORT_JSON}" \
-  '. | map(select(.pipeline.id != $new_report.pipeline.id)) | [$new_report] + .' \
+  '. | map(select(.pipeline.iid != $new_report.pipeline.iid)) | [$new_report] + .' \
   "${REPORTS_JSON_PATH}")
 echo "${UPDATED_REPORTS_JSON}" > "${REPORTS_JSON_PATH}"
 
@@ -85,7 +86,7 @@ jq -r '
       <td>" + .zip_name + "</td>
       <td>" + .date + "</td>
       <td><span class=\"status-" + .status + "\">" + .status + "</span></td>
-      <td><a href=\"" + .pipeline.url + "\" target=\"_blank\">" + .pipeline.id + "</a></td>
+      <td><a href=\"" + .pipeline.url + "\" target=\"_blank\">" + .pipeline.iid + " (" + .pipeline.id + ")</a></td>
       <td><a href=\"" + .commit.url + "\" target=\"_blank\">" + .commit.sha + " (" + .commit.ref + ")</a></td>
       <td><a href=\"" + .report_url + "\">View Report</a></td>
    </tr>"
@@ -167,7 +168,7 @@ EOF
           <td>" + .zip_name + "</td>
           <td>" + .date + "</td>
           <td><span class=\"status-" + .status + "\">" + .status + "</span></td>
-          <td><a href=\"" + .pipeline.url + "\" target=\"_blank\">" + .pipeline.id + "</a></td>
+          <td><a href=\"" + .pipeline.url + "\" target=\"_blank\">" + .pipeline.iid + " (" + .pipeline.id + ")</a></td>
           <td><a href=\"" + .commit.url + "\" target=\"_blank\">" + .commit.sha + " (" + .commit.ref + ")</a></td>
           <td><a href=\"" + .report_url + "\">View Report</a></td>
        </tr>"

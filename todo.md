@@ -31,6 +31,19 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] report 網頁分為 history.htm 與 index.htm; index.htm 保留最新50 個測試pipeline 結果; history.html 可以連結到 history-$year-$month.html
 - [x] 產生 history-$year-$month.html 當作 archive的概念 不用每次都產生 只產生之前的，如果檢查已經存在則不用產生
 
+### publish_reports.sh
+- [ ] 修改report dir 為 REPORT_DIR="reports_repo/${ZIP_BASENAME}/pipelineID/"
+- [ ] 將 results/ 也複製進去 REPORT_DIR
+- [ ] Pipeline ID 將line 69 追加 顯示 id (iid) ，如： `${CI_PIPELINE_IID}(${CI_PIPELINE_ID})`
+- [ ] per-run report, REPORT_DIR/index.htm , log 那欄 連結換成 gitlab.com CI_JOB_URL，但是保留 logs/ 資料
+- [ ] 刪除 ... `click on the link in the 'Log' column or <a href="./log` ...
+
+### generate_report.sh
+- [ ] reports.json,  generate_report.sh  須增加顯示 CI_PIPELINE_ID 方便與 pipeline 網頁對應
+- [ ] reports_repo/index.html Pipeline 顯示 ${CI_PIPELINE_IID}(${CI_PIPELINE_ID})
+- [ ] reports_repo/history-${month}.html  Pipeline 顯示 ${CI_PIPELINE_IID}(${CI_PIPELINE_ID})
+- [ ] reset data for report repo , reports.json and old data logs/....
+
 
 ## start.sh 改進事項：
 - [x] 開發一個 start.sh 腳本，這個腳本主要用來啟動一個完整的 clonezilla ci 流程, 使用 shunit2 來進行單元測試, 並且產生測試報告
@@ -91,7 +104,7 @@ $ ./qemu-clonezilla-ci-run.sh -i --zip zip/clonezilla-live-20251124-resolute-amd
 - [x] 增加--serverzip 參數，可以指定lite server 使用的 clonezilla zip 檔案, 允許與client 相同得zip 檔案
 - [x] 增加--clientzip 參數，可以指定lite client 使用的 clonezilla zip 檔案, 允許與server 相同得zip 檔案
 - [x] 以 COW 方式處理 tmpl 取代 copy qcow2 檔案，減少磁碟空間使用量與加快備份還原速度
-- [ ] client 要 loop 去等server ready
+- [x] client 要 loop 去等server ready//10 times
 
 ## data-clone-restore.sh 改進事項：
 - [x] 整個 script flow 需要開發，完整flow, 參數說明

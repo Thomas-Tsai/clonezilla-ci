@@ -31,10 +31,18 @@ if [ -z "$FIRST_RESULT_FILE" ]; then
 fi
 ZIP_FILENAME=$(grep "zip:" "$FIRST_RESULT_FILE" | cut -d' ' -f2-)
 ZIP_BASENAME=$(basename "$ZIP_FILENAME" .zip)
-REPORT_DIR="reports_repo/${ZIP_BASENAME}"
+REPORT_DIR="reports_repo/${ZIP_BASENAME}/${CI_PIPELINE_IID}"
 echo "INFO: Generating report in directory: ${REPORT_DIR}"
-mkdir -p "${REPORT_DIR}/logs"
-if [ -d "logs" ] && [ -n "$(ls -A logs)" ]; then cp -r logs/* "${REPORT_DIR}/logs/"; fi
+mkdir -p "${REPORT_DIR}"
+if [ -d "logs" ] && [ -n "$(ls -A logs)" ]; then
+    echo "INFO: Copying logs to report directory..."
+    cp -r logs/* "${REPORT_DIR}/logs/";
+fi
+if [ -d "results" ] && [ -n "$(ls -A results)" ]; then
+    echo "INFO: Copying results to report directory..."
+    mkdir -p "${REPORT_DIR}/results"
+    cp -r results/*.yml "${REPORT_DIR}/results/";
+fi
 
 # Step 3a: Generate per-run report header
 pipeline_started_ts=$(date -d "$CI_PIPELINE_CREATED_AT" +%s)
@@ -66,7 +74,7 @@ cat > "${REPORT_DIR}/index.html" <<-EOF
     <h2><a href="../">Back to Report Index</a></h2>
     <h2>Pipeline Summary</h2>
     <div class="summary">
-        <p><strong>Pipeline ID:</strong> <a href="${CI_PIPELINE_URL}">${CI_PIPELINE_IID}</a></p>
+        <p><strong>Pipeline ID:</strong> <a href="${CI_PIPELINE_URL}">${CI_PIPELINE_IID} (${CI_PIPELINE_ID})</a></p>
         <p><strong>Commit:</strong> <a href="${CI_PROJECT_URL}/-/commit/${CI_COMMIT_SHA}">${CI_COMMIT_SHORT_SHA}</a></p>
         <p><strong>Branch:</strong> <a href="${CI_PROJECT_URL}/-/tree/${CI_COMMIT_REF_NAME}">${CI_COMMIT_REF_NAME}</a></p>
         <p><strong>Triggered by:</strong> ${GITLAB_USER_NAME}</p>
@@ -106,7 +114,13 @@ for file in results/*.yml; do
     
     if [ "$job_status" = "success" ]; then status_icon="✅"; elif [ "$job_status" = "failed" ]; then status_icon="❌"; else status_icon="❓"; fi
     job_started_formatted=$(date -d "$job_started" +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$job_started")
-    log_link="<a href='./logs/${job_name}.log'>Log</a>"
+    
+    job_id=$(grep "job_id:" "$file" | cut -d' ' -f2 || echo "")
+    if [ -n "$job_id" ]; then
+        log_link="<a href=\"${CI_PROJECT_URL}/-/jobs/${job_id}\" target=\"_blank\">Log</a>"
+    else
+        log_link="<a href='./logs/${job_name}.log'>Log</a>"
+    fi
 
     echo "        <tr>" >> "${REPORT_DIR}/index.html"
     echo "            <td>${job_name}</td>" >> "${REPORT_DIR}/index.html"
@@ -124,8 +138,6 @@ done
 cat >> "${REPORT_DIR}/index.html" <<-EOF
       </tbody>
   </table>
-  <br>
-  <p><em>For detailed logs, click on the link in the 'Log' column or <a href="./logs/">browse the raw logs directory</a>.</em></p>
 </body>
 </html>
 EOF
