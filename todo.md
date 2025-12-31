@@ -32,17 +32,17 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] 產生 history-$year-$month.html 當作 archive的概念 不用每次都產生 只產生之前的，如果檢查已經存在則不用產生
 
 ### publish_reports.sh
-- [ ] 修改report dir 為 REPORT_DIR="reports_repo/${ZIP_BASENAME}/pipelineID/"
-- [ ] 將 results/ 也複製進去 REPORT_DIR
-- [ ] Pipeline ID 將line 69 追加 顯示 id (iid) ，如： `${CI_PIPELINE_IID}(${CI_PIPELINE_ID})`
-- [ ] per-run report, REPORT_DIR/index.htm , log 那欄 連結換成 gitlab.com CI_JOB_URL，但是保留 logs/ 資料
-- [ ] 刪除 ... `click on the link in the 'Log' column or <a href="./log` ...
+- [x] 修改report dir 為 REPORT_DIR="reports_repo/${ZIP_BASENAME}/pipelineID/"
+- [x] 將 results/ 也複製進去 REPORT_DIR
+- [x] Pipeline ID 將line 69 追加 顯示 id (iid) ，如： `${CI_PIPELINE_IID}(${CI_PIPELINE_ID})`
+- [x] per-run report, REPORT_DIR/index.htm , log 那欄 連結換成 gitlab.com CI_JOB_URL，但是保留 logs/ 資料
+- [x] 刪除 ... `click on the link in the 'Log' column or <a href="./log` ...
 
 ### generate_report.sh
-- [ ] reports.json,  generate_report.sh  須增加顯示 CI_PIPELINE_ID 方便與 pipeline 網頁對應
-- [ ] reports_repo/index.html Pipeline 顯示 ${CI_PIPELINE_IID}(${CI_PIPELINE_ID})
-- [ ] reports_repo/history-${month}.html  Pipeline 顯示 ${CI_PIPELINE_IID}(${CI_PIPELINE_ID})
-- [ ] reset data for report repo , reports.json and old data logs/....
+- [x] reports.json,  generate_report.sh  須增加顯示 CI_PIPELINE_ID 方便與 pipeline 網頁對應
+- [x] reports_repo/index.html Pipeline 顯示 ${CI_PIPELINE_IID}(${CI_PIPELINE_ID})
+- [x] reports_repo/history-${month}.html  Pipeline 顯示 ${CI_PIPELINE_IID}(${CI_PIPELINE_ID})
+- [x] reset data for report repo , reports.json and old data logs/.... // change to append new data
 
 
 ## start.sh 改進事項：

@@ -1,3 +1,21 @@
+workflow:
+  inputs:
+    ARCH:
+      description: 'Select the target architecture for the build and test.'
+      options:
+        - amd64
+        - arm64
+        - riscv64
+      default: 'amd64'
+    TYPE:
+      description: 'Select the Clonezilla release type. (Note: This only applies to the amd64 architecture).'
+      options:
+        - stable
+        - testing
+        - alternative-stable
+        - alternative-testing
+      default: 'stable'
+
 stages:
   - build
   - test
@@ -9,9 +27,8 @@ default:
     - clonezilla
 
 variables:
-  # Default architecture. Can be overridden in the "Run pipeline" page.
-  ARCH: "amd64"
-  TYPE: "stable"
+  # ARCH and TYPE are now configured via `workflow:inputs`
+  # which provides a user-friendly dropdown on the "Run pipeline" page.
   ZIP_DIR: "zip"
   CURL_OPTS: "-fsSL"
 
