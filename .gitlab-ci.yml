@@ -1,8 +1,19 @@
-# This is the parent pipeline. It contains manual trigger jobs for various test combinations.
+# This is the parent pipeline. It supports both scheduled and manual triggers.
 
 stages:
   - trigger
 
+# This job runs automatically for scheduled pipelines.
+# It uses the variables (ARCH, TYPE) defined in the schedule UI.
+trigger:scheduled:
+  stage: trigger
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  trigger:
+    include: 'child-pipeline.yml'
+    strategy: depend
+
+# This template is for the manual trigger jobs below.
 .trigger_template: &trigger_template
   stage: trigger
   rules:
