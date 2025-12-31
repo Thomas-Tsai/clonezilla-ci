@@ -45,12 +45,12 @@ fi
 
 # --- Test for windows clone and restore ---
 test_windows11_clone_restore() {
-    local image_path="$PROJECT_ROOT/qemu/cloudimages/windown-11-${ARCH}.qcow2"
+    local image_path="$PROJECT_ROOT/qemu/cloudimages/windows-11-${ARCH}.qcow2"
 
     if [ -f "$image_path" ]; then
         run_os_clone_restore "$image_path" "$PROJECT_ROOT/isos/win11_cidata.iso" "$NO_SSH_FORWARD_ARG"
     else
-        echo "Skipping test for windown-11-${ARCH}: image file not found at ${image_path}"
+        echo "Skipping test for windows-11-${ARCH}: image file not found at ${image_path}"
     fi
 }
 
