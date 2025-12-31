@@ -1,276 +1,51 @@
-workflow:
-  inputs:
-    ARCH:
-      description: 'Select the target architecture for the build and test.'
-      options:
-        - amd64
-        - arm64
-        - riscv64
-      default: 'amd64'
-    TYPE:
-      description: 'Select the Clonezilla release type. (Note: This only applies to the amd64 architecture).'
-      options:
-        - stable
-        - testing
-        - alternative-stable
-        - alternative-testing
-      default: 'stable'
+# This is the parent pipeline. It contains manual trigger jobs for various test combinations.
 
 stages:
-  - build
-  - test
-  - deploy
+  - trigger
 
-default:
-  tags:
-    - shell
-    - clonezilla
-
-variables:
-  # ARCH and TYPE are now configured via `workflow:inputs`
-  # which provides a user-friendly dropdown on the "Run pipeline" page.
-  ZIP_DIR: "zip"
-  CURL_OPTS: "-fsSL"
-
-build_zip:
-  stage: build
+.trigger_template: &trigger_template
+  stage: trigger
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: on_success
     - when: manual
-  allow_failure: false
-  script:
-    - mkdir -p "${ZIP_DIR}"
-    - chmod +x download-clonezilla.sh
-    - |
-      LATEST_ZIP=""
-      # Priority 1: Direct URL from CI/CD variable
-      if [ -n "${CLONEZILLA_ZIP_URL}" ]; then
-        echo "INFO: Using provided CLONEZILLA_ZIP_URL: ${CLONEZILLA_ZIP_URL}"
-        LATEST_ZIP=$(basename "${CLONEZILLA_ZIP_URL}")
-        DEST_FILE="${ZIP_DIR}/${LATEST_ZIP}"
-        echo "Downloading ${CLONEZILLA_ZIP_URL} to ${DEST_FILE}..."
-        curl ${CURL_OPTS} -o "${DEST_FILE}" "${CLONEZILLA_ZIP_URL}"
-        if [ $? -ne 0 ]; then
-            echo "ERROR: Download from CLONEZILLA_ZIP_URL failed." >&2
-            exit 1
-        fi
-      # Priority 2: Use the download script with ARCH and TYPE
-      else
-        echo "INFO: CLONEZILLA_ZIP_URL not set. Using download-clonezilla.sh with ARCH=${ARCH} and TYPE=${TYPE}."
-        # The download script outputs the full path of the downloaded file
-        DOWNLOADED_ZIP_PATH=$(./download-clonezilla.sh --arch "$ARCH" --type "$TYPE" -o "$ZIP_DIR")
-        if [ $? -ne 0 ] || [ -z "$DOWNLOADED_ZIP_PATH" ] || [ ! -f "$DOWNLOADED_ZIP_PATH" ]; then
-            echo "ERROR: Failed to auto-download Clonezilla zip using download-clonezilla.sh." >&2
-            exit 1
-        fi
-        LATEST_ZIP=$(basename "$DOWNLOADED_ZIP_PATH")
-      fi
-    - |
-      echo "Final ZIP file to be used: ${LATEST_ZIP}"
-      # Save the exact filename to a dotenv artifact to pass to the next stage
-      echo "Saving ZIP_FILE_FROM_BUILD=${LATEST_ZIP} to build.env"
-      echo "ZIP_FILE_FROM_BUILD=${LATEST_ZIP}" > build.env
-  artifacts:
-    name: "clonezilla-live-zip-${ARCH}"
-    paths:
-      - "${ZIP_DIR}/"
-    expire_in: 14 day
-    reports:
-      dotenv: build.env
+  trigger:
+    include: 'child-pipeline.yml'
+    strategy: depend
 
+# --- AMD64 Triggers ---
 
-.test_template:
-  stage: test
-  allow_failure: true
+trigger:amd64-stable:
+  <<: *trigger_template
   variables:
-    LIBGUESTFS_DEBUG: "0"
-    LIBGUESTFS_TRACE: "0"
-  dependencies:
-    - build_zip
-  before_script:
-    - |
-      echo "Setting up qemu cloud images in the project root..."
-      if [ -d "/data/cloudimages" ]; then
-        mkdir -p qemu/cloudimages
-        ln -s /data/cloudimages/*.qcow2 qemu/cloudimages/
-        echo "Linked cloud images from /data/cloudimages."
-      else
-        echo "Warning: /data/cloudimages not found. OS tests will fail if images are not present."
-      fi
-    - |
-      echo "Verifying build artifact (Clonezilla ZIP)..."
-      # The ZIP_FILE_FROM_BUILD variable comes from the build_zip job's dotenv report.
-      if [ -z "${ZIP_FILE_FROM_BUILD}" ]; then
-        echo "Error: ZIP_FILE_FROM_BUILD variable not passed from build job." >&2
-        exit 1
-      fi
-      if ! [ -f "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" ]; then
-        echo "Error: Artifact zip file '${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}' not found!" >&2
-        echo "Listing contents of '${ZIP_DIR}/':"
-        ls -l "${ZIP_DIR}/"
-        exit 1
-      fi
-      echo "Using ZIP file from build job: ${ZIP_FILE_FROM_BUILD}"
-      export ZIP_FILE="${ZIP_FILE_FROM_BUILD}"
-    - |
-      echo "Preparing log directory..."
-      export LOG_DIR="./logs"
-      mkdir -p $LOG_DIR
-    - |
-      echo "Setting up test data directory..."
-      if [ -d "/data/dataSets" ]; then
-        # Ensure dev/testData directory exists before creating symlink target
-        mkdir -p dev
-        rm -rf dev/testData # Remove existing placeholder if any
-        ln -s /data/dataSets dev/testData
-        echo "Linked /data/dataSets to dev/testData."
-      else
-        echo "Warning: /data/dataSets not found on runner. Data clone/restore tests might fail."
-      fi
-  after_script:
-    - |
-      mkdir -p results
-      job_started_ts=$(date -d "$CI_JOB_STARTED_AT" +%s)
-      job_finished_ts=$(date -d "$CI_JOB_FINISHED_AT" +%s)
-      duration=$((job_finished_ts - job_started_ts))
-      duration_formatted=$(date -u -d "@${duration}" +'%H:%M:%S')
+    ARCH: 'amd64'
+    TYPE: 'stable'
 
-      echo "job_name: $CI_JOB_NAME" > "results/${CI_JOB_NAME}.yml"
-      echo "job_status: $CI_JOB_STATUS" >> "results/${CI_JOB_NAME}.yml"
-      echo "job_started_at: $CI_JOB_STARTED_AT" >> "results/${CI_JOB_NAME}.yml"
-      echo "job_duration: $duration_formatted" >> "results/${CI_JOB_NAME}.yml"
-      echo "arch: $ARCH" >> "results/${CI_JOB_NAME}.yml"
-      echo "zip: $ZIP_FILE_FROM_BUILD" >> "results/${CI_JOB_NAME}.yml"
-      echo "runner_description: $CI_RUNNER_DESCRIPTION" >> "results/${CI_JOB_NAME}.yml"
-      if [ -n "$FS" ]; then
-        echo "fs: $FS" >> "results/${CI_JOB_NAME}.yml"
-      fi
+trigger:amd64-testing:
+  <<: *trigger_template
+  variables:
+    ARCH: 'amd64'
+    TYPE: 'testing'
 
-  artifacts:
-    when: always
-    paths:
-      - logs/
-      - results/
-    expire_in: 5 days
-  timeout: 1h
+# --- ARM64 Triggers ---
 
-# --- OS Tests ---
+trigger:arm64-stable:
+  <<: *trigger_template
+  variables:
+    ARCH: 'arm64'
+    TYPE: 'stable'
 
-test:os:ubuntu:
-  extends: .test_template
-  script:
-    - cd jobs
-    - ./test_os_ubuntu.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+# --- RISCV64 Triggers ---
 
-test:os:debian:
-  extends: .test_template
-  script:
-    - cd jobs
-    - ./test_os_debian.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+trigger:riscv64-stable:
+  <<: *trigger_template
+  variables:
+    ARCH: 'riscv64'
+    TYPE: 'stable'
 
-#test:os:fedora:
-#  extends: .test_template
-#  script:
-#    - |
-#      os="fedora"
-#      echo "--- Running OS Clone/Restore Tests for Fedora ($ARCH) ---"
-#      grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" qemu/cloudimages/cloud_images.conf | while IFS= read -r config_line; do
-#          release=$(echo "$config_line" | awk '{print $2}')
-#          image_name="${os}-${release}-${ARCH}.qcow2"
-#          image_path="qemu/cloudimages/${image_name}"
+# Add more combinations as needed.
+# For example, to add alternative-stable for amd64:
 #
-#          if [ -f "$image_path" ]; then
-#              echo "--- Testing ${image_path} ---"
-#              log_file="$LOG_DIR/os_fedora_${release}_${ARCH}_$(date +%Y%m%d_%H%M%S).log"
-#              ./os-clone-restore.sh --zip "${ZIP_DIR}/${ZIP_FILE}" --tmpl "$image_path" --arch "$ARCH" --validate-iso "isos/cidata.iso" --no-ssh-forward 2>&1 | tee -a "$log_file"
-#              rc=${PIPESTATUS[0]}
-#              if [ $rc -ne 0 ]; then
-#                  echo "--- Test FAILED for ${image_path} ---"
-#                  exit 1
-#              fi
-#              echo "--- Test PASSED for ${image_path} ---"
-#          else
-#              echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
-#          fi
-#      done
-#
-test:os:windows11:
-  extends: .test_template
-  tags:
-    - shell
-    - clonezilla
-    - windows
-  script:
-    - cd jobs
-    - ./test_os_windows.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
-
-#--- Filesystem Tests ---
-
-.fs_test_template:
-  extends: .test_template
-  script:
-    - cd jobs
-    - ./test_fs_${FS}.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
-
-test:fs:exfat:
-  extends: .fs_test_template
-  variables:
-    FS: exfat
-
-test:fs:ntfs:
-  extends: .fs_test_template
-  variables:
-    FS: ntfs
-
-test:fs:vfat:
-  extends: .fs_test_template
-  variables:
-    FS: vfat
-
-test:fs:ext4:
-  extends: .fs_test_template
-  variables:
-    FS: ext4
-
-test:fs:xfs:
-  extends: .fs_test_template
-  variables:
-    FS: xfs
-
-test:fs:btrfs:
-  extends: .fs_test_template
-  variables:
-    FS: btrfs
-
-test:liteserver:
-  extends: .test_template
-  script:
-    - cd jobs
-    - ./test_liteserver.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
-
-pages:
-  stage: deploy
-  needs:
-    - test:os:ubuntu
-    - test:os:debian
-    - test:os:windows11
-    - test:fs:exfat
-    - test:fs:ntfs
-    - test:fs:vfat
-    - test:fs:ext4
-    - test:fs:xfs
-    - test:fs:btrfs
-    - test:liteserver
-  script:
-    - chmod +x jobs/publish_reports.sh
-    - jobs/publish_reports.sh
-  artifacts:
-    paths:
-      - public
-    expire_in: 30 days
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: on_success
-    - if: '$CI_COMMIT_BRANCH == "test-reports"'
-      when: on_success
+# trigger:amd64-alternative-stable:
+#   <<: *trigger_template
+#   variables:
+#     ARCH: 'amd64'
+#     TYPE: 'alternative-stable'
