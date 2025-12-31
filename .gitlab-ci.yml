@@ -31,7 +31,7 @@ trigger:amd64-alternative-stable:
     ARCH: 'amd64'
     TYPE: 'alternative-stable'
 
-trigger:amd64-testing:
+trigger:amd64-alternative-testing:
   <<: *trigger_template
   variables:
     ARCH: 'amd64'
@@ -39,19 +39,17 @@ trigger:amd64-testing:
 
 # --- ARM64 Triggers ---
 
-trigger:arm64-stable:
+trigger:arm64:
   <<: *trigger_template
   variables:
     ARCH: 'arm64'
-    TYPE: 'stable'
 
 # --- RISCV64 Triggers ---
 
-trigger:riscv64-stable:
+trigger:riscv64:
   <<: *trigger_template
   variables:
     ARCH: 'riscv64'
-    TYPE: 'stable'
 
 # Add more combinations as needed.
 # For example, to add alternative-stable for amd64:
