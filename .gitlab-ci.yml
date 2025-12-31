@@ -25,6 +25,18 @@ trigger:amd64-testing:
     ARCH: 'amd64'
     TYPE: 'testing'
 
+trigger:amd64-alternative-stable:
+  <<: *trigger_template
+  variables:
+    ARCH: 'amd64'
+    TYPE: 'alternative-stable'
+
+trigger:amd64-testing:
+  <<: *trigger_template
+  variables:
+    ARCH: 'amd64'
+    TYPE: 'alternative-testing'
+
 # --- ARM64 Triggers ---
 
 trigger:arm64-stable:
