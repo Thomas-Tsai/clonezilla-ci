@@ -33,14 +33,15 @@ ZIP_FILENAME=$(grep "zip:" "$FIRST_RESULT_FILE" | cut -d' ' -f2-)
 ZIP_BASENAME=$(basename "$ZIP_FILENAME" .zip)
 REPORT_DIR="reports_repo/${ZIP_BASENAME}/${CI_PIPELINE_IID}"
 echo "INFO: Generating report in directory: ${REPORT_DIR}"
-mkdir -p "${REPORT_DIR}"
+mkdir -p "${REPORT_DIR}/logs"
+mkdir -p "${REPORT_DIR}/results"
+
 if [ -d "logs" ] && [ -n "$(ls -A logs)" ]; then
     echo "INFO: Copying logs to report directory..."
     cp -r logs/* "${REPORT_DIR}/logs/";
 fi
 if [ -d "results" ] && [ -n "$(ls -A results)" ]; then
     echo "INFO: Copying results to report directory..."
-    mkdir -p "${REPORT_DIR}/results"
     cp -r results/*.yml "${REPORT_DIR}/results/";
 fi
 
