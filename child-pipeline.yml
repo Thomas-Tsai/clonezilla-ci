@@ -13,6 +13,8 @@ default:
 
 variables:
   # ARCH and TYPE are provided by the parent pipeline.
+  # CLONEZILLA_ZIP_URL can be provided to specify a direct download URL.
+  CLONEZILLA_ZIP_URL: ""
   ZIP_DIR: "zip"
   CURL_OPTS: "-fsSL"
 

@@ -12,6 +12,8 @@ trigger:scheduled:
   trigger:
     include: 'child-pipeline.yml'
     strategy: depend
+    forward:
+      pipeline_variables: true
 
 # This template is for the manual trigger jobs below.
 .trigger_template: &trigger_template
@@ -21,6 +23,8 @@ trigger:scheduled:
   trigger:
     include: 'child-pipeline.yml'
     strategy: depend
+    forward:
+      pipeline_variables: true
 
 # --- AMD64 Triggers ---
 
