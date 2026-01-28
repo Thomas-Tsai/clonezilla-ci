@@ -18,6 +18,11 @@ ARCH="amd64"
 SSH_FORWARD_ENABLED=1
 QEMU_PID=0
 TIMEOUT_PID=0
+DISK_DRIVER="virtio-blk"
+DEFAULT_LOGICAL_BLOCK_SIZE=""
+DEFAULT_PHYSICAL_BLOCK_SIZE=""
+EFI_ENABLED=0
+TEMP_DIR_PATH=""
 
 # --- Helper Functions ---
 
@@ -46,6 +51,9 @@ print_usage() {
     echo "Optional Arguments:"
     echo "  --timeout <sec>     Maximum time in seconds to wait for QEMU to finish. (Default: $DEFAULT_TIMEOUT)"
     echo "  --arch <arch>       Target architecture (amd64, arm64, riscv64). Default: amd64."
+    echo "  --disk-driver <type>    Disk driver to use: 'virtio-blk' (default) or 'nvme'."
+    echo "  --disk-lbas <size>      Logical block size for the disk (e.g., 512, 4096)."
+    echo "  --disk-pbas <size>      Physical block size for the disk (e.g., 512, 4096)."
     echo "  --no-ssh-forward  Disable TCP port 2222 forwarding for SSH."
     echo "  --keeplog         Do not delete the log file after execution."
     echo "  -h, --help          Display this help message and exit."
@@ -107,6 +115,51 @@ while [[ "$#" -gt 0 ]]; do
             KEEP_LOG=1
             shift 1
             ;; 
+        --temp-dir)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                TEMP_DIR_PATH="$2"
+                shift 2
+            else
+                echo "Error: --temp-dir requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --efi)
+            EFI_ENABLED=1
+            shift 1
+            ;;
+        --disk-driver)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                if [[ "$2" == "virtio-blk" || "$2" == "nvme" ]]; then
+                    DISK_DRIVER="$2"
+                    shift 2
+                else
+                    echo "Error: Invalid value for --disk-driver. Must be 'virtio-blk' or 'nvme'." >&2
+                    print_usage
+                fi
+            else
+                echo "Error: --disk-driver requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --disk-lbas)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                DEFAULT_LOGICAL_BLOCK_SIZE="$2"
+                shift 2
+            else
+                echo "Error: --disk-lbas requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --disk-pbas)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                DEFAULT_PHYSICAL_BLOCK_SIZE="$2"
+                shift 2
+            else
+                echo "Error: --disk-pbas requires a value." >&2
+                print_usage
+            fi
+            ;;
         -h|--help)
             print_usage
             exit 0
@@ -156,6 +209,33 @@ LOG_FILE="logs/cci_validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
         "amd64")
             QEMU_BINARY="qemu-system-x86_64"
             QEMU_MACHINE_ARGS=()
+            if [ "$EFI_ENABLED" -eq 1 ]; then
+                echo "INFO: EFI boot enabled for amd64."
+                
+                # Determine the base directory for temp files. Use TEMP_DIR_PATH if set, otherwise default to "logs".
+                if [ -n "$TEMP_DIR_PATH" ]; then
+                    base_temp_dir="$TEMP_DIR_PATH"
+                else
+                    base_temp_dir="logs"
+                fi
+
+                # Create a temporary, writable copy of the OVMF_VARS file for this VM instance.
+                OVMF_VARS_TEMPLATE="/usr/share/OVMF/OVMF_VARS_4M.fd"
+                OVMF_CODE_FILE="/usr/share/OVMF/OVMF_CODE_4M.fd" # Use standard non-Secure Boot firmware
+                TEMP_OVMF_VARS="${base_temp_dir}/temp_ovmf_vars_$(basename "$DISK_IMAGE")_$(date +%s)_$RANDOM.fd"
+                if [ ! -f "$OVMF_VARS_TEMPLATE" ]; then
+                    echo "ERROR: UEFI VARS template not found at $OVMF_VARS_TEMPLATE" >&2
+                    exit 1
+                fi
+                if [ ! -f "$OVMF_CODE_FILE" ]; then
+                    echo "ERROR: UEFI CODE file not found at $OVMF_CODE_FILE" >&2
+                    exit 1
+                fi
+                cp "$OVMF_VARS_TEMPLATE" "$TEMP_OVMF_VARS"
+                
+                QEMU_MACHINE_ARGS+=("-drive" "if=pflash,format=raw,readonly=on,file=$OVMF_CODE_FILE")
+                QEMU_MACHINE_ARGS+=("-drive" "if=pflash,format=raw,file=$TEMP_OVMF_VARS")
+            fi
             ;;
         "arm64")
             QEMU_BINARY="qemu-system-aarch64"
@@ -195,9 +275,38 @@ LOG_FILE="logs/cci_validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
     fi
     QEMU_ARGS+=("-nic" "$NETDEV_ARGS")
 
-    # Use modern virtio-blk-pci for the main disk for consistent /dev/vdX naming.
-    QEMU_ARGS+=("-drive" "id=drive0,file=$DISK_IMAGE,format=qcow2,if=none")
-    QEMU_ARGS+=("-device" "virtio-blk-pci,drive=drive0")
+    # --- Dynamic Disk Configuration ---
+    if [[ "$DISK_DRIVER" == "nvme" ]]; then
+        # When using NVMe, q35 machine type is preferred for compatibility.
+        # This check prevents adding it multiple times if already set for other reasons.
+        if [[ ! " ${QEMU_MACHINE_ARGS[@]} " =~ " -machine " ]]; then
+            QEMU_MACHINE_ARGS+=("-machine" "q35")
+        fi
+        
+        # For NVMe, block sizes are properties of the device. Serial is also required.
+        drive_properties="id=drive0,file=$DISK_IMAGE,format=qcow2,if=none"
+        device_properties="drive=drive0,serial=validationsn0"
+
+        if [ -n "$DEFAULT_LOGICAL_BLOCK_SIZE" ]; then
+            device_properties+=",logical_block_size=${DEFAULT_LOGICAL_BLOCK_SIZE}"
+        fi
+        if [ -n "$DEFAULT_PHYSICAL_BLOCK_SIZE" ]; then
+            device_properties+=",physical_block_size=${DEFAULT_PHYSICAL_BLOCK_SIZE}"
+        fi
+        
+        QEMU_ARGS+=("-drive" "$drive_properties")
+        QEMU_ARGS+=("-device" "nvme,$device_properties")
+
+    else # Default to virtio-blk
+        # For virtio-blk, logical_block_size is a drive property. Physical is not supported.
+        drive_properties="id=drive0,file=$DISK_IMAGE,format=qcow2,if=none"
+        if [ -n "$DEFAULT_LOGICAL_BLOCK_SIZE" ]; then
+            drive_properties+=",logical_block_size=${DEFAULT_LOGICAL_BLOCK_SIZE}"
+        fi
+        
+        QEMU_ARGS+=("-drive" "$drive_properties")
+        QEMU_ARGS+=("-device" "virtio-blk-pci,drive=drive0")
+    fi
 
     # For riscv64, the CD-ROM must be attached as a virtio-blk device because the
     # standard IDE CD-ROM is not well-supported. For other architectures, -cdrom

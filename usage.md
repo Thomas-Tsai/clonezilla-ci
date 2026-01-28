@@ -255,6 +255,7 @@ This is an orchestration script that automates the full backup, restore, and val
 - Validates argument existence for input files.
 - Makes the Clonezilla image name configurable via `--image-name`.
 - Generates temporary `ocs-sr` command scripts to dynamically set the image name.
+- **Automatically detects UEFI boot mode** if the `--tmpl` QCOW2 filename contains "uefi".
 - Returns 0 for success and 1 for failure.
 
 **Workflow:**
@@ -271,11 +272,11 @@ This is an orchestration script that automates the full backup, restore, and val
   --zip ./isos/clonezilla-live-20251124-resolute-amd64.zip \
   --tmpl ./qemu/debian-sid-generic-amd64-daily-20250805-2195.qcow2
 
-# Run a full cycle with a custom image name
+# Run a full cycle with a custom image name and an UEFI template (will auto-detect EFI)
 ./os-clone-restore.sh \
   --zip ./isos/clonezilla-live-20251124-resolute-amd64.zip \
-  --tmpl ./qemu/debian-sid-generic-amd64-daily-20250805-2195.qcow2 \
-  --image-name "my-custom-image"
+  --tmpl ./qemu/win11-uefi.qcow2 \
+  --image-name "my-windows-efi-image"
 
 # Display help
 ./os-clone-restore.sh --help
@@ -287,6 +288,7 @@ This script boots a restored QCOW2 image with a cloud-init ISO to verify that th
 
 **Features:**
 - Uses long options (`--iso`, `--disk`, `--timeout`, `--keeplog`, `-h`/`--help`).
+- Supports NVMe (`--disk-driver nvme`) and custom block sizes (`--disk-lbas`, `--disk-pbas`) for validating restored images.
 - Validates argument existence.
 - Implements an intelligent timeout mechanism using background processes and `wait -n`.
 - Allows keeping log files for debugging with `--keeplog`.
@@ -297,8 +299,19 @@ This script boots a restored QCOW2 image with a cloud-init ISO to verify that th
 # Validate a restored disk image with a cloud-init ISO
 ./validate.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk ./qemu/restore.qcow2
 
-# Validate with a longer timeout and keep the log file
-./validate.sh --iso dev/cloudinit/cloud_init_config/cidata.iso --disk ./qemu/restore.qcow2 --timeout 600 --keeplog
+# Validate a restored 4Kn NVMe disk
+./validate.sh \
+  --iso dev/cloudinit/cloud_init_config/cidata.iso \
+  --disk ./qemu/restored-4kn-nvme.qcow2 \
+  --disk-driver nvme \
+  --disk-lbas 4096 \
+  --disk-pbas 4096
+
+# Validate a restored EFI disk image
+./validate.sh \
+  --iso dev/cloudinit/cloud_init_config/cidata.iso \
+  --disk ./qemu/restored-efi-disk.qcow2 \
+  --efi
 
 # Display help
 ./validate.sh --help
@@ -348,6 +361,9 @@ Boot Media Options (choose one method):
 
 VM and Task Options:
   --disk <path>           Path to a virtual disk image (.qcow2). Can be specified multiple times.
+  --disk-driver <type>    Disk driver for data disks: 'virtio-blk' (default) or 'nvme'.
+  --disk-lbas <size>      Logical block size for data disks (e.g., 512, 4096).
+  --disk-pbas <size>      Physical block size for data disks (e.g., 512, 4096, for NVMe).
   --image <path>          Path to the shared directory for Clonezilla images (default: ./partimag).
   --cmd <command>         Command string to execute inside Clonezilla (e.g., 'sudo ocs-sr ...').
   --cmdpath <path>        Path to a script file to execute inside Clonezilla.
@@ -355,7 +371,9 @@ VM and Task Options:
   --append-args-file <path> Path to a file containing custom kernel append arguments.
   --qemu-args <args>      A string of extra arguments to pass to the QEMU command. Can be specified multiple times.
   --log-dir <path>        Directory to store log files (default: ./logs).
+  --temp-dir <path>       Directory to store temporary files (e.g., UEFI VARS). Defaults to --log-dir if not set.
   --arch <arch>           Target architecture (amd64, arm64, riscv64). Default: amd64.
+  --efi                   Enable UEFI boot mode for amd64 architecture.
   --no-ssh-forward        Disable TCP port 2222 forwarding for SSH.
   -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal).
   -h, --help              Display this help message and exit.
@@ -367,14 +385,17 @@ Example (Backup with ZIP):
     --cmdpath ./dev/ocscmd/clone-first-disk.sh \
     --image ./partimag
 
-Example (Restore with extracted files):
+Example (Restore with extracted files and UEFI):
   ./qemu-clonezilla-ci-run.sh \
     --disk ./qemu/restore.qcow2 \
     --live ./isos/clonezilla.qcow2 \
     --kernel ./isos/vmlinuz \
     --initrd ./isos/initrd.img \
     --cmd 'sudo /usr/sbin/ocs-sr -g auto -e1 auto -e2 -c -r -j2 -p poweroff restoredisk my-img-name sda' \
-    --image ./partimag
+    --image ./partimag \
+    --efi \
+    --qemu-args "-drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd" \
+    --qemu-args "-drive if=pflash,format=raw,file=./logs/temp_ovmf_vars_$(date +%s)_$RANDOM.fd"
 ```
 
 ### `clonezilla-zip2qcow.sh`

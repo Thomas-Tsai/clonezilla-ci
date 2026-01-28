@@ -38,6 +38,9 @@ print_usage() {
     echo ""
     echo "VM and Task Options:"
     echo "  --disk <path>           Path to a virtual disk image (.qcow2). Can be specified multiple times."
+    echo "  --disk-lbas <size>      Logical block size for data disks (e.g., 512, 4096)."
+    echo "  --disk-pbas <size>      Physical block size for data disks (e.g., 512, 4096)."
+    echo "  --disk-driver <type>    Disk driver to use: 'virtio-blk' (default) or 'nvme'."
     echo "  --image <path>          Path to the shared directory for Clonezilla images (default: ./partimag)."
     echo "  --cmd <command>         Command string to execute inside Clonezilla (e.g., 'sudo ocs-sr ...')."
     echo "  --cmdpath <path>        Path to a script file to execute inside Clonezilla."
@@ -110,8 +113,13 @@ ZIP_IMAGE_SIZE="2G"
 ZIP_FORCE=0
 ARCH="amd64"
 ARCH_WAS_SET=0
+DEFAULT_LOGICAL_BLOCK_SIZE=""
+DEFAULT_PHYSICAL_BLOCK_SIZE=""
 EXTRA_QEMU_ARGS=()
 SSH_FORWARD_ENABLED=1
+DISK_DRIVER="virtio-blk"
+EFI_ENABLED=0
+TEMP_DIR_PATH=""
 
 # Argument parsing
 while [[ "$#" -gt 0 ]]; do
@@ -269,6 +277,51 @@ while [[ "$#" -gt 0 ]]; do
                 echo "Error: --log-dir requires a value." >&2
                 print_usage
             fi
+            ;;
+        --temp-dir)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                TEMP_DIR_PATH="$2"
+                shift 2
+            else
+                echo "Error: --temp-dir requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --disk-lbas)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                DEFAULT_LOGICAL_BLOCK_SIZE="$2"
+                shift 2
+            else
+                echo "Error: --disk-lbas requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --disk-pbas)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                DEFAULT_PHYSICAL_BLOCK_SIZE="$2"
+                shift 2
+            else
+                echo "Error: --disk-pbas requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --disk-driver)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                if [[ "$2" == "virtio-blk" || "$2" == "nvme" ]]; then
+                    DISK_DRIVER="$2"
+                    shift 2
+                else
+                    echo "Error: Invalid value for --disk-driver. Must be 'virtio-blk' or 'nvme'." >&2
+                    print_usage
+                fi
+            else
+                echo "Error: --disk-driver requires a value." >&2
+                print_usage
+            fi
+            ;;
+        --efi)
+            EFI_ENABLED=1
+            shift 1
             ;;
         *)
             echo "Error: Unknown option or missing value for $1" >&2
@@ -460,6 +513,70 @@ echo "-------------------------------------"
 
 # --- Disk and Boot Argument Configuration ---
 
+QEMU_DISK_ARGS_ARRAY=()
+QEMU_DATA_DISK_IDX=0 # Counter for data disks
+LAST_PCI_ADDR=3 # PCI address counter, start addresses from 0x4
+
+# --- 1. Configure Data Disks ---
+if [[ "$DISK_DRIVER" == "virtio-blk" ]]; then
+    DATA_PARTITION_SUFFIX='1'
+else # nvme
+    DATA_PARTITION_SUFFIX='p1'
+fi
+
+for data_disk_path in "${DISKS[@]}"; do
+    data_drive_id="data_drive${QEMU_DATA_DISK_IDX}"
+    data_drive_properties="id=${data_drive_id},file=${data_disk_path},format=qcow2,if=none"
+    
+    LAST_PCI_ADDR=$((LAST_PCI_ADDR + 1))
+    CURRENT_PCI_ADDR=$(printf '0x%x' "$LAST_PCI_ADDR")
+    
+    if [[ "$DISK_DRIVER" == "virtio-blk" ]]; then
+        QEMU_DISK_ARGS_ARRAY+=("-drive" "${data_drive_properties}")
+        QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${data_drive_id},bus=pci.0,addr=${CURRENT_PCI_ADDR}")
+    else # nvme
+        nvme_device_properties="drive=${data_drive_id},serial=data_sn${QEMU_DATA_DISK_IDX}"
+        if [ -n "$DEFAULT_LOGICAL_BLOCK_SIZE" ]; then
+            nvme_device_properties+=",logical_block_size=${DEFAULT_LOGICAL_BLOCK_SIZE}"
+        fi
+        if [ -n "$DEFAULT_PHYSICAL_BLOCK_SIZE" ]; then
+            nvme_device_properties+=",physical_block_size=${DEFAULT_PHYSICAL_BLOCK_SIZE}"
+        fi
+        QEMU_DISK_ARGS_ARRAY+=("-drive" "${data_drive_properties}")
+        QEMU_DISK_ARGS_ARRAY+=("-device" "nvme,${nvme_device_properties},bus=pci.0,addr=${CURRENT_PCI_ADDR}")
+    fi
+    QEMU_DATA_DISK_IDX=$((QEMU_DATA_DISK_IDX + 1))
+done
+
+# --- 2. Configure Clonezilla Live Media (always virtio-blk and always last) ---
+live_drive_id="clz_live_drive"
+live_drive_properties="id=${live_drive_id},file=${LIVE_DISK},format=qcow2,if=none,readonly=on"
+
+LAST_PCI_ADDR=$((LAST_PCI_ADDR + 1))
+CURRENT_PCI_ADDR=$(printf '0x%x' "$LAST_PCI_ADDR")
+QEMU_DISK_ARGS_ARRAY+=("-drive" "${live_drive_properties}")
+QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${live_drive_id},bus=pci.0,addr=${CURRENT_PCI_ADDR}")
+
+# --- Determine Live Media Device Name for Kernel Args ---
+LIVE_MEDIA_PARTITION_SUFFIX="1" # Partition 1 for virtio-blk
+if [[ "$DISK_DRIVER" == "nvme" ]]; then
+    # If data disks are NVMe, they don't use 'vd' names, so the live disk will be 'vda'
+    LIVE_MEDIA_DEVICE_NAME="vda"
+else
+    # If data disks are virtio-blk, they will be vda, vdb, ...
+    # The live disk will be the next one in the sequence.
+    # ASCII value of 'a' is 97.
+    LIVE_MEDIA_DEVICE_NAME_ASCII=$((97 + QEMU_DATA_DISK_IDX))
+    # Check for multi-character device names, although unlikely for this script
+    if (( LIVE_MEDIA_DEVICE_NAME_ASCII > 122 )); then # 'z'
+      echo "ERROR: Too many virtio-blk disks, cannot determine live media device name." >&2
+      exit 1
+    fi
+    LIVE_MEDIA_DEVICE_NAME_CHAR=$(printf "\\$(printf '%03o' "$LIVE_MEDIA_DEVICE_NAME_ASCII")")
+    LIVE_MEDIA_DEVICE_NAME="vd${LIVE_MEDIA_DEVICE_NAME_CHAR}"
+fi
+
+
 # If --append-args-file is used, read its content.
 if [ -n "$APPEND_ARGS_FILE" ]; then
     if [ ! -f "$APPEND_ARGS_FILE" ]; then
@@ -471,42 +588,6 @@ if [ -n "$APPEND_ARGS_FILE" ]; then
     # Sanitize the input by removing a single pair of leading/trailing single or double quotes.
     # This prevents issues if the file content is wrapped in quotes, which would break kernel argument parsing.
     CUSTOM_APPEND_ARGS=$(echo "$CUSTOM_APPEND_ARGS" | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//')
-fi
-
-# Combine user-specified disks and the live disk into a single array.
-ALL_DISKS=("${DISKS[@]}" "$LIVE_DISK")
-LIVE_DISK_INDEX=$((${#DISKS[@]}))
-
-QEMU_DISK_ARGS_ARRAY=()
-LIVE_MEDIA_DEVICE=""
-
-    # Use modern virtio-blk-pci devices for predictable /dev/vdX naming across all architectures.
-    DEVICE_NAMES=('vda' 'vdb' 'vdc' 'vdd' 'vde' 'vdf')
-    for i in "${!ALL_DISKS[@]}"; do
-        if [ $i -lt ${#DEVICE_NAMES[@]} ]; then
-            drive_id="drive${i}"
-            device_name="${DEVICE_NAMES[$i]}"
-            
-            # Start building the drive properties string
-            drive_properties="id=${drive_id},file=${ALL_DISKS[$i]},format=qcow2,if=none"
-
-            if [ $i -eq $LIVE_DISK_INDEX ]; then
-                # This is the Live Disk. Mark it as readonly, disable locking, and record its device name.
-                drive_properties+=",readonly=on"
-                LIVE_MEDIA_DEVICE="${device_name}"
-            fi
-            
-            QEMU_DISK_ARGS_ARRAY+=("-drive" "${drive_properties}")
-            QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${drive_id}")
-        else
-            echo "Warning: Maximum number of disks (${#DEVICE_NAMES[@]}) exceeded. Ignoring extra disks."
-            break
-        fi
-    done
-
-if [ -z "$LIVE_MEDIA_DEVICE" ]; then
-    echo "Error: Could not determine the device for the live media disk." >&2
-    print_usage
 fi
 
 # Build kernel append arguments.
@@ -523,10 +604,18 @@ else
     if [ "$ARCH" = "arm64" ]; then
         CONSOLE_ARG="console=ttyAMA0,38400n8"
     fi
+    # Construct the live-media path with the correct partition suffix
+    LIVE_MEDIA_WITH_PARTITION="/dev/${LIVE_MEDIA_DEVICE_NAME}${LIVE_MEDIA_PARTITION_SUFFIX}"
+
     APPEND_ARGS+=" locales=en_US.UTF-8 keyboard-layouts=us live-getty ${CONSOLE_ARG}"
-    APPEND_ARGS+=" live-media=/dev/${LIVE_MEDIA_DEVICE}1 live-media-path=/live toram"
+    APPEND_ARGS+=" live-media=${LIVE_MEDIA_WITH_PARTITION} live-media-path=/live toram"
     APPEND_ARGS+=" ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\""
-    APPEND_ARGS+=" ocs_prerun2=\"mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag\""
+    ocs_prerun2_mount="mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag"
+    # For NVMe, the QEMU machine needs to be explicitly specified for 9p to work reliably on some systems
+    if [[ "$DISK_DRIVER" == "nvme" ]]; then
+        QEMU_MACHINE_ARGS+=("-machine" "q35") # Ensure q35 is used for NVMe and 9p
+    fi
+    APPEND_ARGS+=" ocs_prerun2=\"${ocs_prerun2_mount}\""
     APPEND_ARGS+=" ocs_daemonon=\"ssh\" ocs_live_run=\"$OCS_COMMAND\""
 
     if [ "$INTERACTIVE_MODE" -eq 0 ]; then
@@ -542,6 +631,34 @@ case "$ARCH" in
     "amd64")
         QEMU_BINARY="qemu-system-x86_64"
         QEMU_MACHINE_ARGS=()
+        if [ "$EFI_ENABLED" -eq 1 ]; then
+            echo "INFO: EFI boot enabled for amd64."
+            
+            # Determine the base directory for temp files. Use TEMP_DIR_PATH if set, otherwise default to LOG_DIR.
+            if [ -n "$TEMP_DIR_PATH" ]; then
+                base_temp_dir="$TEMP_DIR_PATH"
+            else
+                base_temp_dir="$LOG_DIR"
+            fi
+            
+            # Create a temporary, writable copy of the OVMF_VARS file for this VM instance.
+            # This prevents instances from interfering with each other's NVRAM.
+            OVMF_VARS_TEMPLATE="/usr/share/OVMF/OVMF_VARS_4M.fd"
+            OVMF_CODE_FILE="/usr/share/OVMF/OVMF_CODE_4M.fd" # Use standard non-Secure Boot firmware
+            TEMP_OVMF_VARS="${base_temp_dir}/temp_ovmf_vars_$(date +%s)_$RANDOM.fd"
+            if [ ! -f "$OVMF_VARS_TEMPLATE" ]; then
+                echo "ERROR: UEFI VARS template not found at $OVMF_VARS_TEMPLATE" >&2
+                exit 1
+            fi
+            if [ ! -f "$OVMF_CODE_FILE" ]; then
+                echo "ERROR: UEFI CODE file not found at $OVMF_CODE_FILE" >&2
+                exit 1
+            fi
+            cp "$OVMF_VARS_TEMPLATE" "$TEMP_OVMF_VARS"
+            
+            QEMU_MACHINE_ARGS+=("-drive" "if=pflash,format=raw,readonly=on,file=$OVMF_CODE_FILE")
+            QEMU_MACHINE_ARGS+=("-drive" "if=pflash,format=raw,file=$TEMP_OVMF_VARS")
+        fi
         ;;
     "arm64")
         QEMU_BINARY="qemu-system-aarch64"

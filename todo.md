@@ -4,10 +4,11 @@ default prompt: 這是 clonezilla 準備來開發CI的目錄，裡面討論可�
 ## Overview
 This directory contains scripts and tools for automating Clonezilla operations in a Continuous Integration (CI) environment. The main scripts include `qemu-clonezilla-ci-run.sh`, which is used to run Clonezilla in a QEMU virtual machine, and `clonezilla-zip2qcow.sh`, which converts Clonezilla zip images to QCOW2 format for use in QEMU.
 
-- [x] 整個專案的readme 文件需要補充
+- [ ] 整個專案的readme 文件需要補充
 - [x] 整個專案的usage 文件需要補充
 - [x] 整個專案需要支援多架構，先處理 riscv-64, arm64 架構支援; 所有script 需要支援多架構
 - [x] 相依的套件要補上 qemu-efi-aarch64 qemu-system-arm for usage
+- [x] 增加 AMD64 架構下的 EFI 開機備份還原測試支援。
 - [ ] 容器化支援, 開發一個 Dockerfile 來建置一個包含所有相依套件的容器映像檔，方便在不同環境中執行這些腳本，要可以支援多架構，與 dev/testData, qemu/cloudimages, isos, zip 等目錄的掛載
 
 ## .gitlab-ci.yml 改進事項：
@@ -199,6 +200,10 @@ initrd.img,                  --initrd <path>         Path to the initrd file.
 -device mtd-ram,id=mtd0,drive=mtddev0,size=0x4000000 \ # Or similar mtd device
 要怎麼安全的合併到 qemu-clonezilla-ci-run.sh
 - [x] 修正 `qemu-clonezilla-ci-run.sh`，針對 `arm64` 架構，在 kernel append arguments 中指定 `console=ttyAMA0,38400n8` 以確保正常運作。
+- [x] 支援 NVMe 裝置模擬 (`--disk-driver nvme`)，並可指定 logical/physical block size，用於 4Kn 等進階測試場景。
+- [x] `qemu-clonezilla-ci-run.sh` 增加 `--efi` 選項，啟用 AMD64 EFI 開機支援。
+- [x] `qemu-clonezilla-ci-run.sh` 增加 `--temp-dir` 選項，用於指定臨時檔案存放目錄，支援 UEFI VARS 檔案清理。
+- [x] `qemu-clonezilla-ci-run.sh` 將 UEFI 相關的 `-pflash` 參數改為明確的 `-drive if=pflash,format=raw...` 語法。
 
 ## clonezilla-zip2qcow.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。
@@ -207,7 +212,7 @@ initrd.img,                  --initrd <path>         Path to the initrd file.
 ./clonezilla-zip2qcow.sh --zip clonezilla_image.zip --output outputdir/ --size 10G --force
 - [x] 4. 在步驟 Copying Kernel/Initrd files to the target directory，檔案名稱prefix採用clonezilla zip 的base name 來命名，而不是固定用 vmlinuz 與 initrd.img
 - [x] 自動下載最新的zip 檔案，當沒有指定 --zip 參數時，自動下載最新的 clonezilla zip 檔案，預設下載stable amd64 版本
-- [x] 修改 `clonezilla-zip2qcow.sh` 中的自動下載邏輯，改用 `download-clonezilla.sh` 腳本，並支援 `--type` 參數來指定下載的 Clonezilla 版本類型。
+- [x] 修改 `clonezilla-zip2qcow.sh` 中的自動下載邏輯，改用 `download-clonezilla.sh` 腳本，並支援 `--type` 參數。
 
 ## clonezilla-boot.sh 改進事項：
 - [x] rename clonezilla-iso-boot.sh 為 clonezilla-boot.sh
@@ -216,7 +221,7 @@ initrd.img,                  --initrd <path>         Path to the initrd file.
 - [x] 3. 自動下載 clonezilla iso 檔案，當沒有指定 --iso 參數時，自動下載最新的 clonezilla iso 檔案，預設下載stable amd64 iso 版本
 - [x] 增加參數 --zip 行為類似 qemu-clonezilla-ci-run.sh 的用 clonezilla-zip2qcow.sh , 自動解壓縮 zip 檔案取得 vmlinux, initrd.img, clonezilla-live-xxxx.qcow2, 並以qemu開機，用console 顯示。主要用來確認可以用clonezilla iso zip 開機就好，不需要額外指定append args 與 ocs cmd
 - [x] --disk 換成optional 參數, 如果有指定就掛載qcow2 磁碟映像檔案, 沒有指定就不掛載
-- [x] 修改 `clonezilla-boot.sh` 中的自動下載邏輯，改用 `download-clonezilla.sh` 腳本，並支援 `--type` 參數來指定下載的 Clonezilla 版本類型。
+- [x] 修改 `clonezilla-boot.sh` 中的自動下載邏輯，改用 `download-clonezilla.sh` 腳本，並支援 `--type` 參數。
 - [x] 修正 `clonezilla-boot.sh`，針對 `arm64` 架構，在 kernel append arguments 中指定 `console=ttyAMA0,38400n8` 以確保正常運作。
 
 ## clonezilla-download.sh
@@ -252,4 +257,7 @@ cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/c
 - [x] 增加執行結果回傳值，成功回傳0，失敗回傳1
 - [x] 增加選用參數 --keeplog 來保留log 檔案，預設會刪除log 檔案
 - [x] 自動判斷是否 --enable-kvm
-- [x] 初步確認 riscv64 debian, ubuntu os clone restore 進行於 validate fail. 剛剛實際測試 目前 validate.sh 確實會fail; 初步測試以-cdrom 會有問題 會找不到cdrom device; 改用 qemu-system-riscv64 -m 4096 -nographic -nic user,hostfwd=tcp::2222-:22 -drive id=drive0,file=qemu/debian-13-riscv64.qcow2,format=qcow2,if=none -device virtio-blk-pci,drive=drive0 -object rng-random,filename=/dev/urandom,id=rng -device virtio-rng-device,rng=rng -machine virt -kernel /usr/lib/u-boot/qemu-riscv64_smode/uboot.elf -append "root=LABEL=rootfs console=ttyS0" -drive if=none,id=seed,media=cdrom,file=isos/cidata.iso -device virtio-blk-device,drive=seed 可以正常進行cloud init ; 但是cloud init 輸出的訊息沒有看到...但是確認有作用
+- [x] 支援 NVMe 裝置模擬 (`--disk-driver nvme`)，並可指定 logical/physical block size，用於 4Kn 等進階測試場景。
+- [x] `validate.sh` 增加 `--efi` 選項，啟用 AMD64 EFI 開機支援。
+- [x] `validate.sh` 增加 `--temp-dir` 選項，用於指定臨時檔案存放目錄，支援 UEFI VARS 檔案清理。
+- [x] `validate.sh` 將 UEFI 相關的 `-pflash` 參數改為明確的 `-drive if=pflash,format=raw...` 語法。

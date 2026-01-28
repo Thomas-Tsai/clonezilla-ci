@@ -72,6 +72,10 @@ while [[ "$#" -gt 0 ]]; do
             QEMU_EXTRA_ARGS+=" --no-ssh-forward"
             shift 1
             ;;
+        --efi)
+            QEMU_EXTRA_ARGS+=" --efi"
+            shift 1
+            ;;
         --arch)
             ARCH="$2"
             shift 2
@@ -134,6 +138,12 @@ fi
 if [ -z "$CLONE_IMAGE_NAME" ]; then
     CLONE_IMAGE_NAME=$(basename "$TEMPLATE_QCOW" .qcow2)
     echo "INFO: --image-name not specified, deriving from template: $CLONE_IMAGE_NAME"
+fi
+
+# Auto-detect UEFI requirement from template filename
+if [[ "$(basename "$TEMPLATE_QCOW")" == *"uefi"* ]]; then
+    echo "INFO: 'uefi' detected in template filename, enabling EFI boot mode."
+    QEMU_EXTRA_ARGS+=" --efi"
 fi
 
 # Check for required scripts
@@ -206,6 +216,7 @@ sed "s/\"debian-sid\"/\"$CLONE_IMAGE_NAME\"/" "dev/ocscmd/clone-first-disk.sh" >
   --cmdpath "$CLONE_SCRIPT_PATH" \
   --image "$PARTIMAG_DIR" \
   --arch "$ARCH" \
+  --temp-dir "$TEMP_DIR" \
   $QEMU_EXTRA_ARGS
 echo "--- Backup completed successfully. ---"
 echo
@@ -228,6 +239,7 @@ sed "s/\"debian-sid\"/\"$CLONE_IMAGE_NAME\"/" "dev/ocscmd/restore-first-disk.sh"
   --cmdpath "$RESTORE_SCRIPT_PATH" \
   --image "$PARTIMAG_DIR" \
   --arch "$ARCH" \
+  --temp-dir "$TEMP_DIR" \
   $QEMU_EXTRA_ARGS
 echo "--- Restore completed successfully. ---"
 echo
@@ -238,6 +250,7 @@ echo "--- (Step 5/5) Validating the Restored Disk ---"
   --disk "$RESTORE_DISK" \
   --timeout 1200 \
   --arch "$ARCH" \
+  --temp-dir "$TEMP_DIR" \
   $QEMU_EXTRA_ARGS
 echo "--- Validation completed successfully. ---"
 echo
