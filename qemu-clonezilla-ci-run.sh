@@ -120,6 +120,7 @@ SSH_FORWARD_ENABLED=1
 DISK_DRIVER="virtio-blk"
 EFI_ENABLED=0
 TEMP_DIR_PATH=""
+PCI_BUS_NAME="pci.0"
 
 # Argument parsing
 while [[ "$#" -gt 0 ]]; do
@@ -511,6 +512,66 @@ else
 fi
 echo "-------------------------------------"
 
+# --- QEMU Execution ---
+
+# Set QEMU binary and machine type based on architecture
+case "$ARCH" in
+    "amd64")
+        QEMU_BINARY="qemu-system-x86_64"
+        QEMU_MACHINE_ARGS=()
+        if [ "$EFI_ENABLED" -eq 1 ]; then
+            echo "INFO: EFI boot enabled for amd64."
+            
+            # Determine the base directory for temp files. Use TEMP_DIR_PATH if set, otherwise default to LOG_DIR.
+            if [ -n "$TEMP_DIR_PATH" ]; then
+                base_temp_dir="$TEMP_DIR_PATH"
+            else
+                base_temp_dir="$LOG_DIR"
+            fi
+            
+            # Create a temporary, writable copy of the OVMF_VARS file for this VM instance.
+            # This prevents instances from interfering with each other's NVRAM.
+            OVMF_VARS_TEMPLATE="/usr/share/OVMF/OVMF_VARS_4M.fd"
+            OVMF_CODE_FILE="/usr/share/OVMF/OVMF_CODE_4M.fd" # Use standard non-Secure Boot firmware
+            TEMP_OVMF_VARS="${base_temp_dir}/temp_ovmf_vars_$(date +%s)_$RANDOM.fd"
+            if [ ! -f "$OVMF_VARS_TEMPLATE" ]; then
+                echo "ERROR: UEFI VARS template not found at $OVMF_VARS_TEMPLATE" >&2
+                exit 1
+            fi
+            if [ ! -f "$OVMF_CODE_FILE" ]; then
+                echo "ERROR: UEFI CODE file not found at $OVMF_CODE_FILE" >&2
+                exit 1
+            fi
+            cp "$OVMF_VARS_TEMPLATE" "$TEMP_OVMF_VARS"
+            
+            QEMU_MACHINE_ARGS+=("-drive" "if=pflash,format=raw,readonly=on,file=$OVMF_CODE_FILE")
+            QEMU_MACHINE_ARGS+=("-drive" "if=pflash,format=raw,file=$TEMP_OVMF_VARS")
+        fi
+        ;;
+    "arm64")
+        QEMU_BINARY="qemu-system-aarch64"
+        QEMU_MACHINE_ARGS=("-machine" "virt" "-bios" "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd")
+        PCI_BUS_NAME="pcie.0"
+        ;;
+    "riscv64")
+        QEMU_BINARY="qemu-system-riscv64"
+        QEMU_MACHINE_ARGS=("-machine" "virt")
+        PCI_BUS_NAME="pcie.0"
+        ;;
+    *)
+        echo "Error: Unsupported architecture: $ARCH" >&2
+        print_usage
+        ;;
+esac
+
+# Check if QEMU binary exists
+if ! command -v "$QEMU_BINARY" &> /dev/null; then
+    echo "Error: QEMU binary not found for architecture '$ARCH': $QEMU_BINARY" >&2
+    echo "Please ensure the QEMU system emulator for '$ARCH' is installed and in your PATH." >&2
+    echo "On Debian/Ubuntu, you might need to install 'qemu-system-arm' (for arm64) or 'qemu-system-misc' (for riscv64)." >&2
+    exit 1
+fi
+
 # --- Disk and Boot Argument Configuration ---
 
 QEMU_DISK_ARGS_ARRAY=()
@@ -533,7 +594,7 @@ for data_disk_path in "${DISKS[@]}"; do
     
     if [[ "$DISK_DRIVER" == "virtio-blk" ]]; then
         QEMU_DISK_ARGS_ARRAY+=("-drive" "${data_drive_properties}")
-        QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${data_drive_id},bus=pci.0,addr=${CURRENT_PCI_ADDR}")
+        QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${data_drive_id},bus=${PCI_BUS_NAME},addr=${CURRENT_PCI_ADDR}")
     else # nvme
         nvme_device_properties="drive=${data_drive_id},serial=data_sn${QEMU_DATA_DISK_IDX}"
         if [ -n "$DEFAULT_LOGICAL_BLOCK_SIZE" ]; then
@@ -543,7 +604,7 @@ for data_disk_path in "${DISKS[@]}"; do
             nvme_device_properties+=",physical_block_size=${DEFAULT_PHYSICAL_BLOCK_SIZE}"
         fi
         QEMU_DISK_ARGS_ARRAY+=("-drive" "${data_drive_properties}")
-        QEMU_DISK_ARGS_ARRAY+=("-device" "nvme,${nvme_device_properties},bus=pci.0,addr=${CURRENT_PCI_ADDR}")
+        QEMU_DISK_ARGS_ARRAY+=("-device" "nvme,${nvme_device_properties},bus=${PCI_BUS_NAME},addr=${CURRENT_PCI_ADDR}")
     fi
     QEMU_DATA_DISK_IDX=$((QEMU_DATA_DISK_IDX + 1))
 done
@@ -555,7 +616,7 @@ live_drive_properties="id=${live_drive_id},file=${LIVE_DISK},format=qcow2,if=non
 LAST_PCI_ADDR=$((LAST_PCI_ADDR + 1))
 CURRENT_PCI_ADDR=$(printf '0x%x' "$LAST_PCI_ADDR")
 QEMU_DISK_ARGS_ARRAY+=("-drive" "${live_drive_properties}")
-QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${live_drive_id},bus=pci.0,addr=${CURRENT_PCI_ADDR}")
+QEMU_DISK_ARGS_ARRAY+=("-device" "virtio-blk-pci,drive=${live_drive_id},bus=${PCI_BUS_NAME},addr=${CURRENT_PCI_ADDR}")
 
 # --- Determine Live Media Device Name for Kernel Args ---
 LIVE_MEDIA_PARTITION_SUFFIX="1" # Partition 1 for virtio-blk
@@ -626,62 +687,6 @@ fi
 
 # --- QEMU Execution ---
 
-# Set QEMU binary and machine type based on architecture
-case "$ARCH" in
-    "amd64")
-        QEMU_BINARY="qemu-system-x86_64"
-        QEMU_MACHINE_ARGS=()
-        if [ "$EFI_ENABLED" -eq 1 ]; then
-            echo "INFO: EFI boot enabled for amd64."
-            
-            # Determine the base directory for temp files. Use TEMP_DIR_PATH if set, otherwise default to LOG_DIR.
-            if [ -n "$TEMP_DIR_PATH" ]; then
-                base_temp_dir="$TEMP_DIR_PATH"
-            else
-                base_temp_dir="$LOG_DIR"
-            fi
-            
-            # Create a temporary, writable copy of the OVMF_VARS file for this VM instance.
-            # This prevents instances from interfering with each other's NVRAM.
-            OVMF_VARS_TEMPLATE="/usr/share/OVMF/OVMF_VARS_4M.fd"
-            OVMF_CODE_FILE="/usr/share/OVMF/OVMF_CODE_4M.fd" # Use standard non-Secure Boot firmware
-            TEMP_OVMF_VARS="${base_temp_dir}/temp_ovmf_vars_$(date +%s)_$RANDOM.fd"
-            if [ ! -f "$OVMF_VARS_TEMPLATE" ]; then
-                echo "ERROR: UEFI VARS template not found at $OVMF_VARS_TEMPLATE" >&2
-                exit 1
-            fi
-            if [ ! -f "$OVMF_CODE_FILE" ]; then
-                echo "ERROR: UEFI CODE file not found at $OVMF_CODE_FILE" >&2
-                exit 1
-            fi
-            cp "$OVMF_VARS_TEMPLATE" "$TEMP_OVMF_VARS"
-            
-            QEMU_MACHINE_ARGS+=("-drive" "if=pflash,format=raw,readonly=on,file=$OVMF_CODE_FILE")
-            QEMU_MACHINE_ARGS+=("-drive" "if=pflash,format=raw,file=$TEMP_OVMF_VARS")
-        fi
-        ;;
-    "arm64")
-        QEMU_BINARY="qemu-system-aarch64"
-        QEMU_MACHINE_ARGS=("-machine" "virt" "-bios" "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd")
-        ;;
-    "riscv64")
-        QEMU_BINARY="qemu-system-riscv64"
-        QEMU_MACHINE_ARGS=("-machine" "virt")
-        ;;
-    *)
-        echo "Error: Unsupported architecture: $ARCH" >&2
-        print_usage
-        ;;
-esac
-
-# Check if QEMU binary exists
-if ! command -v "$QEMU_BINARY" &> /dev/null; then
-    echo "Error: QEMU binary not found for architecture '$ARCH': $QEMU_BINARY" >&2
-    echo "Please ensure the QEMU system emulator for '$ARCH' is installed and in your PATH." >&2
-    echo "On Debian/Ubuntu, you might need to install 'qemu-system-arm' (for arm64) or 'qemu-system-misc' (for riscv64)." >&2
-    exit 1
-fi
-
 # Build the QEMU command using a bash array for robustness.
 # This avoids all the quoting issues associated with building a command string and using eval.
 QEMU_ARGS=(
@@ -742,7 +747,7 @@ QEMU_ARGS+=(
     "-device" "virtio-net-pci,netdev=net0"
     "-netdev" "$NETDEV_ARGS"
     "-fsdev" "local,id=hostshare,path=$PARTIMAG_PATH,security_model=mapped-xattr"
-    "-device" "virtio-9p-pci,fsdev=hostshare,mount_tag=hostshare"
+    "-device" "virtio-9p-pci,fsdev=hostshare,mount_tag=hostshare,bus=${PCI_BUS_NAME}"
     "-append" "$APPEND_ARGS"
 )
 
