@@ -195,6 +195,49 @@ run_liteserver_test() {
     assertEquals "Lite Server test failed. Check log: $LOG_FILE" 0 "$RESULT"
 }
 
+# Test for lite multicast from image
+run_lite_multicast_from_image_test() {
+    local TEST_START_TIME=$(date +%s)
+    local TEST_NAME="lite_multicast_from_image_test_${ARCH}"
+    local TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
+
+    echo "--- Running Lite Multicast From Image Test ($ARCH) (Log: $LOG_FILE) ---"
+
+    local test_disk_path="$PROJECT_ROOT/qemu/ubuntu-24.04-amd64.qcow2"
+    local RESULT=0
+
+    if [ -f "$test_disk_path" ]; then
+        echo "INFO: Using disk image '$test_disk_path' for lite multicast test."
+        # The command to be tested. The zip file comes from the script's global var.
+        (cd .. && ./liteserver.sh \
+            --zip "$CLONEZILLA_ZIP" \
+            --arch "$ARCH" \
+            --disk "$test_disk_path" \
+            --cmdpath "dev/ocscmd/lite-multicast.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
+        
+        local SCRIPT_RESULT="${PIPESTATUS[0]}"
+        RESULT="$SCRIPT_RESULT"
+    else
+        echo "WARNING: Skipping Lite Multicast From Image test for arch '$ARCH'. Disk image '$test_disk_path' not found."
+        RESULT=0
+    fi
+    
+    local TEST_END_TIME=$(date +%s)
+    local TEST_DURATION=$((TEST_END_TIME - TEST_START_TIME))
+
+    if [ "$RESULT" -eq 0 ]; then
+        if [ ! -f "$test_disk_path" ]; then
+            echo "--- Lite Multicast From Image Test SKIPPED (${TEST_DURATION} seconds) ---"
+        else
+            echo "--- Lite Multicast From Image Test Passed (${TEST_DURATION} seconds) ---"
+        fi
+    else
+        echo "--- Lite Multicast From Image Test FAILED (${TEST_DURATION} seconds) ---"
+    fi
+    assertEquals "Lite Multicast From Image test failed. Check log: $LOG_FILE" 0 "$RESULT"
+}
+
 # Main initialization function
 initialize_test_environment() {
     # Setup Logging
