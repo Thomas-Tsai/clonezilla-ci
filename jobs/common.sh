@@ -135,14 +135,14 @@ run_fs_clone_restore() {
     assertEquals "$fs clone/restore script failed for $fs. Check log: $LOG_FILE" 0 "$RESULT"
 }
 
-# Test for liteserver
-run_liteserver_test() {
+# Test for lite bt from device
+run_lite_bt_from_device_test() {
     local TEST_START_TIME=$(date +%s)
-    local TEST_NAME="liteserver_test_${ARCH}"
+    local TEST_NAME="lite_bt_from_device_test_${ARCH}"
     local TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
     local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
 
-    echo "--- Running Lite Server Test ($ARCH) (Log: $LOG_FILE) ---"
+    echo "--- Running Lite BT From Device Test ($ARCH) (Log: $LOG_FILE) ---"
 
     # Dynamically find a debian disk for the current architecture
     local os="debian"
@@ -164,18 +164,19 @@ run_liteserver_test() {
     fi
 
     if [ -f "$test_disk_path" ]; then
-        echo "INFO: Using disk image '$test_disk_path' for liteserver test."
+        echo "INFO: Using disk image '$test_disk_path' for lite bt from device test."
         # The command to be tested. The zip file comes from the script's global var.
         (cd .. && ./liteserver.sh \
             --zip "$CLONEZILLA_ZIP" \
             --arch "$ARCH" \
             --disk "$test_disk_path" \
-            --cmdpath "dev/ocscmd/lite-bt.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
+            --imgname "$TEST_NAME" \
+            --cmdpath "dev/ocscmd/lite-bt-dev.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
         
         local SCRIPT_RESULT="${PIPESTATUS[0]}"
         RESULT="$SCRIPT_RESULT"
     else
-        echo "WARNING: Skipping Lite Server test for arch '$ARCH'. No suitable Debian disk image found."
+        echo "WARNING: Skipping Lite BT From Device test for arch '$ARCH'. No suitable Debian disk image found."
         # Mark test as skipped by ensuring RESULT is 0.
         RESULT=0
     fi
@@ -185,14 +186,58 @@ run_liteserver_test() {
 
     if [ "$RESULT" -eq 0 ]; then
         if [ ! -f "$test_disk_path" ]; then
-            echo "--- Lite Server Test SKIPPED (${TEST_DURATION} seconds) ---"
+            echo "--- Lite BT From Device Test SKIPPED (${TEST_DURATION} seconds) ---"
         else
-            echo "--- Lite Server Test Passed (${TEST_DURATION} seconds) ---"
+            echo "--- Lite BT From Device Test Passed (${TEST_DURATION} seconds) ---"
         fi
     else
-        echo "--- Lite Server Test FAILED (${TEST_DURATION} seconds) ---"
+        echo "--- Lite BT From Device Test FAILED (${TEST_DURATION} seconds) ---"
     fi
-    assertEquals "Lite Server test failed. Check log: $LOG_FILE" 0 "$RESULT"
+    assertEquals "Lite BT From Device test failed. Check log: $LOG_FILE" 0 "$RESULT"
+}
+
+# Test for lite bt from image
+run_lite_bt_from_image_test() {
+    local TEST_START_TIME=$(date +%s)
+    local TEST_NAME="lite_bt_from_image_test_${ARCH}"
+    local TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
+
+    echo "--- Running Lite BT From Image Test ($ARCH) (Log: $LOG_FILE) ---"
+
+    local test_disk_path="$PROJECT_ROOT/qemu/ubuntu-24.04-amd64.qcow2"
+    local RESULT=0
+
+    if [ -f "$test_disk_path" ]; then
+        echo "INFO: Using disk image '$test_disk_path' for lite bt from image test."
+        # The command to be tested. The zip file comes from the script's global var.
+        (cd .. && ./liteserver.sh \
+            --zip "$CLONEZILLA_ZIP" \
+            --arch "$ARCH" \
+            --disk "$test_disk_path" \
+            --imgname "$TEST_NAME" \
+            --cmdpath "dev/ocscmd/lite-bt-image.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
+        
+        local SCRIPT_RESULT="${PIPESTATUS[0]}"
+        RESULT="$SCRIPT_RESULT"
+    else
+        echo "WARNING: Skipping Lite BT From Image test for arch '$ARCH'. Disk image '$test_disk_path' not found."
+        RESULT=0
+    fi
+    
+    local TEST_END_TIME=$(date +%s)
+    local TEST_DURATION=$((TEST_END_TIME - TEST_START_TIME))
+
+    if [ "$RESULT" -eq 0 ]; then
+        if [ ! -f "$test_disk_path" ]; then
+            echo "--- Lite BT From Image Test SKIPPED (${TEST_DURATION} seconds) ---"
+        else
+            echo "--- Lite BT From Image Test Passed (${TEST_DURATION} seconds) ---"
+        fi
+    else
+        echo "--- Lite BT From Image Test FAILED (${TEST_DURATION} seconds) ---"
+    fi
+    assertEquals "Lite BT From Image test failed. Check log: $LOG_FILE" 0 "$RESULT"
 }
 
 # Test for lite multicast from image
@@ -214,7 +259,8 @@ run_lite_multicast_from_image_test() {
             --zip "$CLONEZILLA_ZIP" \
             --arch "$ARCH" \
             --disk "$test_disk_path" \
-            --cmdpath "dev/ocscmd/lite-multicast.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
+            --imgname "$TEST_NAME" \
+            --cmdpath "dev/ocscmd/lite-multicast-image.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
         
         local SCRIPT_RESULT="${PIPESTATUS[0]}"
         RESULT="$SCRIPT_RESULT"
@@ -236,6 +282,50 @@ run_lite_multicast_from_image_test() {
         echo "--- Lite Multicast From Image Test FAILED (${TEST_DURATION} seconds) ---"
     fi
     assertEquals "Lite Multicast From Image test failed. Check log: $LOG_FILE" 0 "$RESULT"
+}
+
+# Test for lite multicast from device
+run_lite_multicast_from_device_test() {
+    local TEST_START_TIME=$(date +%s)
+    local TEST_NAME="lite_multicast_from_device_test_${ARCH}"
+    local TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    local LOG_FILE="$LOG_DIR/${TEST_NAME}_${TIMESTAMP}.log"
+
+    echo "--- Running Lite Multicast From Device Test ($ARCH) (Log: $LOG_FILE) ---"
+
+    local test_disk_path="$PROJECT_ROOT/qemu/ubuntu-24.04-amd64.qcow2"
+    local RESULT=0
+
+    if [ -f "$test_disk_path" ]; then
+        echo "INFO: Using disk image '$test_disk_path' for lite multicast device test."
+        # The command to be tested. The zip file comes from the script's global var.
+        (cd .. && ./liteserver.sh \
+            --zip "$CLONEZILLA_ZIP" \
+            --arch "$ARCH" \
+            --disk "$test_disk_path" \
+            --imgname "$TEST_NAME" \
+            --cmdpath "dev/ocscmd/lite-multicast-dev.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
+        
+        local SCRIPT_RESULT="${PIPESTATUS[0]}"
+        RESULT="$SCRIPT_RESULT"
+    else
+        echo "WARNING: Skipping Lite Multicast From Device test for arch '$ARCH'. Disk image '$test_disk_path' not found."
+        RESULT=0
+    fi
+    
+    local TEST_END_TIME=$(date +%s)
+    local TEST_DURATION=$((TEST_END_TIME - TEST_START_TIME))
+
+    if [ "$RESULT" -eq 0 ]; then
+        if [ ! -f "$test_disk_path" ]; then
+            echo "--- Lite Multicast From Device Test SKIPPED (${TEST_DURATION} seconds) ---"
+        else
+            echo "--- Lite Multicast From Device Test Passed (${TEST_DURATION} seconds) ---"
+        fi
+    else
+        echo "--- Lite Multicast From Device Test FAILED (${TEST_DURATION} seconds) ---"
+    fi
+    assertEquals "Lite Multicast From Device test failed. Check log: $LOG_FILE" 0 "$RESULT"
 }
 
 # Main initialization function

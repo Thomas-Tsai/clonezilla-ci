@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# test_liteserver.sh - Tests the liteserver functionality.
+# test_lite_multicast_from_device.sh - Tests the lite multicast from device functionality.
 #
 
 # Source the common script
@@ -41,14 +41,14 @@ if [[ -n "$CLONEZILLA_ZIP" ]]; then
     CLONEZILLA_ZIP="$(realpath "$CLONEZILLA_ZIP")"
 fi
 
-# --- Test for liteserver ---
-test_liteserver() {
+# --- Test for lite multicast from device ---
+test_lite_multicast_from_device() {
     # Check if the required disk for the test exists.
     local test_disk="$PROJECT_ROOT/qemu/cloudimages/debian-13-amd64.qcow2"
     if [ -f "$test_disk" ]; then
-        run_liteserver_test # No --no-ssh-forward parameter is needed here
+        run_lite_multicast_from_device_test
     else
-        echo "Skipping Lite Server test: required disk not found at ${test_disk}"
+        echo "Skipping Lite Multicast From Device test: required disk not found at ${test_disk}"
     fi
 }
 

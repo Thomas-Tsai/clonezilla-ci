@@ -11,8 +11,13 @@ CMD=""
 CMDPATH=""
 KEEP_TEMP=false
 LOG_DIR="logs"
-PARTIMAG_DIR="partimag"
+PARTIMAG_DIR="" # Default to empty, will be set in main
+IMG_NAME="vda" # Default image name
 ARCH="amd64" # Default architecture
+VALIDATE_ISO="isos/cidata.iso"
+VALIDATE_TIMEOUT=1200
+NO_SSH_FORWARD=false
+EFI_ENABLED=false
 
 # --- Helper Functions ---
 info() {
@@ -56,7 +61,11 @@ Required Options:
 Optional Options:
   --arch <arch>             Target architecture (amd64, arm64, riscv64). Default: amd64.
   --no-ssh-forward      Disable SSH port forwarding in QEMU (for parallel CI runs).
+  --imgname <name>          Custom image name (default: vda).
   --keep-temp               Keep temporary files (e.g., restored client disks) on failure or completion.
+  --validate-iso <path>     Path to the cloud-init ISO for validation (default: isos/cidata.iso).
+  --timeout <seconds>       Timeout for the validation process (default: 1200).
+  --efi                     Enable EFI boot mode.
   -h, --help                Display this help message and exit.
 
 EOF
@@ -99,7 +108,23 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --no-ssh-forward)
-            # Accept and ignore, as internal calls already use this flag.
+            NO_SSH_FORWARD=true
+            shift 1
+            ;;
+        --imgname)
+            IMG_NAME="$2"
+            shift 2
+            ;;
+        --validate-iso)
+            VALIDATE_ISO="$2"
+            shift 2
+            ;;
+        --timeout)
+            VALIDATE_TIMEOUT="$2"
+            shift 2
+            ;;
+        --efi)
+            EFI_ENABLED=true
             shift 1
             ;;
         -h|--help)
@@ -153,6 +178,10 @@ for disk in "${SERVER_DISKS[@]}"; do
         error "Server disk not found: $disk"
     fi
 done
+
+if [[ ! -f "$VALIDATE_ISO" ]]; then
+    error "Validation ISO not found: $VALIDATE_ISO"
+fi
 
 # --- Main Execution ---
 TMP_DIR=""
@@ -236,6 +265,17 @@ main() {
     TMP_DIR=$(mktemp -d -p "$PWD" "cci_liteserver_XXXXXX")
     echo $$ > "$TMP_DIR/liteserver.pid"
     info "Temporary directory created at: $TMP_DIR"
+
+    # Set PARTIMAG_DIR if not provided
+    if [[ -z "$PARTIMAG_DIR" ]]; then
+        PARTIMAG_DIR="$TMP_DIR/partimag"
+        mkdir -p "$PARTIMAG_DIR"
+        info "No --image specified. Using isolated directory: $PARTIMAG_DIR"
+    fi
+
+    # Export IMG_NAME for scripts
+    export OCS_IMG_NAME="$IMG_NAME"
+    info "Using image name: $IMG_NAME"
 
     # Process Server ZIP
     SERVER_CZ_ZIP_BASENAME=$(basename "$SERVER_ZIP_FILE" .zip)
@@ -341,6 +381,7 @@ main() {
     ./qemu-clonezilla-ci-run.sh "${SERVER_QEMU_RUN_ARGS[@]}" &
     SERVER_PID=$!
     info "Server started with PID: $SERVER_PID. Waiting for it to boot..."
+    info "sleep 60 seconds to wait for server to boot..."
     sleep 60
 
     # Prepare client command args
@@ -368,8 +409,25 @@ main() {
 
     # --- Phase 2: Validate Restored Disk ---
     info "--- Phase 2: Validate Restored Disk ---"
-    # TODO: Implement validation for multiple disks.
-    info "Validation for multiple restored disks is not yet implemented. Skipping."
+    for disk in "${CLIENT_DISKS[@]}"; do
+        info "Validating restored disk: $disk"
+        VALIDATE_ARGS=(
+            "--iso" "$VALIDATE_ISO"
+            "--disk" "$disk"
+            "--timeout" "$VALIDATE_TIMEOUT"
+            "--arch" "$ARCH"
+            "--temp-dir" "$TMP_DIR"
+        )
+        if [ "$NO_SSH_FORWARD" = true ]; then
+            VALIDATE_ARGS+=("--no-ssh-forward")
+        fi
+        if [ "$EFI_ENABLED" = true ]; then
+            VALIDATE_ARGS+=("--efi")
+        fi
+
+        ./validate.sh "${VALIDATE_ARGS[@]}"
+    done
+    info "Validation phase complete."
 
     # --- Phase 3: Final Cleanup ---
     info "--- Phase 3: Final Cleanup ---"

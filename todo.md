@@ -81,7 +81,7 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 
 client --cmd 參數機本是固定的
 server 提供 --cmd, --cmdpath 參數來讓使用者可以自訂 server 的行為 透過 qemu-clonezilla-ci-run.sh 傳入qemu
-如：./liteserver.sh --zip clone.zip --disk a.qcow2 --disk b.qcow2 --cmdpath dev/ocscmd/lite-bt.sh --keep-temp
+如：./liteserver.sh --zip clone.zip --disk a.qcow2 --disk b.qcow2 --cmdpath dev/ocscmd/lite-bt-dev.sh --keep-temp
 
 整個flow 為
 1. prepare zip

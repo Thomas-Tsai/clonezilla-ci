@@ -227,11 +227,29 @@ test:fs:btrfs:
   variables:
     FS: btrfs
 
-test:liteserver:
+test:lite_bt_from_device:
   extends: .test_template
   script:
     - cd jobs
-    - ./test_liteserver.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+    - ./test_lite_bt_from_device.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+
+test:lite_bt_from_image:
+  extends: .test_template
+  script:
+    - cd jobs
+    - ./test_lite_bt_from_image.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+
+test:lite_multicast_from_image:
+  extends: .test_template
+  script:
+    - cd jobs
+    - ./test_lite_multicast_from_image.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+
+test:lite_multicast_from_device:
+  extends: .test_template
+  script:
+    - cd jobs
+    - ./test_lite_multicast_from_device.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 pages:
   stage: deploy
@@ -245,7 +263,10 @@ pages:
     - test:fs:ext4
     - test:fs:xfs
     - test:fs:btrfs
-    - test:liteserver
+    - test:lite_bt_from_device
+    - test:lite_bt_from_image
+    - test:lite_multicast_from_image
+    - test:lite_multicast_from_device
   script:
     - chmod +x jobs/publish_reports.sh
     - jobs/publish_reports.sh
