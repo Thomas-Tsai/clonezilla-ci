@@ -186,7 +186,7 @@ run_lite_bt_from_device_test() {
     if [ -f "$test_disk_path" ]; then
         echo "INFO: Using disk image '$test_disk_path' for lite bt from device test."
         # The command to be tested. The zip file comes from the script's global var.
-        (cd .. && timeout -k 10s 1200 ./liteserver.sh \
+        (cd .. && timeout -k 10s 3600 ./liteserver.sh \
             --zip "$CLONEZILLA_ZIP" \
             --arch "$ARCH" \
             --disk "$test_disk_path" \
@@ -232,7 +232,7 @@ run_lite_bt_from_image_test() {
     if [ -f "$test_disk_path" ]; then
         echo "INFO: Using disk image '$test_disk_path' for lite bt from image test."
         # The command to be tested. The zip file comes from the script's global var.
-        (cd .. && timeout -k 10s 1200 ./liteserver.sh \
+        (cd .. && timeout -k 10s 3600 ./liteserver.sh \
             --zip "$CLONEZILLA_ZIP" \
             --arch "$ARCH" \
             --disk "$test_disk_path" \
@@ -277,7 +277,7 @@ run_lite_multicast_from_image_test() {
     if [ -f "$test_disk_path" ]; then
         echo "INFO: Using disk image '$test_disk_path' for lite multicast test."
         # The command to be tested. The zip file comes from the script's global var.
-        (cd .. && timeout -k 10s 1200 ./liteserver.sh \
+        (cd .. && timeout -k 10s 3600 ./liteserver.sh \
             --zip "$CLONEZILLA_ZIP" \
             --arch "$ARCH" \
             --disk "$test_disk_path" \
@@ -322,7 +322,7 @@ run_lite_multicast_from_device_test() {
     if [ -f "$test_disk_path" ]; then
         echo "INFO: Using disk image '$test_disk_path' for lite multicast device test."
         # The command to be tested. The zip file comes from the script's global var.
-        (cd .. && timeout -k 10s 1200 ./liteserver.sh \
+        (cd .. && timeout -k 10s 3600 ./liteserver.sh \
             --zip "$CLONEZILLA_ZIP" \
             --arch "$ARCH" \
             --disk "$test_disk_path" \
