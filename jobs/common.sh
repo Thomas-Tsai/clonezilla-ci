@@ -28,6 +28,28 @@ error() {
     exit 1
 }
 
+# Dynamically find a debian disk for the given architecture
+get_debian_disk_path() {
+    local arch="$1"
+    local os="debian"
+    local config_file="$PROJECT_ROOT/qemu/cloudimages/cloud_images.conf"
+    local test_disk_path=""
+
+    if [ -f "$config_file" ]; then
+        # Find the first available debian image for the given architecture
+        local config_line
+        config_line=$(grep -E "^\s*${os}\s+.*\s+${arch}\s+" "$config_file" | head -n 1)
+
+        if [ -n "$config_line" ]; then
+            local release
+            release=$(echo "$config_line" | awk '{print $2}')
+            local image_name="${os}-${release}-${arch}.qcow2"
+            test_disk_path="$PROJECT_ROOT/qemu/cloudimages/${image_name}"
+        fi
+    fi
+    echo "$test_disk_path"
+}
+
 # --- Configurable variables ---
 SHUNIT_TIMER=1 # Enable test timing
 CLONEZILLA_ZIP=""
@@ -157,24 +179,9 @@ run_lite_bt_from_device_test() {
 
     echo "--- Running Lite BT From Device Test ($ARCH) (Log: $LOG_FILE) ---"
 
-    # Dynamically find a debian disk for the current architecture
-    local os="debian"
-    local config_file="$PROJECT_ROOT/qemu/cloudimages/cloud_images.conf"
-    local test_disk_path=""
+    local test_disk_path
+    test_disk_path=$(get_debian_disk_path "$ARCH")
     local RESULT=0 # Default to success (for skip case)
-
-    if [ -f "$config_file" ]; then
-        # Find the first available debian image for the given architecture
-        local config_line
-        config_line=$(grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" "$config_file" | head -n 1)
-
-        if [ -n "$config_line" ]; then
-            local release
-            release=$(echo "$config_line" | awk '{print $2}')
-            local image_name="${os}-${release}-${ARCH}.qcow2"
-            test_disk_path="$PROJECT_ROOT/qemu/cloudimages/${image_name}"
-        fi
-    fi
 
     if [ -f "$test_disk_path" ]; then
         echo "INFO: Using disk image '$test_disk_path' for lite bt from device test."
@@ -218,7 +225,8 @@ run_lite_bt_from_image_test() {
 
     echo "--- Running Lite BT From Image Test ($ARCH) (Log: $LOG_FILE) ---"
 
-    local test_disk_path="$PROJECT_ROOT/qemu/ubuntu-24.04-amd64.qcow2"
+    local test_disk_path
+    test_disk_path=$(get_debian_disk_path "$ARCH")
     local RESULT=0
 
     if [ -f "$test_disk_path" ]; then
@@ -262,7 +270,8 @@ run_lite_multicast_from_image_test() {
 
     echo "--- Running Lite Multicast From Image Test ($ARCH) (Log: $LOG_FILE) ---"
 
-    local test_disk_path="$PROJECT_ROOT/qemu/ubuntu-24.04-amd64.qcow2"
+    local test_disk_path
+    test_disk_path=$(get_debian_disk_path "$ARCH")
     local RESULT=0
 
     if [ -f "$test_disk_path" ]; then
@@ -306,7 +315,8 @@ run_lite_multicast_from_device_test() {
 
     echo "--- Running Lite Multicast From Device Test ($ARCH) (Log: $LOG_FILE) ---"
 
-    local test_disk_path="$PROJECT_ROOT/qemu/ubuntu-24.04-amd64.qcow2"
+    local test_disk_path
+    test_disk_path=$(get_debian_disk_path "$ARCH")
     local RESULT=0
 
     if [ -f "$test_disk_path" ]; then
