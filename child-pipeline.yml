@@ -185,6 +185,10 @@ test:os:windows11:
     - shell
     - clonezilla
     - windows
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
   script:
     - cd jobs
     - ./test_os_windows.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
@@ -251,12 +255,19 @@ test:lite_multicast_from_device:
     - cd jobs
     - ./test_lite_multicast_from_device.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
+test:lite_raw_data:
+  extends: .test_template
+  script:
+    - cd jobs
+    - ./test_lite_raw_data.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+
 pages:
   stage: deploy
   needs:
     - test:os:ubuntu
     - test:os:debian
-    - test:os:windows11
+    - job: test:os:windows11
+      optional: true
     - test:fs:exfat
     - test:fs:ntfs
     - test:fs:vfat
@@ -267,6 +278,7 @@ pages:
     - test:lite_bt_from_image
     - test:lite_multicast_from_image
     - test:lite_multicast_from_device
+    - test:lite_raw_data
   script:
     - chmod +x jobs/publish_reports.sh
     - jobs/publish_reports.sh
