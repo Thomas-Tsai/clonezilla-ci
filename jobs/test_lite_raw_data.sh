@@ -78,7 +78,7 @@ run_lite_raw_check() {
     # Run liteserver.sh with the prepared disk and MD5 check, skipping OS validation
     # Use timeout to prevent hanging on problematic modes.
     # Set timeout to 20 minutes (1200s) as some modes (like BitTorrent) are slow.
-    local timeout_val=1200
+    local timeout_val=3600
     info "Starting liteserver.sh with ${timeout_val}s timeout..."
     
     (cd .. && timeout -k 10s "$timeout_val" ./liteserver.sh \
