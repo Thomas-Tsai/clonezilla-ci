@@ -14,6 +14,20 @@ if [[ "$(basename "$PWD")" != "jobs" ]]; then
     exit 1
 fi
 
+# --- Helper Functions ---
+info() {
+    echo "$(date +'%T') [INFO] - $*"
+}
+
+warn() {
+    echo "$(date +'%T') [WARNING] - $*"
+}
+
+error() {
+    echo "$(date +'%T') [ERROR] - $*" >&2
+    exit 1
+}
+
 # --- Configurable variables ---
 SHUNIT_TIMER=1 # Enable test timing
 CLONEZILLA_ZIP=""
@@ -54,8 +68,7 @@ autodownload_clonezilla_zip() {
         DOWNLOADED_ZIP_PATH=$("$DOWNLOAD_SCRIPT" --arch "$ARCH" --type "$TYPE" -o "$DEFAULT_DOWNLOAD_DIR")
         
         if [ $? -ne 0 ] || [ -z "$DOWNLOADED_ZIP_PATH" ] || [ ! -f "$DOWNLOADED_ZIP_PATH" ]; then
-            echo "ERROR: Failed to auto-download Clonezilla zip using $DOWNLOAD_SCRIPT." >&2
-            exit 1
+            error "Failed to auto-download Clonezilla zip using $DOWNLOAD_SCRIPT."
         fi
         
         # Set the global CLONEZILLA_ZIP variable to the absolute path
@@ -166,12 +179,12 @@ run_lite_bt_from_device_test() {
     if [ -f "$test_disk_path" ]; then
         echo "INFO: Using disk image '$test_disk_path' for lite bt from device test."
         # The command to be tested. The zip file comes from the script's global var.
-        (cd .. && ./liteserver.sh \
+        (cd .. && timeout -k 10s 1200 ./liteserver.sh \
             --zip "$CLONEZILLA_ZIP" \
             --arch "$ARCH" \
             --disk "$test_disk_path" \
             --imgname "$TEST_NAME" \
-            --cmdpath "dev/ocscmd/lite-bt-dev.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
+            --cmdpath "dev/ocscmd/lite-bt-dev.sh" --no-ssh-forward --no-validate) 2>&1 | tee -a "$LOG_FILE"
         
         local SCRIPT_RESULT="${PIPESTATUS[0]}"
         RESULT="$SCRIPT_RESULT"
@@ -211,12 +224,12 @@ run_lite_bt_from_image_test() {
     if [ -f "$test_disk_path" ]; then
         echo "INFO: Using disk image '$test_disk_path' for lite bt from image test."
         # The command to be tested. The zip file comes from the script's global var.
-        (cd .. && ./liteserver.sh \
+        (cd .. && timeout -k 10s 1200 ./liteserver.sh \
             --zip "$CLONEZILLA_ZIP" \
             --arch "$ARCH" \
             --disk "$test_disk_path" \
             --imgname "$TEST_NAME" \
-            --cmdpath "dev/ocscmd/lite-bt-image.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
+            --cmdpath "dev/ocscmd/lite-bt-image.sh" --no-ssh-forward --no-validate) 2>&1 | tee -a "$LOG_FILE"
         
         local SCRIPT_RESULT="${PIPESTATUS[0]}"
         RESULT="$SCRIPT_RESULT"
@@ -255,12 +268,12 @@ run_lite_multicast_from_image_test() {
     if [ -f "$test_disk_path" ]; then
         echo "INFO: Using disk image '$test_disk_path' for lite multicast test."
         # The command to be tested. The zip file comes from the script's global var.
-        (cd .. && ./liteserver.sh \
+        (cd .. && timeout -k 10s 1200 ./liteserver.sh \
             --zip "$CLONEZILLA_ZIP" \
             --arch "$ARCH" \
             --disk "$test_disk_path" \
             --imgname "$TEST_NAME" \
-            --cmdpath "dev/ocscmd/lite-multicast-image.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
+            --cmdpath "dev/ocscmd/lite-multicast-image.sh" --no-ssh-forward --no-validate) 2>&1 | tee -a "$LOG_FILE"
         
         local SCRIPT_RESULT="${PIPESTATUS[0]}"
         RESULT="$SCRIPT_RESULT"
@@ -299,12 +312,12 @@ run_lite_multicast_from_device_test() {
     if [ -f "$test_disk_path" ]; then
         echo "INFO: Using disk image '$test_disk_path' for lite multicast device test."
         # The command to be tested. The zip file comes from the script's global var.
-        (cd .. && ./liteserver.sh \
+        (cd .. && timeout -k 10s 1200 ./liteserver.sh \
             --zip "$CLONEZILLA_ZIP" \
             --arch "$ARCH" \
             --disk "$test_disk_path" \
             --imgname "$TEST_NAME" \
-            --cmdpath "dev/ocscmd/lite-multicast-dev.sh" --no-ssh-forward) 2>&1 | tee -a "$LOG_FILE"
+            --cmdpath "dev/ocscmd/lite-multicast-dev.sh" --no-ssh-forward --no-validate) 2>&1 | tee -a "$LOG_FILE"
         
         local SCRIPT_RESULT="${PIPESTATUS[0]}"
         RESULT="$SCRIPT_RESULT"

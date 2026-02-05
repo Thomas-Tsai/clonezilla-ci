@@ -34,11 +34,11 @@ IMG_NAME="${OCS_IMG_NAME:-MT-vda}"
 if [ -d "/home/partimag/$IMG_NAME" ]; then
     rm -rf "/home/partimag/$IMG_NAME"
 fi
-/usr/sbin/ocs-sr -b -q2 -c -j2 -edio -z9p -i 0 -sfsck -scs -senc -p command savedisk "$IMG_NAME" vda
+/usr/sbin/ocs-sr -b -q1 -c -j2 -edio -z9p -i 0 -sfsck -scs -senc -p command savedisk "$IMG_NAME" vda
 
 echo "Info: Running Clonezilla lite server multicast image"
 mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag
-ocs-live-feed-img -cbm both -dm start-new-dhcpd -lscm massive-deployment -mdst from-image -g auto -e1 auto -e2 -r -x -j2 -k0 -sc0 -p command -md multicast --clients-to-wait 1 start "$IMG_NAME" vda
+ocs-live-feed-img -cbm both -dm start-new-dhcpd -lscm massive-deployment -mdst from-image -g auto -e1 auto -e2 -r -x -j2 -edio -k0 -sc0 -p command -md multicast --clients-to-wait 1 start "$IMG_NAME" vda
 
 echo "Info: Powering off the server"
 poweroff

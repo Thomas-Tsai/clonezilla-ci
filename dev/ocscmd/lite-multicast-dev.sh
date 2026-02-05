@@ -28,7 +28,7 @@ ip a add 192.168.0.1/24 dev "${IFACE}"
 ip r add default via 192.168.0.1
 
 echo "Info: Running Clonezilla lite server multicast device"
-ocs-live-feed-img -cbm both -dm start-new-dhcpd -lscm massive-deployment -mdst from-device -cdt disk-2-mdisks -bsdf sfsck -g auto -e1 auto -e2 -x -j2 -k0 -p true -md multicast --clients-to-wait 1 start "${OCS_IMG_NAME:-vda}" vda
+ocs-live-feed-img -cbm both -dm start-new-dhcpd -lscm massive-deployment -mdst from-device -cdt disk-2-mdisks -bsdf sfsck -g auto -e1 auto -e2 -r -x -j2 -k0 -p true -md multicast --clients-to-wait 1 start "${OCS_IMG_NAME:-vda}" vda
 
 echo "Info: Powering off the server"
 poweroff

@@ -14,9 +14,11 @@ done
 
 if [ -z "$IFACE" ]; then
   echo "Error: Could not find an unconfigured network interface to use for the server." >&2
+  echo "DEBUG: No unconfigured interface found" > /dev/ttyS0
   exit 1
 fi
 echo "Info: Found unconfigured network interface for server: $IFACE"
+echo "DEBUG: Found interface $IFACE" > /dev/ttyS0
 
 # In lite server mode, the server has to set a static IP address and run DHCP service,
 # so the client can lease an IP address and find the server.
@@ -28,12 +30,14 @@ ip a add 192.168.0.2/24 dev "${IFACE}"
 ip r add default via 192.168.0.2
 # Now run the Clonezilla lite server command with retries.
 # This loop will try to execute 'ocs-live-get-img 192.168.0.1' up to 10 times.
+echo "DEBUG: Starting ocs-live-get-img loop" > /dev/ttyS0
 for i in $(seq 1 10); do
   echo "Attempt $i/10: Running ocs-live-get-img..."
-  # Execute the command.
-  # If 'ocs-live-get-img' succeeds (returns an exit code of 0), the '&& break' part will execute,
-  # causing the loop to terminate immediately.
-  ocs-live-get-img 192.168.0.1 && break
+  echo "DEBUG: Attempt $i running ocs-live-get-img" > /dev/ttyS0
+  # Execute the command with non-interactive flags.
+  # -g auto: use the default values for everything
+  # -batch: run in batch mode
+  ocs-live-get-img --batch 192.168.0.1 "${OCS_IMG_NAME:-}" && break
 
   # If 'ocs-live-get-img' fails (returns a non-zero exit code), the code below will execute.
   if [ $i -lt 10 ]; then

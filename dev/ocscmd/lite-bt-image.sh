@@ -34,7 +34,7 @@ IMG_NAME="${OCS_IMG_NAME:-BT-vda}"
 if [ -d "/home/partimag/$IMG_NAME" ]; then
     rm -rf "/home/partimag/$IMG_NAME"
 fi
-/usr/sbin/ocs-sr -b -q2 -c -j2 -edio -z9p -i 0 -sfsck -scs -senc -p command savedisk "$IMG_NAME" vda
+/usr/sbin/ocs-sr -b -q1 -c -j2 -edio -z9p -i 0 -sfsck -scs -senc -p command savedisk "$IMG_NAME" vda
 
 echo "Info: Running Clonezilla lite server multicast image"
 mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag

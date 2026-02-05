@@ -18,6 +18,7 @@ VALIDATE_ISO="isos/cidata.iso"
 VALIDATE_TIMEOUT=1200
 NO_SSH_FORWARD=false
 EFI_ENABLED=false
+DEBUG_MODE=false
 
 # --- Helper Functions ---
 info() {
@@ -66,10 +67,14 @@ Optional Options:
   --validate-iso <path>     Path to the cloud-init ISO for validation (default: isos/cidata.iso).
   --timeout <seconds>       Timeout for the validation process (default: 1200).
   --efi                     Enable EFI boot mode.
+  --check-raw-md5 <path>    Path to an MD5 file to verify the last partition's raw data.
+  --no-validate             Skip the OS validation phase.
   -h, --help                Display this help message and exit.
-
 EOF
 }
+
+CHECK_RAW_MD5=""
+NO_VALIDATE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -125,6 +130,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --efi)
             EFI_ENABLED=true
+            shift 1
+            ;;
+        --check-raw-md5)
+            CHECK_RAW_MD5="$2"
+            shift 2
+            ;;
+        --no-validate)
+            NO_VALIDATE=true
+            shift 1
+            ;;
+        --debug)
+            DEBUG_MODE=true
             shift 1
             ;;
         -h|--help)
@@ -193,28 +210,51 @@ cleanup() {
 
     info "--- Running final cleanup ---"
 
-    if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
-        info "Terminating server process (PID $SERVER_PID) and its children..."
-        # Get all children of the server script PID
-        CHILD_PIDS=$(pgrep -P "$SERVER_PID" || true)
-
-        # Terminate children gracefully first, then the parent
-        if [[ -n "$CHILD_PIDS" ]]; then
-            kill $CHILD_PIDS 2>/dev/null
-        fi
-        kill "$SERVER_PID" 2>/dev/null
-        sleep 2 # Give it a moment to terminate gracefully
-
-        # If parent is still there, it or some children might be stuck. Force kill.
-        if kill -0 "$SERVER_PID" 2>/dev/null; then
-            info "Server process (PID $SERVER_PID) or its children still alive. Force killing..."
-            # Re-fetch PIDs in case new children spawned, though unlikely.
-            CHILD_PIDS=$(pgrep -P "$SERVER_PID" || true)
-            if [[ -n "$CHILD_PIDS" ]]; then
-                kill -9 $CHILD_PIDS 2>/dev/null
+    if [ "$DEBUG_MODE" = false ]; then
+        # Function to kill a process and all its descendants
+        kill_descendants() {
+            local target_pid=$1
+            local signal=${2:-TERM}
+            if [[ -n "$target_pid" ]] && kill -0 "$target_pid" 2>/dev/null; then
+                # Get children recursively
+                local children=$(pgrep -P "$target_pid" || true)
+                for child in $children; do
+                    kill_descendants "$child" "$signal"
+                done
+                kill -"$signal" "$target_pid" 2>/dev/null
             fi
-            kill -9 "$SERVER_PID" 2>/dev/null
+        }
+
+        if [[ -n "${SERVER_PID:-}" ]]; then
+            info "Terminating server process (PID $SERVER_PID) and its descendants..."
+            kill_descendants "$SERVER_PID" "TERM"
+            sleep 2
+            if kill -0 "$SERVER_PID" 2>/dev/null; then
+                info "Server still alive, force killing..."
+                kill_descendants "$SERVER_PID" "KILL"
+            fi
         fi
+
+        if [[ -n "${CLIENT_PID:-}" ]]; then
+            info "Terminating client process (PID $CLIENT_PID) and its descendants..."
+            kill_descendants "$CLIENT_PID" "TERM"
+            sleep 2
+            if kill -0 "$CLIENT_PID" 2>/dev/null; then
+                info "Client still alive, force killing..."
+                kill_descendants "$CLIENT_PID" "KILL"
+            fi
+        fi
+
+        # Final safety check: kill any other children of this script
+        local REMAINING_CHILDREN=$(pgrep -P $$ || true)
+        if [[ -n "$REMAINING_CHILDREN" ]]; then
+            info "Killing remaining child processes of this script: $REMAINING_CHILDREN"
+            kill $REMAINING_CHILDREN 2>/dev/null || true
+            sleep 1
+            kill -9 $REMAINING_CHILDREN 2>/dev/null || true
+        fi
+    else
+        info "Debug mode is active. Skipping VM termination."
     fi
 
     if [ "$KEEP_TEMP" = true ]; then
@@ -350,90 +390,200 @@ main() {
     # --- Phase 1: Start Server and Client ---
     info "--- Phase 1: Start Server and Client VMs ---"
     SERVER_PID=""
+    CLIENT_PID=""
     PRIVATE_PORT=$((10000 + (RANDOM % 50000)))
     info "Using private network port: $PRIVATE_PORT"
 
-    # The main cleanup trap, defined at the top of the script, is sufficient.
+    if [ "$DEBUG_MODE" = true ]; then
+        info "--- Running in DEBUG MODE ---"
+        local SERVER_SSH_PORT=2222
+        local CLIENT_SSH_PORT=2223
 
-    # Prepare server command args
-    SERVER_QEMU_RUN_ARGS=(
-        "--live" "$SERVER_CZ_LIVE_QCOW"
-        "--kernel" "$SERVER_CZ_KERNEL"
-        "--initrd" "$SERVER_CZ_INITRD"
-        "--image" "$PARTIMAG_DIR"
-        "--no-ssh-forward"
-        "--arch" "$ARCH"
-    )
-    for disk in "${TEMP_SERVER_DISKS[@]}"; do
-        SERVER_QEMU_RUN_ARGS+=("--disk" "$disk")
-    done
-    if [[ -n "$CMD" ]]; then
-        SERVER_QEMU_RUN_ARGS+=("--cmd" "$CMD")
-    elif [[ -n "$CMDPATH" ]]; then
-        SERVER_QEMU_RUN_ARGS+=("--cmdpath" "$CMDPATH")
-    fi
-    SERVER_QEMU_RUN_ARGS+=(
-        "--qemu-args" "-netdev socket,id=privnet,listen=:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
-    )
-
-    # Start Server
-    info "Starting Lite Server in the background..."
-    ./qemu-clonezilla-ci-run.sh "${SERVER_QEMU_RUN_ARGS[@]}" &
-    SERVER_PID=$!
-    info "Server started with PID: $SERVER_PID. Waiting for it to boot..."
-    info "sleep 60 seconds to wait for server to boot..."
-    sleep 60
-
-    # Prepare client command args
-    CLIENT_QEMU_RUN_ARGS=(
-        "--live" "$CLIENT_CZ_LIVE_QCOW"
-        "--kernel" "$CLIENT_CZ_KERNEL"
-        "--initrd" "$CLIENT_CZ_INITRD"
-        "--image" "$PARTIMAG_DIR"
-        "--no-ssh-forward"
-        "--cmdpath" "dev/ocscmd/lite-client.sh"
-        "--arch" "$ARCH"
-        "--qemu-args" "-netdev socket,id=privnet,connect=:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
-    )
-    for disk in "${CLIENT_DISKS[@]}"; do
-        CLIENT_QEMU_RUN_ARGS+=("--disk" "$disk")
-    done
-    
-    # Start Client
-    info "Starting Client to receive the image..."
-    ./qemu-clonezilla-ci-run.sh "${CLIENT_QEMU_RUN_ARGS[@]}"
-    
-    info "Client has finished."
-    # The cleanup trap, triggered on script exit, will handle terminating the server.
-    info "Server/Client phase complete."
-
-    # --- Phase 2: Validate Restored Disk ---
-    info "--- Phase 2: Validate Restored Disk ---"
-    for disk in "${CLIENT_DISKS[@]}"; do
-        info "Validating restored disk: $disk"
-        VALIDATE_ARGS=(
-            "--iso" "$VALIDATE_ISO"
-            "--disk" "$disk"
-            "--timeout" "$VALIDATE_TIMEOUT"
+        # Prepare server command args for debug
+        SERVER_QEMU_RUN_ARGS=(
+            "--live" "$SERVER_CZ_LIVE_QCOW"
+            "--kernel" "$SERVER_CZ_KERNEL"
+            "--initrd" "$SERVER_CZ_INITRD"
+            "--image" "$PARTIMAG_DIR"
             "--arch" "$ARCH"
-            "--temp-dir" "$TMP_DIR"
+            "--ssh-port" "$SERVER_SSH_PORT"
+            "--interactive"
+            "--cmd" "bash"
         )
-        if [ "$NO_SSH_FORWARD" = true ]; then
-            VALIDATE_ARGS+=("--no-ssh-forward")
+        for disk in "${TEMP_SERVER_DISKS[@]}"; do
+            SERVER_QEMU_RUN_ARGS+=("--disk" "$disk")
+        done
+        SERVER_QEMU_RUN_ARGS+=(
+            "--qemu-args" "-netdev socket,id=privnet,listen=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
+        )
+
+        # Start Server in debug mode
+        info "Starting Lite Server in DEBUG mode..."
+        ./qemu-clonezilla-ci-run.sh "${SERVER_QEMU_RUN_ARGS[@]}" &
+        SERVER_PID=$!
+        info "Server started with PID: $SERVER_PID"
+
+        # Prepare client command args for debug
+        CLIENT_QEMU_RUN_ARGS=(
+            "--live" "$CLIENT_CZ_LIVE_QCOW"
+            "--kernel" "$CLIENT_CZ_KERNEL"
+            "--initrd" "$CLIENT_CZ_INITRD"
+            "--image" "$PARTIMAG_DIR"
+            "--arch" "$ARCH"
+            "--ssh-port" "$CLIENT_SSH_PORT"
+            "--interactive"
+            "--cmd" "bash"
+            "--qemu-args" "-netdev socket,id=privnet,connect=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
+        )
+        for disk in "${CLIENT_DISKS[@]}"; do
+            CLIENT_QEMU_RUN_ARGS+=("--disk" "$disk")
+        done
+        
+        # Start Client in debug mode
+        info "Starting Client in DEBUG mode..."
+        ./qemu-clonezilla-ci-run.sh "${CLIENT_QEMU_RUN_ARGS[@]}" &
+        CLIENT_PID=$!
+        info "Client started with PID: $CLIENT_PID"
+
+        info "------------------------------------------------------------"
+        info "               VMs are running in DEBUG MODE"
+        info "------------------------------------------------------------"
+        info "SSH into SERVER: ssh -p $SERVER_SSH_PORT user@localhost"
+        info "SSH into CLIENT: ssh -p $CLIENT_SSH_PORT user@localhost"
+        info "Temporary directory with disks: $TMP_DIR"
+        info "Press Ctrl+C to terminate this script and the VMs."
+        info "------------------------------------------------------------"
+        
+        # Wait for user to Ctrl+C
+        wait
+    else
+        # The main cleanup trap, defined at the top of the script, is sufficient.
+
+        # Prepare server command args
+        SERVER_QEMU_RUN_ARGS=(
+            "--live" "$SERVER_CZ_LIVE_QCOW"
+            "--kernel" "$SERVER_CZ_KERNEL"
+            "--initrd" "$SERVER_CZ_INITRD"
+            "--image" "$PARTIMAG_DIR"
+            "--no-ssh-forward"
+            "--arch" "$ARCH"
+        )
+        for disk in "${TEMP_SERVER_DISKS[@]}"; do
+            SERVER_QEMU_RUN_ARGS+=("--disk" "$disk")
+        done
+        if [[ -n "$CMD" ]]; then
+            SERVER_QEMU_RUN_ARGS+=("--cmd" "$CMD")
+        elif [[ -n "$CMDPATH" ]]; then
+            SERVER_QEMU_RUN_ARGS+=("--cmdpath" "$CMDPATH")
         fi
-        if [ "$EFI_ENABLED" = true ]; then
-            VALIDATE_ARGS+=("--efi")
+        SERVER_QEMU_RUN_ARGS+=(
+            "--qemu-args" "-netdev socket,id=privnet,listen=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
+        )
+
+        # Start Server
+        info "Starting Lite Server in the background..."
+        ./qemu-clonezilla-ci-run.sh "${SERVER_QEMU_RUN_ARGS[@]}" &
+        SERVER_PID=$!
+        info "Server started with PID: $SERVER_PID. Waiting for it to boot..."
+        info "sleep 60 seconds to wait for server to boot..."
+        sleep 60
+
+        # Prepare client command args
+        CLIENT_QEMU_RUN_ARGS=(
+            "--live" "$CLIENT_CZ_LIVE_QCOW"
+            "--kernel" "$CLIENT_CZ_KERNEL"
+            "--initrd" "$CLIENT_CZ_INITRD"
+            "--image" "$PARTIMAG_DIR"
+            "--no-ssh-forward"
+            "--cmdpath" "dev/ocscmd/lite-client.sh"
+            "--arch" "$ARCH"
+            "--qemu-args" "-netdev socket,id=privnet,connect=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
+        )
+        
+        # Pass OCS_IMG_NAME to the client via environment variable in the script command
+        if [ -n "${OCS_IMG_NAME:-}" ]; then
+            # We override the default bash command constructed by qemu-clonezilla-ci-run.sh
+            # to include the environment variable.
+            # qemu-clonezilla-ci-run.sh will mount the script at /home/partimag/cmd_scripts/lite-client.sh
+            local CLIENT_CMD="export OCS_IMG_NAME=$OCS_IMG_NAME; bash /home/partimag/cmd_scripts/lite-client.sh"
+            CLIENT_QEMU_RUN_ARGS+=(
+                "--cmd" "$CLIENT_CMD"
+            )
+            # Since we are using --cmd, qemu-clonezilla-ci-run.sh won't copy the script.
+            # We must do it manually here.
+            mkdir -p "$PARTIMAG_DIR/cmd_scripts"
+            cp "dev/ocscmd/lite-client.sh" "$PARTIMAG_DIR/cmd_scripts/"
+
+            # Remove --cmdpath as we are using --cmd now
+            local NEW_CLIENT_ARGS=()
+            local SKIP_NEXT=false
+            for arg in "${CLIENT_QEMU_RUN_ARGS[@]}"; do
+                if [ "$SKIP_NEXT" = true ]; then
+                    SKIP_NEXT=false
+                    continue
+                fi
+                if [[ "$arg" == "--cmdpath" ]]; then
+                    SKIP_NEXT=true
+                    continue
+                fi
+                NEW_CLIENT_ARGS+=("$arg")
+            done
+            CLIENT_QEMU_RUN_ARGS=("${NEW_CLIENT_ARGS[@]}")
         fi
+        for disk in "${CLIENT_DISKS[@]}"; do
+            CLIENT_QEMU_RUN_ARGS+=("--disk" "$disk")
+        done
+        
+        # Start Client
+        info "Starting Client to receive the image..."
+        ./qemu-clonezilla-ci-run.sh "${CLIENT_QEMU_RUN_ARGS[@]}"
+        
+        info "Client has finished."
+        # The cleanup trap, triggered on script exit, will handle terminating the server.
+        info "Server/Client phase complete."
 
-        ./validate.sh "${VALIDATE_ARGS[@]}"
-    done
-    info "Validation phase complete."
+        # --- Phase 2: Validate Restored Disk ---
+        info "--- Phase 2: Validate Restored Disk ---"
+        for disk in "${CLIENT_DISKS[@]}"; do
+            if [[ -n "$CHECK_RAW_MD5" ]]; then
+                info "Verifying raw data integrity for disk: $disk"
+                if [[ ! -f "${CHECK_RAW_MD5}" ]]; then
+                    error "MD5 file not found: ${CHECK_RAW_MD5}"
+                fi
+                #EXPECTED_MD5=$(cat "${CHECK_RAW_MD5}")
+                ./dev/verify-raw-data.sh "$disk" "${CHECK_RAW_MD5}"
+                info "Raw data verification passed for $disk."
+            fi
 
-    # --- Phase 3: Final Cleanup ---
-    info "--- Phase 3: Final Cleanup ---"
-    info "Script finished successfully. Cleanup will be handled automatically on exit."
+            if [ "$NO_VALIDATE" = false ]; then
+                info "Validating restored disk: $disk"
+                VALIDATE_ARGS=(
+                    "--iso" "$VALIDATE_ISO"
+                    "--disk" "$disk"
+                    "--timeout" "$VALIDATE_TIMEOUT"
+                    "--arch" "$ARCH"
+                    "--temp-dir" "$TMP_DIR"
+                )
+                if [ "$NO_SSH_FORWARD" = true ]; then
+                    VALIDATE_ARGS+=("--no-ssh-forward")
+                fi
+                if [ "$EFI_ENABLED" = true ]; then
+                    VALIDATE_ARGS+=("--efi")
+                fi
 
-    info "Lite Server test cycle completed successfully!"
+                ./validate.sh "${VALIDATE_ARGS[@]}"
+            else
+                info "Skipping OS validation as requested (--no-validate)."
+            fi
+        done
+        info "Validation phase complete."
+
+        # --- Phase 3: Final Cleanup ---
+        info "--- Phase 3: Final Cleanup ---"
+        info "Script finished successfully. Cleanup will be handled automatically on exit."
+
+        info "Lite Server test cycle completed successfully!"
+    fi
 }
 
 main "$@"
