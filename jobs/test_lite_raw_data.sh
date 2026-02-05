@@ -108,8 +108,8 @@ run_lite_raw_check() {
     
     # Aggressive cleanup between modes to prevent resource leakage
     # Kill all QEMU processes and any remaining liteserver.sh orphans
-    pkill -9 qemu-system || true
-    pkill -9 -f liteserver.sh || true
+    # Removed pkill commands as they can interfere with other parallel jobs.
+    # liteserver.sh has its own robust cleanup.
     sleep 5
     
     if [ "$RESULT" -ne 0 ]; then
