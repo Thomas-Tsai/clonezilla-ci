@@ -240,7 +240,7 @@ This script orchestrates a Clonezilla Lite Server test, setting up a server VM a
 ./liteserver.sh \
   --serverzip ./zip/clonezilla-live-3.3.0-33-amd64.zip \
   --disk ./qemu/debian-13-amd64.qcow2 \
-  --cmdpath ./dev/ocscmd/lite-bt.sh
+  --cmdpath ./dev/ocscmd/lite-bt-dev.sh
 
 # Display help
 ./liteserver.sh --help
@@ -382,7 +382,7 @@ Example (Backup with ZIP):
   ./qemu-clonezilla-ci-run.sh \
     --disk ./qemu/source.qcow2 \
     --zip ./zip/clonezilla-live-3.1.2-9-amd64.zip \
-    --cmdpath ./dev/ocscmd/clone-first-disk.sh \
+    --cmdpath ./dev/ocscmd/lite-bt-dev.sh \
     --image ./partimag
 
 Example (Restore with extracted files and UEFI):

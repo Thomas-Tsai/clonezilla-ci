@@ -49,7 +49,8 @@ print_usage() {
     echo "  --qemu-args <args>      A string of extra arguments to pass to the QEMU command. Can be specified multiple times."
     echo "  --log-dir <path>        Directory to store log files (default: ./logs)."
     echo "  --arch <arch>           Target architecture (amd64, arm64, riscv64). Default: amd64."
-    echo "  --no-ssh-forward        Disable TCP port 2222 forwarding for SSH."
+    echo "  --no-ssh-forward        Disable TCP port 2222 forwarding for SSH.
+  --ssh-port <port>       Specify the host TCP port for SSH forwarding (default: 2222)."
     echo "  -i, --interactive       Enable interactive mode (QEMU will not power off, output to terminal)."
     echo "  -h, --help              Display this help message and exit."
     echo ""
@@ -117,6 +118,7 @@ DEFAULT_LOGICAL_BLOCK_SIZE=""
 DEFAULT_PHYSICAL_BLOCK_SIZE=""
 EXTRA_QEMU_ARGS=()
 SSH_FORWARD_ENABLED=1
+SSH_HOST_PORT=2222
 DISK_DRIVER="virtio-blk"
 EFI_ENABLED=0
 TEMP_DIR_PATH=""
@@ -128,6 +130,15 @@ while [[ "$#" -gt 0 ]]; do
         --no-ssh-forward)
             SSH_FORWARD_ENABLED=0
             shift 1
+            ;;
+        --ssh-port)
+            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
+                SSH_HOST_PORT="$2"
+                shift 2
+            else
+                echo "Error: --ssh-port requires a value." >&2
+                print_usage
+            fi
             ;;
         --qemu-args)
             if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
@@ -410,9 +421,11 @@ fi
 # --- Argument Validation ---
 
 # Ensure either --cmd or --cmdpath is provided, but not both.
-if [[ -z "$OCS_COMMAND" && -z "$CMDPATH" ]]; then
-    echo "Error: Missing command. Please provide either --cmd or --cmdpath." >&2
-    print_usage
+if [ "$INTERACTIVE_MODE" -eq 0 ]; then
+    if [[ -z "$OCS_COMMAND" && -z "$CMDPATH" ]]; then
+        echo "Error: Missing command. Please provide either --cmd or --cmdpath." >&2
+        print_usage
+    fi
 fi
 if [[ -n "$OCS_COMMAND" && -n "$CMDPATH" ]]; then
     echo "Error: Conflicting arguments. --cmd and --cmdpath cannot be used together." >&2
@@ -442,13 +455,18 @@ if [ -n "$CMDPATH" ]; then
         print_usage
     fi
     
-    # Create a temporary directory within the shared 'partimag' folder to hold the script.
-    # This keeps the root of the image directory clean.
-    SCRIPT_DIR_NAME="cmd_script_$(date +%s)_$RANDOM"
+    # Create a directory within the shared 'partimag' folder to hold the script.
+    # We use a fixed name 'cmd_scripts' to ensure consistency between server and client
+    # in a multi-VM setup (like lite server).
+    SCRIPT_DIR_NAME="cmd_scripts"
     HOST_SCRIPT_DIR="$PARTIMAG_PATH/$SCRIPT_DIR_NAME"
+    
+    # Ensure the directory exists for the script.
+    # We don't wipe the whole directory here because multiple VMs (like server and client)
+    # might be sharing this folder via 9p.
     mkdir -p "$HOST_SCRIPT_DIR"
     
-    # Copy the user's script to the temporary directory.
+    # Copy the user's script to the directory.
     cp "$CMDPATH" "$HOST_SCRIPT_DIR/"
     SCRIPT_BASENAME=$(basename "$CMDPATH")
     
@@ -737,8 +755,8 @@ fi
 # Networking
 NETDEV_ARGS="user,id=net0"
 if [ "$SSH_FORWARD_ENABLED" -eq 1 ]; then
-    NETDEV_ARGS+=",hostfwd=tcp::2222-:22"
-    echo "INFO: SSH port forwarding enabled (host 2222 -> guest 22)."
+    NETDEV_ARGS+=",hostfwd=tcp::$SSH_HOST_PORT-:22"
+    echo "INFO: SSH port forwarding enabled (host $SSH_HOST_PORT -> guest 22)."
 else
     echo "INFO: SSH port forwarding disabled."
 fi
@@ -759,7 +777,7 @@ if [ "$INTERACTIVE_MODE" -eq 0 ]; then
     echo "All output will be saved to log file: $LOG_FILE"
     echo "Executing command: ${QEMU_ARGS[*]}"
     echo "Executing command: ${QEMU_ARGS[*]}" > "$LOG_FILE"
-    "${QEMU_ARGS[@]}" >> "$LOG_FILE" 2>&1
+    "${QEMU_ARGS[@]}" < /dev/null >> "$LOG_FILE" 2>&1
 else
     echo "Mode: Interactive debug mode (output directly to terminal)"
     echo "Executing command: ${QEMU_ARGS[*]}"

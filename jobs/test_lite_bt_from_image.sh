@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# test_lite_multicast_from_image.sh - Tests the lite multicast from image functionality.
+# test_lite_bt_from_image.sh - Tests the lite bt from image functionality.
 #
 
 # Source the common script
@@ -41,14 +41,14 @@ if [[ -n "$CLONEZILLA_ZIP" ]]; then
     CLONEZILLA_ZIP="$(realpath "$CLONEZILLA_ZIP")"
 fi
 
-# --- Test for lite multicast from image ---
-test_lite_multicast_from_image() {
+# --- Test for lite bt from image ---
+test_lite_bt_from_image() {
     # Check if the required disk for the test exists.
     local test_disk="$PROJECT_ROOT/qemu/cloudimages/debian-13-amd64.qcow2"
     if [ -f "$test_disk" ]; then
-        run_lite_multicast_from_image_test
+        run_lite_bt_from_image_test
     else
-        echo "Skipping Lite Multicast From Image test: required disk not found at ${test_disk}"
+        echo "Skipping Lite BT From Image test: required disk not found at ${test_disk}"
     fi
 }
 
