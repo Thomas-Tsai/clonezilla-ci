@@ -279,8 +279,9 @@ main() {
         PID_FILE="$dir/liteserver.pid"
         if [[ -f "$PID_FILE" ]]; then
             PID=$(cat "$PID_FILE")
-            # Check if a process with that PID is still running. We check for the script name to be sure.
-            if ! ps -p "$PID" -o comm= | grep -q "liteserver.sh"; then
+            # Check if a process with that PID is still running.
+            # We check the full command line (args) because 'comm' might just show 'bash'.
+            if ! ps -p "$PID" -o args= | grep -q "liteserver.sh"; then
                 # The script that created this directory is no longer running.
                 # This means any QEMU process using this directory is an orphan.
                 info "Found orphan temp directory '$dir' from finished process $PID."
