@@ -233,30 +233,50 @@ test:fs:btrfs:
 
 test:lite_bt_from_device:
   extends: .test_template
+  tags:
+    - shell
+    - clonezilla
+    - liteserver
   script:
     - cd jobs
     - ./test_lite_bt_from_device.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 test:lite_bt_from_image:
   extends: .test_template
+  tags:
+    - shell
+    - clonezilla
+    - liteserver
   script:
     - cd jobs
     - ./test_lite_bt_from_image.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 test:lite_multicast_from_image:
   extends: .test_template
+  tags:
+    - shell
+    - clonezilla
+    - liteserver
   script:
     - cd jobs
     - ./test_lite_multicast_from_image.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 test:lite_multicast_from_device:
   extends: .test_template
+  tags:
+    - shell
+    - clonezilla
+    - liteserver
   script:
     - cd jobs
     - ./test_lite_multicast_from_device.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
 
 test:lite_raw_data:
   extends: .test_template
+  tags:
+    - shell
+    - clonezilla
+    - liteserver
   script:
     - cd jobs
     - ./test_lite_raw_data.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
