@@ -1,5 +1,9 @@
 # This is the parent pipeline. It supports both scheduled and manual triggers.
 
+default:
+  timeout: 90m
+  retry: 1
+
 stages:
   - trigger
 
