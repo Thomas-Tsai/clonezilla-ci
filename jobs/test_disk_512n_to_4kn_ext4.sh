@@ -30,6 +30,10 @@ while [ "$#" -gt 0 ]; do
             usage
             exit 0
             ;;
+        --no-ssh-forward)
+            NO_SSH_FORWARD_ARGS="--no-ssh-forward"
+            shift 1
+            ;;
         *)
             # Stop parsing at the first unknown argument
             break
@@ -107,6 +111,7 @@ test_512n_to_4kn_ext4() {
         --image "$PARTIMAG_DIR" \
         --arch "$ARCH" \
         --cmd "$OCS_BACKUP" \
+        $NO_SSH_FORWARD_ARGS \
         --log-dir "$LOG_DIR"
 
     assertEquals "Backup failed" 0 $?
@@ -130,6 +135,7 @@ test_512n_to_4kn_ext4() {
         --image "$PARTIMAG_DIR" \
         --arch "$ARCH" \
         --cmd "$OCS_RESTORE" \
+        $NO_SSH_FORWARD_ARGS \
         --log-dir "$LOG_DIR"
 
     assertEquals "Restore failed" 0 $?
