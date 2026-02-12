@@ -6,6 +6,8 @@
 # ----------------------------------------------------------------------
 
 # Record start time
+# Determine project root directory
+PROJECT_ROOT="$(realpath "$(dirname "$0")")"
 START_TIME=$(date +%s)
 
 # Function to check for KVM availability
@@ -109,7 +111,9 @@ APPEND_ARGS_FILE=""
 HOST_SCRIPT_DIR="" # Ensure variable is declared for the trap
 LOG_FILE="" # Initialize LOG_FILE
 CLONEZILLA_ZIP=""
-ZIP_OUTPUT_DIR="./zip"
+ZIP_OUTPUT_DIR="${PROJECT_ROOT}/zip"
+# Ensure output directory exists
+mkdir -p "$ZIP_OUTPUT_DIR"
 ZIP_IMAGE_SIZE="2G"
 ZIP_FORCE=0
 ARCH="amd64"
@@ -325,7 +329,13 @@ while [[ "$#" -gt 0 ]]; do
                 else
                     echo "Error: Invalid value for --disk-driver. Must be 'virtio-blk' or 'nvme'." >&2
                     print_usage
-                fi
+fi
+# Auto-adjust PCI bus name for NVMe and q35 machines
+if [[ "$DISK_DRIVER" == "nvme" ]] || [[ " ${QEMU_MACHINE_ARGS[@]} " =~ " q35 " ]]; then
+    PCI_BUS_NAME="pcie.0"
+else
+    PCI_BUS_NAME="pci.0"
+fi
             else
                 echo "Error: --disk-driver requires a value." >&2
                 print_usage
@@ -378,7 +388,7 @@ if [ -n "$CLONEZILLA_ZIP" ]; then
     fi
 
     # Check for the conversion script
-    CONVERSION_SCRIPT="./clonezilla-zip2qcow.sh"
+    CONVERSION_SCRIPT="$(dirname "$0")/clonezilla-zip2qcow.sh"
     if [ ! -x "$CONVERSION_SCRIPT" ]; then
         echo "Error: Conversion script not found or not executable: $CONVERSION_SCRIPT" >&2
         exit 1
