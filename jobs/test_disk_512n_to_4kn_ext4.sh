@@ -66,15 +66,28 @@ oneTimeSetUp() {
     # Create source disk
     qemu-img create -f qcow2 "$SOURCE_DISK" 5G
 
+    # Resolve testData symlink to real path (e.g., for GitLab Runner)
+    local TESTDATA_REALPATH
+    TESTDATA_REALPATH=$(realpath "${PROJECT_ROOT}/dev/testData")
+    local TESTDATA_BASENAME
+    TESTDATA_BASENAME=$(basename "$TESTDATA_REALPATH")
+
     # Use guestfish directly to setup partitions and data
-    guestfish --rw -a "$SOURCE_DISK" <<EOF
-run
+    local GUESTFISH_CMDS="run
 part-init /dev/sda mbr
 part-add /dev/sda p 2048 -1
 mkfs ext4 /dev/sda1
 mount /dev/sda1 /
-copy-in "${PROJECT_ROOT}/dev/testData" /
-umount /
+copy-in \"$TESTDATA_REALPATH\" /"
+    if [ "$TESTDATA_BASENAME" != "testData" ]; then
+        GUESTFISH_CMDS="$GUESTFISH_CMDS
+mv \"/$TESTDATA_BASENAME\" /testData"
+    fi
+    GUESTFISH_CMDS="$GUESTFISH_CMDS
+umount /"
+
+    guestfish --rw -a "$SOURCE_DISK" <<EOF
+$GUESTFISH_CMDS
 EOF
 
     # Generate source MD5 (relative to testData)
