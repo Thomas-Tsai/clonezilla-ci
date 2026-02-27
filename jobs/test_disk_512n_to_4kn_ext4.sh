@@ -67,28 +67,32 @@ oneTimeSetUp() {
     qemu-img create -f qcow2 "$SOURCE_DISK" 5G
 
     # Resolve testData symlink to real path (e.g., for GitLab Runner)
+    # Using realpath ensures we have the underlying path, but tar -h will follow the symlink.
     local TESTDATA_REALPATH
     TESTDATA_REALPATH=$(realpath "${PROJECT_ROOT}/dev/testData")
-    local TESTDATA_BASENAME
-    TESTDATA_BASENAME=$(basename "$TESTDATA_REALPATH")
 
-    # Use guestfish directly to setup partitions and data
+    # Use guestfish to setup partitions and data.
+    # We use GPT for all architectures as requested for modern support.
+    # We explicitly start at sector 2048 (1 MiB) to ensure compatibility with 4Kn targets
+    # which require more sectors for the GPT partition table than 512n disks.
+    # We use explicit end sector 10485000 for the 5G disk to be safe with GPT.
     local GUESTFISH_CMDS="run
-part-init /dev/sda mbr
-part-add /dev/sda p 2048 -1
+part-init /dev/sda gpt
+part-add /dev/sda primary 2048 10485000
 mkfs ext4 /dev/sda1
-mount /dev/sda1 /
-copy-in \"$TESTDATA_REALPATH\" /"
-    if [ "$TESTDATA_BASENAME" != "testData" ]; then
-        GUESTFISH_CMDS="$GUESTFISH_CMDS
-mv \"/$TESTDATA_BASENAME\" /testData"
-    fi
-    GUESTFISH_CMDS="$GUESTFISH_CMDS
-umount /"
+mount /dev/sda1 /"
+
+    # Create a tarball on the host, following symlinks (-h)
+    local TESTDATA_TAR="$WORK_DIR/testData.tar"
+    (cd "$(dirname "$TESTDATA_REALPATH")" && tar -chf "$TESTDATA_TAR" "$(basename "$TESTDATA_REALPATH")")
 
     guestfish --rw -a "$SOURCE_DISK" <<EOF
 $GUESTFISH_CMDS
+tar-in "$TESTDATA_TAR" /
+sync
+umount /
 EOF
+    rm -f "$TESTDATA_TAR"
 
     # Generate source MD5 (relative to testData)
     info "Generating source MD5 checksums..."

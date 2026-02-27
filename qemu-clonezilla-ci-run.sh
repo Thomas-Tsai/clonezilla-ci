@@ -701,7 +701,7 @@ else
     APPEND_ARGS+=" ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\""
     ocs_prerun2_mount="mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag"
     # For NVMe, the QEMU machine needs to be explicitly specified for 9p to work reliably on some systems
-    if [[ "$DISK_DRIVER" == "nvme" ]]; then
+    if [[ "$DISK_DRIVER" == "nvme" ]] && [[ "$ARCH" == "amd64" ]]; then
         QEMU_MACHINE_ARGS+=("-machine" "q35") # Ensure q35 is used for NVMe and 9p
     fi
     APPEND_ARGS+=" ocs_prerun2=\"${ocs_prerun2_mount}\""
