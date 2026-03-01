@@ -1,0 +1,35 @@
+Bootstrap: docker
+From: debian:trixie
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        wget \
+        unzip \
+        shunit2 \
+        uuid-runtime \
+        genisoimage \
+        guestfs-tools \
+        guestfish \
+        guestmount \
+        qemu-utils \
+        qemu-system-x86 \
+        qemu-system-arm \
+        qemu-system-riscv \
+        qemu-efi-aarch64 \
+        linux-image-amd64 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+%environment
+    export LC_ALL=C
+    export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+%runscript
+    exec "$@"
+
+%help
+    This container provides the environment for running Clonezilla CI tests.
+    It includes QEMU, libguestfs, and required utilities.

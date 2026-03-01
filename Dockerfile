@@ -17,10 +17,12 @@ RUN apt-get update && \
     shunit2 \
     uuid-runtime \
     genisoimage \
+    bc \
     # Filesystem and guest tools
     guestfs-tools \
     guestfish \
     guestmount \
+    xfsprogs \
     # QEMU common utilities
     qemu-utils \
     # All QEMU system emulators

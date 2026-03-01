@@ -6,7 +6,7 @@
 # Source the common script
 . "$(dirname "$0")/common.sh"
 
-local NO_SSH_FORWARD_ARG=""
+NO_SSH_FORWARD_ARG=""
 
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
@@ -52,7 +52,7 @@ test_sample() {
     # Run the command and capture its stdout/stderr
     local output
     echo "RUNNING: qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/sample_restore.qcow2  --arch "$ARCH" --cmd pwd"
-    output=$((cd .. && ./qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/sample_restore.qcow2  --arch "$ARCH" --cmd pwd) 2>&1)
+    output=$( (cd .. && ./qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/sample_restore.qcow2  --arch "$ARCH" --cmd pwd) 2>&1)
     echo "$output" # Show the output for debugging
 
     # Extract the log file path from the output, removing any carriage returns

@@ -6,7 +6,7 @@
 # Source the common script
 . "$(dirname "$0")/common.sh"
 
-local NO_SSH_FORWARD_ARG=""
+NO_SSH_FORWARD_ARG=""
 
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
