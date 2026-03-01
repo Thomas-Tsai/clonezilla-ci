@@ -153,8 +153,14 @@ build_zip:
   variables:
     SLURM_PARTITION: "development"
     SLURM_ACCOUNT: "GOV109092"
+    SIF_IMAGE: "/home/u1597171/clonezilla-ci/slurm/clonezilla-ci.sif"
   before_script:
     - |
+      echo "Verifying Singularity image exists at ${SIF_IMAGE}..."
+      if [ ! -f "${SIF_IMAGE}" ]; then
+        echo "Error: Singularity image not found at ${SIF_IMAGE}!" >&2
+        exit 1
+      fi
       echo "Verifying build artifact (Clonezilla ZIP)..."
       if [ -z "${ZIP_FILE_FROM_BUILD}" ]; then
         echo "Error: ZIP_FILE_FROM_BUILD variable not passed from build job." >&2
@@ -170,7 +176,7 @@ build_zip:
            --job-name="ci_$(basename ${TEST_SCRIPT} .sh)" \
            --mem=8G --cpus-per-task=4 \
            singularity exec --bind .:/app --bind /dev/kvm:/dev/kvm \
-           slurm/clonezilla-ci.sif \
+           "${SIF_IMAGE}" \
            bash -c "cd /app/jobs && ./${TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
   after_script:
     - |
