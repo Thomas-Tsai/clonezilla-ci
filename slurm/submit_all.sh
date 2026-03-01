@@ -6,6 +6,10 @@ SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 PROJECT_ROOT="$(realpath "$SCRIPT_DIR/..")"
 SBATCH_TEMPLATE="$SCRIPT_DIR/template.sbatch"
 
+# Default partition and account
+SLURM_PARTITION=${SLURM_PARTITION:-development}
+SLURM_ACCOUNT=${SLURM_ACCOUNT:-GOV109092}
+
 # Ensure we're running from the project root
 cd "$PROJECT_ROOT"
 
@@ -40,6 +44,8 @@ for test_file in $TEST_FILES; do
     echo "Submitting job for: $test_name"
     # Using --export to pass the test script into the sbatch environment
     sbatch --job-name="ci_$test_name" \
+           --partition="$SLURM_PARTITION" \
+           --account="$SLURM_ACCOUNT" \
            --export=ALL,TEST_SCRIPT="$test_file" \
            "$SBATCH_TEMPLATE"
 done
