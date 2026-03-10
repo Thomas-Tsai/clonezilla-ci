@@ -18,14 +18,17 @@ To run any of the scripts, you use `docker run` and mount the necessary host dir
 # Run the main test suite (`start.sh`)
 ```bash
 docker run --rm -it \
-  --device=/dev/kvm \
-  -v ./dev/testData:/app/dev/testData \
-  -v ./qemu/cloudimages:/app/qemu/cloudimages \
-  -v ./isos:/app/isos \
-  -v ./zip:/app/zip \
-  -v ./partimag:/app/partimag \
-  -v ./logs:/app/logs \
-  clonezilla-ci --arch amd64
+  --device /dev/kvm \
+  --device /dev/fuse \
+  --cap-add SYS_ADMIN \
+  --security-opt apparmor=unconfined \
+  -v $(pwd)/dev/testData:/app/dev/testData \
+  -v $(pwd)/qemu/cloudimages:/app/qemu/cloudimages \
+  -v $(pwd)/isos:/app/isos \
+  -v $(pwd)/zip:/app/zip \
+  -v $(pwd)/partimag:/app/partimag \
+  -v $(pwd)/logs:/app/logs \
+  clonezilla-ci ./start.sh
 ```
 **Note:** The `--device=/dev/kvm` flag is for enabling KVM hardware acceleration on Linux hosts. It may not be needed or available on other operating systems.
 
@@ -33,10 +36,59 @@ docker run --rm -it \
 ```bash
 docker run --rm -it \
   --device=/dev/kvm \
+  --security-opt apparmor=unconfined \
   -v ./qemu:/app/qemu \
   -v ./isos:/app/isos \
   -v ./zip:/app/zip \
   clonezilla-ci ./clonezilla-boot.sh --disk /app/qemu/my-disk.qcow2
+
+
+**Example: Running an individual job script (e.g., `test_disk_512n_to_4kn_ext4.sh`)**
+
+**Example: Running an individual script in the jobs directory (e.g., `test_disk_512n_to_4kn_ext4.sh`)**
+```bash
+docker run --rm -it \
+  --device=/dev/kvm \
+  --device /dev/fuse \
+  --cap-add SYS_ADMIN \
+  --security-opt apparmor=unconfined \
+  -w /app/jobs \
+  -v $(pwd)/dev/testData:/app/dev/testData \
+  -v $(pwd)/qemu:/app/qemu \
+  -v $(pwd)/isos:/app/isos \
+  -v $(pwd)/zip:/app/zip \
+  -v $(pwd)/partimag:/app/partimag \
+  -v $(pwd)/logs:/app/logs \
+
+**Example: Running an individual script in the jobs directory (e.g., `test_disk_512n_to_4kn_ext4.sh`)**
+```bash
+docker run --rm -it \
+  --device=/dev/kvm \
+  --device /dev/fuse \
+  --cap-add SYS_ADMIN \
+  --security-opt apparmor=unconfined \
+  -w /app/jobs \
+  -v $(pwd)/dev/testData:/app/dev/testData \
+  -v $(pwd)/qemu:/app/qemu \
+  -v $(pwd)/isos:/app/isos \
+  -v $(pwd)/zip:/app/zip \
+  -v $(pwd)/partimag:/app/partimag \
+  -v $(pwd)/logs:/app/logs \
+```bash
+docker run --rm -it \
+  --device /dev/kvm \
+  --device /dev/fuse \
+  --cap-add SYS_ADMIN \
+  --security-opt apparmor=unconfined \
+  -w /app/jobs \
+  -v $(pwd)/dev/testData:/app/dev/testData \
+  -v $(pwd)/qemu:/app/qemu \
+  -v $(pwd)/isos:/app/isos \
+  -v $(pwd)/zip:/app/zip \
+  -v $(pwd)/partimag:/app/partimag \
+  -v $(pwd)/logs:/app/logs \
+  clonezilla-ci ./test_disk_512n_to_4kn_ext4.sh
+```
 
 
 

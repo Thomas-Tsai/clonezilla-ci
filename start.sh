@@ -13,10 +13,42 @@ JOBS_DIR="jobs"
 
 # --- Setup Logging ---
 mkdir -p "$LOG_DIR"
-exec &> >(tee -a "$MAIN_LOG_FILE")
+# exec &> >(tee -a "$MAIN_LOG_FILE") # Commented out to avoid parallel tee issues in some shells if needed, but keeping it for now if it works.
 
 echo "--- Starting Clonezilla CI Test Suite ---"
-echo "Arguments: $@"
+echo "Original Arguments: $@"
+
+# --- Argument Parsing ---
+CLONEZILLA_ZIP=""
+ARCH=""
+
+# We'll keep a copy of original arguments to pass down
+# or we can reconstruct them.
+PASSED_ARGS=()
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --zip)
+            CLONEZILLA_ZIP="$(realpath "$2")"
+            PASSED_ARGS+=("--zip" "$CLONEZILLA_ZIP")
+            shift 2
+            ;;
+        --arch)
+            ARCH="$2"
+            PASSED_ARGS+=("--arch" "$2")
+            shift 2
+            ;;
+        *)
+            PASSED_ARGS+=("$1")
+            shift 1
+            ;;
+    esac
+done
+
+# Restart logging after parsing if needed, or just continue
+exec &> >(tee -a "$MAIN_LOG_FILE")
+
+echo "Effective Arguments: ${PASSED_ARGS[@]}"
 echo "-----------------------------------------"
 
 # Find and run all test scripts in the jobs directory
@@ -28,7 +60,7 @@ for test_script in "${JOBS_DIR}"/test_*.sh; do
         echo "=================================================================="
         
         # Execute the test script, passing along all arguments from start.sh
-        (cd "${JOBS_DIR}" && ./"$(basename "$test_script")" "$@")
+        (cd "${JOBS_DIR}" && ./"$(basename "$test_script")" "${PASSED_ARGS[@]}")
         
         RESULT=$?
         if [ "$RESULT" -ne 0 ]; then

@@ -97,7 +97,7 @@ EOF
     # Generate source MD5 (relative to testData)
     info "Generating source MD5 checksums..."
     # checksums of files INSIDE dev/testData
-    (cd "${PROJECT_ROOT}/dev/testData" && find . -type f -exec md5sum {} + | sort -k 2) > "$SRC_MD5_FILE"
+    (cd "${PROJECT_ROOT}/dev/testData" && find . -type f -exec md5sum {} + | env LC_ALL=C sort -k 2) > "$SRC_MD5_FILE"
 }
 
 oneTimeTearDown() {
@@ -166,7 +166,7 @@ test_512n_to_4kn_ext4() {
 #!/bin/bash
 sudo mount /dev/nvme0n1p1 /mnt
 if [ -d /mnt/testData ]; then
-  cd /mnt/testData && find . -type f -exec md5sum {} + | sort -k 2 > /home/partimag/$VM_MD5_FILE
+  cd /mnt/testData && find . -type f -exec md5sum {} + | env LC_ALL=C sort -k 2 > /home/partimag/$VM_MD5_FILE
 else
   echo 'ERROR: testData directory not found' > /home/partimag/error.log
 fi

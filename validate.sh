@@ -28,11 +28,11 @@ TEMP_DIR_PATH=""
 
 # Function to check for KVM availability
 check_kvm_available() {
-    if [ -e "/dev/kvm" ] && [ "$(groups | grep -c kvm)" -gt 0 ]; then
-        echo "INFO: KVM is available and the current user is in the 'kvm' group."
+    if [ -w "/dev/kvm" ]; then
+        echo "INFO: KVM is available and accessible."
         return 0 # KVM is available
     else
-        echo "INFO: KVM is not available or the current user is not in the 'kvm' group. Running without KVM."
+        echo "INFO: KVM is not available or not accessible. Running without KVM."
         return 1 # KVM is not available
     fi
 }

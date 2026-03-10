@@ -30,8 +30,10 @@ RUN apt-get update && \
     qemu-system-arm \
     qemu-system-riscv \
     qemu-efi-aarch64 && \
+    # Ensure xfsprogs is included in the libguestfs appliance
+    find /usr/lib -name supermin.d -type d -exec sh -c 'echo xfsprogs >> {}/packages' \; && \
     # Clean up APT cache (after main install)
-    rm -rf /var/lib/apt/lists/*;
+    rm -rf /var/lib/apt/lists/*
 
 # Install kernel package required by libguestfs to build its appliance for the TARGETARCH
 # This prevents 'supermin exited with error status 1' by providing kernel modules.

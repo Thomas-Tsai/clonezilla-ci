@@ -12,11 +12,11 @@ START_TIME=$(date +%s)
 
 # Function to check for KVM availability
 check_kvm_available() {
-    if [ -e "/dev/kvm" ] && [ "$(groups | grep -c kvm)" -gt 0 ]; then
-        echo "INFO: KVM is available and the current user is in the 'kvm' group."
+    if [ -w "/dev/kvm" ]; then
+        echo "INFO: KVM is available and accessible."
         return 0 # KVM is available
     else
-        echo "INFO: KVM is not available or the current user is not in the 'kvm' group. Running without KVM."
+        echo "INFO: KVM is not available or not accessible. Running without KVM."
         return 1 # KVM is not available
     fi
 }
@@ -85,7 +85,7 @@ cleanup() {
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
 
-    if [ "$INTERACTIVE_MODE" -eq 0 ]; then
+    if [ "$INTERACTIVE_MODE" -eq 0 ] && [ -n "$LOG_FILE" ]; then
         echo "Total execution time: ${DURATION} seconds" >> "$LOG_FILE"
         echo "INFO: Total execution time: ${DURATION} seconds (logged to $LOG_FILE)"
     else
@@ -410,10 +410,7 @@ if [ -n "$CLONEZILLA_ZIP" ]; then
         echo "Extracting Clonezilla ZIP. This may take a moment..."
         
         # Build the command
-        CONVERT_CMD=("$CONVERSION_SCRIPT" --zip "$CLONEZILLA_ZIP" --output "$ZIP_OUTPUT_DIR" --size "$ZIP_IMAGE_SIZE" --arch "$ARCH")
-        if [ "$ZIP_FORCE" -eq 1 ]; then
-            CONVERT_CMD+=("--force")
-        fi
+        CONVERT_CMD=("$CONVERSION_SCRIPT" --zip "$CLONEZILLA_ZIP" --output "$ZIP_OUTPUT_DIR" --size "$ZIP_IMAGE_SIZE" --arch "$ARCH" --force)
         
         # Execute the command
         if ! "${CONVERT_CMD[@]}"; then

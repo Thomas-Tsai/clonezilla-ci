@@ -50,21 +50,38 @@ docker build -t clonezilla-ci .
 
 To run the test suite, you need to mount the directories containing your test data and images into the container.
 
+Usage with `start.sh`
+-------------------
+To run the end-to-end tests or other tasks, run a container and mount your host directories:
+
 ```bash
 docker run --rm -it \
+  --device /dev/kvm \
+  --device /dev/fuse \
+  --cap-add SYS_ADMIN \
+  --security-opt apparmor=unconfined \
   -v ./dev/testData:/app/dev/testData \
   -v ./qemu/cloudimages:/app/qemu/cloudimages \
   -v ./isos:/app/isos \
   -v ./zip:/app/zip \
   -v ./partimag:/app/partimag \
   -v ./logs:/app/logs \
-  clonezilla-ci
+  clonezilla-ci ./start.sh --zip /app/zip/clonezilla-live-3.3.1-37-amd64.zip
 ```
+
+### Explanation of Arguments:
+- `--device /dev/kvm`: Enables KVM hardware acceleration (highly recommended).
+- `--device /dev/fuse`, `--cap-add SYS_ADMIN`, and `--security-opt apparmor=unconfined`: Required for `libguestfs` to mount and verify filesystems without permission denied errors.
+- `-v ./dev/testData:/app/dev/testData`: Mount source test data.
 
 You can pass arguments to `start.sh` as well:
 
 ```bash
 docker run --rm -it \
+  --device /dev/kvm \
+  --device /dev/fuse \
+  --cap-add SYS_ADMIN \
+  --security-opt apparmor=unconfined \
   -v ./dev/testData:/app/dev/testData \
   -v ./qemu/cloudimages:/app/qemu/cloudimages \
   -v ./isos:/app/isos \
