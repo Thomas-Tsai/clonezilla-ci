@@ -49,6 +49,9 @@ test_sample() {
     # Ensure cleanup happens when the function returns
     trap 'rm -f ../qemu/sample_restore.qcow2' RETURN
 
+    # Handle libguestfs XDG_RUNTIME_DIR issue in containers
+    unset XDG_RUNTIME_DIR
+
     # Run the command and capture its stdout/stderr
     local output
     echo "RUNNING: qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/sample_restore.qcow2  --arch "$ARCH" --cmd pwd"
@@ -57,7 +60,7 @@ test_sample() {
 
     # Extract the log file path from the output, removing any carriage returns
     local log_file
-    log_file=$(echo "$output" | grep "^Full log file located at:" | awk '{print $NF}' | tr -d '\r')
+    log_file=$(echo "$output" | grep "log file located at:" | awk '{print $NF}' | tr -d '\r')
 
     if [[ -z "$log_file" ]]; then
         echo "Error: Could not find log file name in command output." >&2
@@ -83,7 +86,11 @@ test_sample() {
 
     # Grep for 'finish' and print the result. Grep's exit code will determine test pass/fail.
     echo "Grepping for 'finish' in $log_path..."
-    grep "finish" "$log_path"
+    if ! grep "finish" "$log_path"; then
+        echo "Test failed or 'finish' not found. QEMU log contents:"
+        cat "$log_path"
+        return 1
+    fi
 }
 
 # --- Main execution ---

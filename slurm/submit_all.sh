@@ -20,7 +20,9 @@ mkdir -p "$SCRIPT_DIR/logs"
 SIF_IMAGE="$SCRIPT_DIR/clonezilla-ci.sif"
 if [[ ! -f "$SIF_IMAGE" ]]; then
     echo "WARNING: Singularity image not found at $SIF_IMAGE"
-    echo "Make sure to build it first: singularity build $SIF_IMAGE $SCRIPT_DIR/clonezilla-ci.def"
+    echo "Make sure to build Docker image first: docker build -t clonezilla-ci:latest ."
+    echo "Then export it: docker save clonezilla-ci:latest -o /tmp/clonezilla-ci.tar"
+    echo "Then build Singularity image: sudo singularity build $SIF_IMAGE docker-archive:///tmp/clonezilla-ci.tar"
     echo "If you continue, the Slurm jobs may fail."
     read -p "Continue anyway? (y/n): " -n 1 -r
     echo

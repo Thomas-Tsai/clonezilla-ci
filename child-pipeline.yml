@@ -177,7 +177,7 @@ build_zip:
            --mem=8G --cpus-per-task=4 \
            singularity exec --bind .:/app --bind /dev/kvm:/dev/kvm \
            "${SIF_IMAGE}" \
-           bash -c "cd /app/jobs && ./${TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
+           bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
   after_script:
     - |
       mkdir -p results

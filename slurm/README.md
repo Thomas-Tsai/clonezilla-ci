@@ -12,13 +12,21 @@ This directory contains scripts and configuration to run the Clonezilla CI test 
 
 ### 1. Build the Singularity Image
 
-Use the provided definition file to build the Singularity image. This image contains all the necessary dependencies, including QEMU and test utilities.
+Instead of managing a separate Singularity definition file, we build the Singularity image directly from the project's `Dockerfile` to ensure the environments are identical.
 
+First, build the Docker image from the project root:
 ```bash
-singularity build clonezilla-ci.sif clonezilla-ci.def
+docker build -t clonezilla-ci:latest .
 ```
 
-*Note: You may need `sudo` or use a build service if your HPC environment doesn't allow local builds.*
+Then, export the image to a tar archive and build the Singularity image from it (this avoids issues with Apptainer docker-daemon API incompatibilities):
+```bash
+docker save clonezilla-ci:latest -o /tmp/clonezilla-ci.tar
+cd slurm
+sudo singularity build clonezilla-ci.sif docker-archive:///tmp/clonezilla-ci.tar
+```
+
+*Note: You may need `sudo` to run `singularity build` locally depending on your Apptainer/Singularity setup.*
 
 ### 2. Prepare Your Environment
 
