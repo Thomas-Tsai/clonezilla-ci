@@ -16,6 +16,9 @@
 # This ensures that the script will stop if any step fails.
 set -e
 
+# Unset XDG_RUNTIME_DIR to prevent libguestfs errors in Singularity/Slurm environments
+unset XDG_RUNTIME_DIR
+
 # --- Default values ---
 CLONEZILLA_ZIP=""
 SOURCE_DATA_DIR=""
@@ -195,13 +198,11 @@ echo "INFO: Using temporary working directory: $WORK_DIR"
 cleanup() {
     exit_code=$?
 
-    # First, handle unmounting if a guestmount was performed
+    # First, handle cleanup if a directory was extracted
     MOUNT_POINT="$WORK_DIR/mnt"
-    if [ -d "$MOUNT_POINT" ] && mountpoint -q "$MOUNT_POINT"; then
-        echo "INFO: Attempting to unmount FUSE filesystem at $MOUNT_POINT..."
-        if ! guestunmount "$MOUNT_POINT"; then
-            echo "WARNING: Failed to unmount $MOUNT_POINT. Manual intervention may be required." >&2
-        fi
+    if [ -d "$MOUNT_POINT" ]; then
+        echo "INFO: Cleaning up extracted filesystem at $MOUNT_POINT..."
+        rm -rf "$MOUNT_POINT"
     fi
 
     if [ $exit_code -ne 0 ]; then
@@ -375,9 +376,9 @@ MOUNT_POINT="$WORK_DIR/mnt"
 CHECKSUM_LOG="$WORK_DIR/checksum_verification.log"
 mkdir -p "$MOUNT_POINT"
 
-# Mount the restored disk image read-only
-echo "INFO: Mounting restored disk image..."
-guestmount -a "$RESTORE_DISK_QCOW2" -m "/dev/sda1" --ro "$MOUNT_POINT"
+# Extract the restored disk image instead of mounting with FUSE
+echo "INFO: Extracting restored disk image for verification..."
+guestfish --ro -a "$RESTORE_DISK_QCOW2" -m "/dev/sda1" tar-out / - | tar -xC "$MOUNT_POINT"
 
 echo "INFO: Comparing source and restored checksums..."
 # Use md5sum -c to check the restored files against the original checksums.
@@ -385,15 +386,15 @@ echo "INFO: Comparing source and restored checksums..."
 # The full output (only errors, if any) is saved to a log file.
 # We temporarily disable 'exit on error' to handle the md5sum result manually.
 set +e
-# The paths in the checksum file are relative, and guestmount presents the
+# The paths in the checksum file are relative, and we extracted
 # restored files at the root of the mount point, so we cd there to run the check.
 (cd "$MOUNT_POINT" && md5sum --quiet -c "$SOURCE_CHECKSUM_FILE") &> "$CHECKSUM_LOG"
 result=$?
 set -e
 
-# Unmount the disk image
-echo "INFO: Unmounting restored disk image."
-guestunmount "$MOUNT_POINT"
+# Cleanup extracted files
+echo "INFO: Cleaning up extracted disk files."
+rm -rf "${MOUNT_POINT:?}"/*
 
 if [ $result -eq 0 ]; then
     echo ""
