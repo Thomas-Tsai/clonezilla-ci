@@ -75,6 +75,18 @@ usage() {
 # --- Auto-download Clonezilla ZIP if not provided ---
 autodownload_clonezilla_zip() {
     if [[ -z "$CLONEZILLA_ZIP" ]]; then
+        local DEFAULT_DOWNLOAD_DIR="$PROJECT_ROOT/zip"
+
+        # Try to find a local zip first to avoid internet access on compute nodes
+        local EXISTING_ZIP
+        EXISTING_ZIP=$(ls -1t "$DEFAULT_DOWNLOAD_DIR"/clonezilla-live*-${ARCH}*.zip 2>/dev/null | head -n 1)
+        if [[ -n "$EXISTING_ZIP" && -f "$EXISTING_ZIP" ]]; then
+            echo "INFO: --zip not specified, but found existing zip: $EXISTING_ZIP"
+            CLONEZILLA_ZIP=$(realpath "$EXISTING_ZIP")
+            echo "INFO: Using ZIP: $CLONEZILLA_ZIP"
+            return
+        fi
+
         echo "INFO: --zip not specified. Attempting to auto-download."
         
         # The download script is in the project root

@@ -31,6 +31,15 @@ if [[ ! -f "$SIF_IMAGE" ]]; then
     fi
 fi
 
+ARCH=${ARCH:-amd64}
+TYPE=${TYPE:-stable}
+
+echo "--- Ensuring Clonezilla ZIP is downloaded for $ARCH ($TYPE) ---"
+"$PROJECT_ROOT/download-clonezilla.sh" --arch "$ARCH" --type "$TYPE" -o "$PROJECT_ROOT/zip"
+if [ $? -ne 0 ]; then
+    echo "WARNING: Failed to auto-download zip on login node. Compute nodes may fail if they cannot access the internet."
+fi
+
 echo "--- Submitting all tests in parallel ---"
 
 # Find all test files in the jobs directory

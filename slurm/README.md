@@ -42,6 +42,16 @@ You can submit a specific test script using `sbatch`. To override the default pa
 sbatch --partition=YOUR_PARTITION --account=YOUR_ACCOUNT_ID --export=ALL,TEST_SCRIPT=jobs/test_fs_ext4.sh template.sbatch
 ```
 
+### Specify Architecture and ZIP File
+
+To test a specific architecture or avoid downloading the Clonezilla ZIP on compute nodes that lack internet access, you can pass the `ARCH` and `ZIP_FILE` environment variables.
+
+Because the project directory is mounted to `/app` inside the Singularity container, you should provide an absolute path aligned with the container's filesystem (e.g., `/app/zip/...` or `../zip/...`).
+
+```bash
+sbatch --export=ALL,TEST_SCRIPT=jobs/test_fs_ext4.sh,ARCH=amd64,ZIP_FILE=/app/zip/clonezilla-live-3.3.1-37-amd64.zip template.sbatch
+```
+
 ### Submit All Tests
 
 To run the entire test suite in parallel, use the `submit_all.sh` script:

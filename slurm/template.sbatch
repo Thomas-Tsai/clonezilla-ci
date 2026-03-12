@@ -38,6 +38,7 @@ echo "Job Name: $SLURM_JOB_NAME"
 echo "Job ID:   $SLURM_JOB_ID"
 echo "Test File: $TARGET_TEST_SCRIPT"
 echo "Arch:      $ARCH"
+echo "Zip File:  ${ZIP_FILE:-auto-download}"
 echo "----------------------------------------"
 
 # Run the test script inside the Singularity container.
@@ -51,11 +52,17 @@ if [[ -e /dev/kvm ]]; then
     KVM_BIND="--bind /dev/kvm"
 fi
 
+TEST_ARGS="--arch $ARCH"
+if [[ -n "$ZIP_FILE" ]]; then
+    TEST_ARGS="$TEST_ARGS --zip $ZIP_FILE"
+fi
+
 # We bind the current directory to /app and change directory to /app/jobs
 # to run the tests correctly because of common.sh check.
+# The TEST_ARGS are appended to the test script invocation.
 singularity exec --bind .:/app ${KVM_BIND} \
     ${SIF_IMAGE} \
-    bash -c "cd /app/jobs && ./${TARGET_TEST_SCRIPT#jobs/}"
+    bash -c "cd /app/jobs && ./${TARGET_TEST_SCRIPT#jobs/} $TEST_ARGS"
 
 echo "----------------------------------------"
 echo "Job completed at $(date)"
