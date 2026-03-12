@@ -28,11 +28,13 @@ TEMP_DIR_PATH=""
 
 # Function to check for KVM availability
 check_kvm_available() {
-    if [ -w "/dev/kvm" ]; then
+    # Check if /dev/kvm is a character device and if we actually have read/write access
+    # Testing access via FD 9 catches cases where [ -w /dev/kvm ] lies in unprivileged containers
+    if [ -c "/dev/kvm" ] && ( exec 9<>/dev/kvm ) 2>/dev/null; then
         echo "INFO: KVM is available and accessible."
         return 0 # KVM is available
     else
-        echo "INFO: KVM is not available or not accessible. Running without KVM."
+        echo "INFO: KVM is not available or not accessible (Permission denied). Running without KVM."
         return 1 # KVM is not available
     fi
 }
