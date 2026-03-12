@@ -1,6 +1,18 @@
 # This is a child pipeline configuration.
 # It expects ARCH and TYPE to be passed as variables from the parent pipeline.
 
+workflow:
+  rules:
+    - if: '$TEST_ENV == "slurm"'
+      variables:
+        RUNNER_TAG1: "dev"
+        RUNNER_TAG2: "dev"
+    - when: always
+      variables:
+        TEST_ENV: "local"
+        RUNNER_TAG1: "shell"
+        RUNNER_TAG2: "clonezilla"
+
 stages:
   - build
   - test
@@ -10,8 +22,8 @@ default:
   timeout: 90m
   retry: 1
   tags:
-    - shell
-    - clonezilla
+    - ${RUNNER_TAG1}
+    - ${RUNNER_TAG2}
 
 variables:
   # ARCH and TYPE are provided by the parent pipeline.
@@ -22,6 +34,9 @@ variables:
 
 build_zip:
   stage: build
+  tags:
+    - shell
+    - clonezilla
   rules:
     - when: on_success
   allow_failure: false
@@ -72,47 +87,83 @@ build_zip:
   variables:
     LIBGUESTFS_DEBUG: "0"
     LIBGUESTFS_TRACE: "0"
+    SLURM_PARTITION: "development"
+    SLURM_ACCOUNT: "GOV109092"
+    SIF_IMAGE: "/home/u1597171/clonezilla-ci/slurm/clonezilla-ci.sif"
   dependencies:
     - build_zip
   before_script:
     - |
-      echo "Setting up qemu cloud images in the project root..."
-      if [ -d "/data/cloudimages" ]; then
-        mkdir -p qemu/cloudimages
-        ln -s /data/cloudimages/*.qcow2 qemu/cloudimages/
-        echo "Linked cloud images from /data/cloudimages."
+      if [ "$TEST_ENV" = "slurm" ]; then
+        echo "Verifying Singularity image exists at ${SIF_IMAGE}..."
+        if [ ! -f "${SIF_IMAGE}" ]; then
+          echo "Error: Singularity image not found at ${SIF_IMAGE}!" >&2
+          exit 1
+        fi
+        echo "Verifying build artifact (Clonezilla ZIP)..."
+        if [ -z "${ZIP_FILE_FROM_BUILD}" ]; then
+          echo "Error: ZIP_FILE_FROM_BUILD variable not passed from build job." >&2
+          exit 1
+        fi
+        export ZIP_FILE_PATH="$(pwd)/${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}"
+        echo "Using ZIP file: ${ZIP_FILE_PATH}"
       else
-        echo "Warning: /data/cloudimages not found. OS tests will fail if images are not present."
+        echo "Setting up qemu cloud images in the project root..."
+        if [ -d "/data/cloudimages" ]; then
+          mkdir -p qemu/cloudimages
+          ln -s /data/cloudimages/*.qcow2 qemu/cloudimages/
+          echo "Linked cloud images from /data/cloudimages."
+        else
+          echo "Warning: /data/cloudimages not found. OS tests will fail if images are not present."
+        fi
+        echo "Verifying build artifact (Clonezilla ZIP)..."
+        if [ -z "${ZIP_FILE_FROM_BUILD}" ]; then
+          echo "Error: ZIP_FILE_FROM_BUILD variable not passed from build job." >&2
+          exit 1
+        fi
+        if ! [ -f "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" ]; then
+          echo "Error: Artifact zip file '${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}' not found!" >&2
+          echo "Listing contents of '${ZIP_DIR}/':"
+          ls -l "${ZIP_DIR}/"
+          exit 1
+        fi
+        echo "Using ZIP file from build job: ${ZIP_FILE_FROM_BUILD}"
+        export ZIP_FILE="${ZIP_FILE_FROM_BUILD}"
+        echo "Preparing log directory..."
+        export LOG_DIR="./logs"
+        mkdir -p $LOG_DIR
+        echo "Setting up test data directory..."
+        if [ -d "/data/dataSets" ]; then
+          # Ensure dev/testData directory exists before creating symlink target
+          mkdir -p dev
+          rm -rf dev/testData # Remove existing placeholder if any
+          ln -s /data/dataSets dev/testData
+          echo "Linked /data/dataSets to dev/testData."
+        else
+          echo "Warning: /data/dataSets not found on runner. Data clone/restore tests might fail."
+        fi
       fi
+  script:
     - |
-      echo "Verifying build artifact (Clonezilla ZIP)..."
-      # The ZIP_FILE_FROM_BUILD variable comes from the build_zip job's dotenv report.
-      if [ -z "${ZIP_FILE_FROM_BUILD}" ]; then
-        echo "Error: ZIP_FILE_FROM_BUILD variable not passed from build job." >&2
+      if [ -z "$TEST_SCRIPT" ]; then
+        echo "Error: TEST_SCRIPT is not set for this job!"
         exit 1
       fi
-      if ! [ -f "${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" ]; then
-        echo "Error: Artifact zip file '${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}' not found!" >&2
-        echo "Listing contents of '${ZIP_DIR}/':"
-        ls -l "${ZIP_DIR}/"
-        exit 1
-      fi
-      echo "Using ZIP file from build job: ${ZIP_FILE_FROM_BUILD}"
-      export ZIP_FILE="${ZIP_FILE_FROM_BUILD}"
-    - |
-      echo "Preparing log directory..."
-      export LOG_DIR="./logs"
-      mkdir -p $LOG_DIR
-    - |
-      echo "Setting up test data directory..."
-      if [ -d "/data/dataSets" ]; then
-        # Ensure dev/testData directory exists before creating symlink target
-        mkdir -p dev
-        rm -rf dev/testData # Remove existing placeholder if any
-        ln -s /data/dataSets dev/testData
-        echo "Linked /data/dataSets to dev/testData."
+      if [ "$TEST_ENV" = "slurm" ]; then
+        echo "Submitting Slurm job for ${TEST_SCRIPT}..."
+        # Use srun for synchronous execution in GitLab CI so it waits for completion
+        # Evaluate TEST_SCRIPT locally first to handle embedded variables like ${FS}
+        EVAL_TEST_SCRIPT=$(eval echo "$TEST_SCRIPT")
+        srun -p "${SLURM_PARTITION}" --account="${SLURM_ACCOUNT}" \
+             --job-name="ci_$(basename ${EVAL_TEST_SCRIPT} .sh)" \
+             --mem=8G --cpus-per-task=4 \
+             singularity exec --bind .:/app --bind /dev/kvm:/dev/kvm \
+             "${SIF_IMAGE}" \
+             bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
       else
-        echo "Warning: /data/dataSets not found on runner. Data clone/restore tests might fail."
+        cd jobs
+        EVAL_TEST_SCRIPT=$(eval echo "$TEST_SCRIPT")
+        ./${EVAL_TEST_SCRIPT#jobs/} --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
       fi
   after_script:
     - |
@@ -141,78 +192,17 @@ build_zip:
     expire_in: 5 days
   timeout: 1h
 
-# --- Slurm Test Template ---
-
-.slurm_test_template:
-  stage: test
-  tags:
-    - dev
-  allow_failure: true
-  dependencies:
-    - build_zip
-  variables:
-    SLURM_PARTITION: "development"
-    SLURM_ACCOUNT: "GOV109092"
-    SIF_IMAGE: "/home/u1597171/clonezilla-ci/slurm/clonezilla-ci.sif"
-  before_script:
-    - |
-      echo "Verifying Singularity image exists at ${SIF_IMAGE}..."
-      if [ ! -f "${SIF_IMAGE}" ]; then
-        echo "Error: Singularity image not found at ${SIF_IMAGE}!" >&2
-        exit 1
-      fi
-      echo "Verifying build artifact (Clonezilla ZIP)..."
-      if [ -z "${ZIP_FILE_FROM_BUILD}" ]; then
-        echo "Error: ZIP_FILE_FROM_BUILD variable not passed from build job." >&2
-        exit 1
-      fi
-      export ZIP_FILE_PATH="$(pwd)/${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}"
-      echo "Using ZIP file: ${ZIP_FILE_PATH}"
-  script:
-    - |
-      echo "Submitting Slurm job for ${TEST_SCRIPT}..."
-      # Use srun for synchronous execution in GitLab CI so it waits for completion
-      srun -p "${SLURM_PARTITION}" --account="${SLURM_ACCOUNT}" \
-           --job-name="ci_$(basename ${TEST_SCRIPT} .sh)" \
-           --mem=8G --cpus-per-task=4 \
-           singularity exec --bind .:/app --bind /dev/kvm:/dev/kvm \
-           "${SIF_IMAGE}" \
-           bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
-  after_script:
-    - |
-      mkdir -p results
-      job_started_ts=$(date -d "$CI_JOB_STARTED_AT" +%s)
-      job_finished_ts=$(date -d "$CI_JOB_FINISHED_AT" +%s)
-      duration=$((job_finished_ts - job_started_ts))
-      duration_formatted=$(date -u -d "@${duration}" +'%H:%M:%S')
-
-      echo "job_name: $CI_JOB_NAME" > "results/${CI_JOB_NAME}.yml"
-      echo "job_status: $CI_JOB_STATUS" >> "results/${CI_JOB_NAME}.yml"
-      echo "job_started_at: $CI_JOB_STARTED_AT" >> "results/${CI_JOB_NAME}.yml"
-      echo "job_duration: $duration_formatted" >> "results/${CI_JOB_NAME}.yml"
-      echo "arch: $ARCH" >> "results/${CI_JOB_NAME}.yml"
-      echo "zip: $ZIP_FILE_FROM_BUILD" >> "results/${CI_JOB_NAME}.yml"
-      echo "runner_description: $CI_RUNNER_DESCRIPTION" >> "results/${CI_JOB_NAME}.yml"
-  artifacts:
-    when: always
-    paths:
-      - logs/
-      - results/
-    expire_in: 5 days
-
 # --- OS Tests ---
 
 test:os:ubuntu:
   extends: .test_template
-  script:
-    - cd jobs
-    - ./test_os_ubuntu.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+  variables:
+    TEST_SCRIPT: "jobs/test_os_ubuntu.sh"
 
 test:os:debian:
   extends: .test_template
-  script:
-    - cd jobs
-    - ./test_os_debian.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+  variables:
+    TEST_SCRIPT: "jobs/test_os_debian.sh"
 
 test:os:windows11:
   extends: .test_template
@@ -224,17 +214,16 @@ test:os:windows11:
     - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
       when: never
     - when: on_success
-  script:
-    - cd jobs
-    - ./test_os_windows.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+  variables:
+    TEST_ENV: "local"
+    TEST_SCRIPT: "jobs/test_os_windows.sh"
 
 #--- Filesystem Tests ---
 
 .fs_test_template:
   extends: .test_template
-  script:
-    - cd jobs
-    - ./test_fs_${FS}.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+  variables:
+    TEST_SCRIPT: "jobs/test_fs_${FS}.sh"
 
 test:fs:exfat:
   extends: .fs_test_template
@@ -269,8 +258,9 @@ test:fs:btrfs:
 # --- Slurm Test Jobs ---
 
 test:slurm:sample:
-  extends: .slurm_test_template
+  extends: .test_template
   variables:
+    TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_sample.sh"
 
 test:lite_bt_from_device:
@@ -279,9 +269,9 @@ test:lite_bt_from_device:
     - shell
     - clonezilla
     - liteserver
-  script:
-    - cd jobs
-    - ./test_lite_bt_from_device.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+  variables:
+    TEST_ENV: "local"
+    TEST_SCRIPT: "jobs/test_lite_bt_from_device.sh"
 
 test:lite_bt_from_image:
   extends: .test_template
@@ -289,9 +279,9 @@ test:lite_bt_from_image:
     - shell
     - clonezilla
     - liteserver
-  script:
-    - cd jobs
-    - ./test_lite_bt_from_image.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+  variables:
+    TEST_ENV: "local"
+    TEST_SCRIPT: "jobs/test_lite_bt_from_image.sh"
 
 test:lite_multicast_from_image:
   extends: .test_template
@@ -299,9 +289,9 @@ test:lite_multicast_from_image:
     - shell
     - clonezilla
     - liteserver
-  script:
-    - cd jobs
-    - ./test_lite_multicast_from_image.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+  variables:
+    TEST_ENV: "local"
+    TEST_SCRIPT: "jobs/test_lite_multicast_from_image.sh"
 
 test:lite_multicast_from_device:
   extends: .test_template
@@ -309,9 +299,9 @@ test:lite_multicast_from_device:
     - shell
     - clonezilla
     - liteserver
-  script:
-    - cd jobs
-    - ./test_lite_multicast_from_device.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+  variables:
+    TEST_ENV: "local"
+    TEST_SCRIPT: "jobs/test_lite_multicast_from_device.sh"
 
 test:lite_raw_data:
   extends: .test_template
@@ -319,15 +309,14 @@ test:lite_raw_data:
     - shell
     - clonezilla
     - liteserver
-  script:
-    - cd jobs
-    - ./test_lite_raw_data.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+  variables:
+    TEST_ENV: "local"
+    TEST_SCRIPT: "jobs/test_lite_raw_data.sh"
 
 test:disk_512en_4kn_ext4_data:
   extends: .test_template
-  script:
-    - cd jobs
-    - ./test_disk_512n_to_4kn_ext4.sh --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+  variables:
+    TEST_SCRIPT: "jobs/test_disk_512n_to_4kn_ext4.sh"
 
 pages:
   stage: deploy

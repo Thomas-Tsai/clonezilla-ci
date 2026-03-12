@@ -39,7 +39,7 @@ TYPE=""
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --zip)
-            ZIP_FILE="$(realpath "$2")"
+            ZIP_FILE="$2"
             shift 2
             ;;
         --arch)
