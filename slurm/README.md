@@ -54,10 +54,10 @@ sbatch --export=ALL,TEST_SCRIPT=jobs/test_fs_ext4.sh,ARCH=amd64,ZIP_FILE=/app/zi
 
 ### Submit All Tests
 
-To run the entire test suite in parallel, use the `submit_all.sh` script:
+To run the entire test suite in parallel, use the `submit_all.sh` script. You can pass the same arguments to it to control the parallel jobs:
 
 ```bash
-./submit_all.sh
+./submit_all.sh --arch amd64 --zip /app/zip/clonezilla-live-3.3.1-37-amd64.zip
 ```
 
 This will iterate through all `jobs/test*.sh` scripts and submit each as a separate Slurm job.

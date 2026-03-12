@@ -31,13 +31,48 @@ if [[ ! -f "$SIF_IMAGE" ]]; then
     fi
 fi
 
+# Parse command line arguments
+ZIP_FILE=""
+ARCH=""
+TYPE=""
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --zip)
+            ZIP_FILE="$(realpath "$2")"
+            shift 2
+            ;;
+        --arch)
+            ARCH="$2"
+            shift 2
+            ;;
+        --type)
+            TYPE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: $0 [--zip <path>] [--arch <arch>] [--type <type>]"
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            echo "Usage: $0 [--zip <path>] [--arch <arch>] [--type <type>]"
+            exit 1
+            ;;
+    esac
+done
+
 ARCH=${ARCH:-amd64}
 TYPE=${TYPE:-stable}
 
-echo "--- Ensuring Clonezilla ZIP is downloaded for $ARCH ($TYPE) ---"
-"$PROJECT_ROOT/download-clonezilla.sh" --arch "$ARCH" --type "$TYPE" -o "$PROJECT_ROOT/zip"
-if [ $? -ne 0 ]; then
-    echo "WARNING: Failed to auto-download zip on login node. Compute nodes may fail if they cannot access the internet."
+if [[ -z "$ZIP_FILE" ]]; then
+    echo "--- Ensuring Clonezilla ZIP is downloaded for $ARCH ($TYPE) ---"
+    "$PROJECT_ROOT/download-clonezilla.sh" --arch "$ARCH" --type "$TYPE" -o "$PROJECT_ROOT/zip"
+    if [ $? -ne 0 ]; then
+        echo "WARNING: Failed to auto-download zip on login node. Compute nodes may fail if they cannot access the internet."
+    fi
+else
+    echo "--- Using specific Clonezilla ZIP: $ZIP_FILE ---"
 fi
 
 echo "--- Submitting all tests in parallel ---"
@@ -53,11 +88,16 @@ fi
 for test_file in $TEST_FILES; do
     test_name=$(basename "$test_file" .sh)
     echo "Submitting job for: $test_name"
-    # Using --export to pass the test script into the sbatch environment
+    # Using --export to pass the test script and arguments into the sbatch environment
+    export_args="ALL,TEST_SCRIPT=$test_file,ARCH=$ARCH"
+    if [[ -n "$ZIP_FILE" ]]; then
+        export_args="$export_args,ZIP_FILE=$ZIP_FILE"
+    fi
+
     sbatch --job-name="ci_$test_name" \
            --partition="$SLURM_PARTITION" \
            --account="$SLURM_ACCOUNT" \
-           --export=ALL,TEST_SCRIPT="$test_file" \
+           --export="$export_args" \
            "$SBATCH_TEMPLATE"
 done
 
