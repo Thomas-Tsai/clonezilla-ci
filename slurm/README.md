@@ -36,10 +36,10 @@ Ensure that any required disk images or Clonezilla ZIP files are available in th
 
 ### Submit a Single Test
 
-You can submit a specific test script using `sbatch`:
+You can submit a specific test script using `sbatch`. To override the default partition and account, you can pass them as arguments:
 
 ```bash
-sbatch --export=ALL,TEST_SCRIPT=jobs/test_fs_ext4.sh template.sbatch
+sbatch --partition=YOUR_PARTITION --account=YOUR_ACCOUNT_ID --export=ALL,TEST_SCRIPT=jobs/test_fs_ext4.sh template.sbatch
 ```
 
 ### Submit All Tests

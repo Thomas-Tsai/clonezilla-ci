@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=clonezilla_ci
-#SBATCH --partition=${SLURM_PARTITION:-development}
-#SBATCH --account=${SLURM_ACCOUNT:-GOV109092}
+#SBATCH --partition=development
+#SBATCH --account=GOV109092
 #SBATCH --time=01:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
