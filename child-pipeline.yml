@@ -87,7 +87,7 @@ build_zip:
   variables:
     LIBGUESTFS_DEBUG: "0"
     LIBGUESTFS_TRACE: "0"
-    SLURM_PARTITION: "development"
+    SLURM_PARTITION: "ct112"
     SLURM_ACCOUNT: "GOV109092"
     SIF_IMAGE: "/home/u1597171/clonezilla-ci/slurm/clonezilla-ci.sif"
   dependencies:
