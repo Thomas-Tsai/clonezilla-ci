@@ -1,18 +1,6 @@
 # This is a child pipeline configuration.
 # It expects ARCH and TYPE to be passed as variables from the parent pipeline.
 
-workflow:
-  rules:
-    - if: '$TEST_ENV == "slurm"'
-      variables:
-        RUNNER_TAG1: "dev"
-        RUNNER_TAG2: "dev"
-    - when: always
-      variables:
-        TEST_ENV: "local"
-        RUNNER_TAG1: "shell"
-        RUNNER_TAG2: "clonezilla"
-
 stages:
   - build
   - test
@@ -22,8 +10,7 @@ default:
   timeout: 90m
   retry: 1
   tags:
-    - ${RUNNER_TAG1}
-    - ${RUNNER_TAG2}
+    - clonezilla
 
 variables:
   # ARCH and TYPE are provided by the parent pipeline.
@@ -35,7 +22,6 @@ variables:
 build_zip:
   stage: build
   tags:
-    - shell
     - clonezilla
   rules:
     - when: on_success
@@ -94,11 +80,20 @@ build_zip:
     - build_zip
   before_script:
     - |
-      # GitLab Pipeline Variables (from trigger/schedule) override Job Variables.
-      # Use FORCE_LOCAL to allow a job to stay local even if the pipeline is in slurm mode.
+      # Auto-detect Environment Strategy
+      # If the job explicitly requests local execution (FORCE_LOCAL), we skip auto-detection.
       if [ "$FORCE_LOCAL" = "true" ]; then
         echo "FORCE_LOCAL is true, setting TEST_ENV to local."
         export TEST_ENV="local"
+      else
+        # Auto-detect if we landed on a Slurm runner by checking for the Singularity image
+        if [ -f "${SIF_IMAGE}" ] || command -v srun &> /dev/null; then
+          echo "Detected Slurm environment (SIF_IMAGE found or srun available). Setting TEST_ENV=slurm."
+          export TEST_ENV="slurm"
+        else
+          echo "No Slurm environment detected. Defaulting to TEST_ENV=local."
+          export TEST_ENV="local"
+        fi
       fi
 
       if [ "$TEST_ENV" = "slurm" ]; then
@@ -232,7 +227,6 @@ test:os:debian:
 test:os:windows11:
   extends: .test_template
   tags:
-    - shell
     - clonezilla
     - windows
   rules:
@@ -294,7 +288,6 @@ test:slurm:sample:
 test:lite_bt_from_device:
   extends: .test_template
   tags:
-    - shell
     - clonezilla
     - liteserver
   variables:
@@ -305,7 +298,6 @@ test:lite_bt_from_device:
 test:lite_bt_from_image:
   extends: .test_template
   tags:
-    - shell
     - clonezilla
     - liteserver
   variables:
@@ -316,7 +308,6 @@ test:lite_bt_from_image:
 test:lite_multicast_from_image:
   extends: .test_template
   tags:
-    - shell
     - clonezilla
     - liteserver
   variables:
@@ -327,7 +318,6 @@ test:lite_multicast_from_image:
 test:lite_multicast_from_device:
   extends: .test_template
   tags:
-    - shell
     - clonezilla
     - liteserver
   variables:
@@ -338,7 +328,6 @@ test:lite_multicast_from_device:
 test:lite_raw_data:
   extends: .test_template
   tags:
-    - shell
     - clonezilla
     - liteserver
   variables:
