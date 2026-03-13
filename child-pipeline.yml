@@ -152,6 +152,10 @@ build_zip:
         echo "Error: TEST_SCRIPT is not set for this job!"
         exit 1
       fi
+      EXTRA_BINDS=""
+      [ -d "/data/cloudimages" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/cloudimages"
+      [ -d "/data/dataSets" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/dataSets"
+
       if [ "$TEST_ENV" = "slurm" ]; then
         echo "Submitting Slurm job for ${TEST_SCRIPT}..."
         # Use srun for synchronous execution in GitLab CI so it waits for completion
@@ -160,7 +164,7 @@ build_zip:
         srun -p "${SLURM_PARTITION}" --account="${SLURM_ACCOUNT}" \
              --job-name="ci_$(basename ${EVAL_TEST_SCRIPT} .sh)" \
              --mem=8G --cpus-per-task=4 \
-             singularity exec --bind .:/app --bind /dev/kvm:/dev/kvm \
+             singularity exec --bind .:/app --bind /dev/kvm:/dev/kvm ${EXTRA_BINDS} \
              "${SIF_IMAGE}" \
              bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
       else
