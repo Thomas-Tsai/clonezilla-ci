@@ -125,12 +125,23 @@ build_zip:
 
       echo "Setting up qemu cloud images in the project root..."
       if [ -d "/data/cloudimages" ]; then
+        echo "Available qcow imags in /data/cloudimages/:"
+        find /data/cloudimages/ -name "*.qcow2"
         mkdir -p qemu/cloudimages
         ln -s /data/cloudimages/*.qcow2 qemu/cloudimages/
         echo "Linked cloud images from /data/cloudimages."
+      elif [ -d "/home/u1597171/clonezilla-ci/qemu/cloudimages" ]; then
+        echo "Available qcow imags in /home/u1597171/clonezilla-ci/qemu/cloudimages/:"
+        find /home/u1597171/clonezilla-ci/qemu/cloudimages/ -name "*.qcow2"
+        mkdir -p qemu/cloudimages
+        ln -s /home/u1597171/clonezilla-ci/qemu/cloudimages/*.qcow2 qemu/cloudimages/
+        echo "Linked cloud images from /home/u1597171/clonezilla-ci/qemu/cloudimages."
       else
         echo "Warning: /data/cloudimages not found. OS tests will fail if images are not present."
       fi
+
+      echo "Available qcow imags in qemu/cloudimages/:"
+      find qemu/cloudimages/ -name "*.qcow2"
 
       echo "Preparing log directory..."
       export LOG_DIR="./logs"
