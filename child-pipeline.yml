@@ -7,7 +7,7 @@ stages:
   - deploy
 
 default:
-  timeout: 90m
+  timeout: 120m
   retry: 1
   tags:
     - clonezilla
@@ -210,7 +210,7 @@ build_zip:
       - logs/
       - results/
     expire_in: 5 days
-  timeout: 1h
+  timeout: 2h
 
 # --- OS Tests ---
 
@@ -287,42 +287,26 @@ test:slurm:sample:
 
 test:lite_bt_from_device:
   extends: .test_template
-  tags:
-    - clonezilla
-    - liteserver
   variables:
-    TEST_ENV: "local"
-    FORCE_LOCAL: "true"
+    TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_lite_bt_from_device.sh"
 
 test:lite_bt_from_image:
   extends: .test_template
-  tags:
-    - clonezilla
-    - liteserver
   variables:
-    TEST_ENV: "local"
-    FORCE_LOCAL: "true"
+    TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_lite_bt_from_image.sh"
 
 test:lite_multicast_from_image:
   extends: .test_template
-  tags:
-    - clonezilla
-    - liteserver
   variables:
-    TEST_ENV: "local"
-    FORCE_LOCAL: "true"
+    TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_lite_multicast_from_image.sh"
 
 test:lite_multicast_from_device:
   extends: .test_template
-  tags:
-    - clonezilla
-    - liteserver
   variables:
-    TEST_ENV: "local"
-    FORCE_LOCAL: "true"
+    TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_lite_multicast_from_device.sh"
 
 test:lite_raw_data:
@@ -337,7 +321,12 @@ test:lite_raw_data:
 
 test:disk_512en_4kn_ext4_data:
   extends: .test_template
+  tags:
+    - clonezilla
+    - liteserver
   variables:
+    TEST_ENV: "local"
+    FORCE_LOCAL: "true"
     TEST_SCRIPT: "jobs/test_disk_512n_to_4kn_ext4.sh"
 
 pages:
