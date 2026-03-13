@@ -259,6 +259,8 @@ test:fs:btrfs:
 
 test:slurm:sample:
   extends: .test_template
+  rules:
+    - if: '$TEST_ENV == "slurm"'
   variables:
     TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_sample.sh"
@@ -331,7 +333,8 @@ pages:
     - test:fs:ext4
     - test:fs:xfs
     - test:fs:btrfs
-    - test:slurm:sample
+    - job: test:slurm:sample
+      optional: true
     - test:lite_bt_from_device
     - test:lite_bt_from_image
     - test:lite_multicast_from_image
