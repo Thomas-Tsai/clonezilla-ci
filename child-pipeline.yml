@@ -108,14 +108,6 @@ build_zip:
         export ZIP_FILE_PATH="$(pwd)/${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}"
         echo "Using ZIP file: ${ZIP_FILE_PATH}"
       else
-        echo "Setting up qemu cloud images in the project root..."
-        if [ -d "/data/cloudimages" ]; then
-          mkdir -p qemu/cloudimages
-          ln -s /data/cloudimages/*.qcow2 qemu/cloudimages/
-          echo "Linked cloud images from /data/cloudimages."
-        else
-          echo "Warning: /data/cloudimages not found. OS tests will fail if images are not present."
-        fi
         echo "Verifying build artifact (Clonezilla ZIP)..."
         if [ -z "${ZIP_FILE_FROM_BUILD}" ]; then
           echo "Error: ZIP_FILE_FROM_BUILD variable not passed from build job." >&2
@@ -129,19 +121,30 @@ build_zip:
         fi
         echo "Using ZIP file from build job: ${ZIP_FILE_FROM_BUILD}"
         export ZIP_FILE="${ZIP_FILE_FROM_BUILD}"
-        echo "Preparing log directory..."
-        export LOG_DIR="./logs"
-        mkdir -p $LOG_DIR
-        echo "Setting up test data directory..."
-        if [ -d "/data/dataSets" ]; then
-          # Ensure dev/testData directory exists before creating symlink target
-          mkdir -p dev
-          rm -rf dev/testData # Remove existing placeholder if any
-          ln -s /data/dataSets dev/testData
-          echo "Linked /data/dataSets to dev/testData."
-        else
-          echo "Warning: /data/dataSets not found on runner. Data clone/restore tests might fail."
-        fi
+      fi
+
+      echo "Setting up qemu cloud images in the project root..."
+      if [ -d "/data/cloudimages" ]; then
+        mkdir -p qemu/cloudimages
+        ln -s /data/cloudimages/*.qcow2 qemu/cloudimages/
+        echo "Linked cloud images from /data/cloudimages."
+      else
+        echo "Warning: /data/cloudimages not found. OS tests will fail if images are not present."
+      fi
+
+      echo "Preparing log directory..."
+      export LOG_DIR="./logs"
+      mkdir -p $LOG_DIR
+      
+      echo "Setting up test data directory..."
+      if [ -d "/data/dataSets" ]; then
+        # Ensure dev/testData directory exists before creating symlink target
+        mkdir -p dev
+        rm -rf dev/testData # Remove existing placeholder if any
+        ln -s /data/dataSets dev/testData
+        echo "Linked /data/dataSets to dev/testData."
+      else
+        echo "Warning: /data/dataSets not found on runner. Data clone/restore tests might fail."
       fi
   script:
     - |
