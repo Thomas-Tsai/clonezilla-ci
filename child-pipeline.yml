@@ -94,6 +94,13 @@ build_zip:
     - build_zip
   before_script:
     - |
+      # GitLab Pipeline Variables (from trigger/schedule) override Job Variables.
+      # Use FORCE_LOCAL to allow a job to stay local even if the pipeline is in slurm mode.
+      if [ "$FORCE_LOCAL" = "true" ]; then
+        echo "FORCE_LOCAL is true, setting TEST_ENV to local."
+        export TEST_ENV="local"
+      fi
+
       if [ "$TEST_ENV" = "slurm" ]; then
         echo "Verifying Singularity image exists at ${SIF_IMAGE}..."
         if [ ! -f "${SIF_IMAGE}" ]; then
@@ -234,6 +241,7 @@ test:os:windows11:
     - when: on_success
   variables:
     TEST_ENV: "local"
+    FORCE_LOCAL: "true"
     TEST_SCRIPT: "jobs/test_os_windows.sh"
 
 #--- Filesystem Tests ---
@@ -291,6 +299,7 @@ test:lite_bt_from_device:
     - liteserver
   variables:
     TEST_ENV: "local"
+    FORCE_LOCAL: "true"
     TEST_SCRIPT: "jobs/test_lite_bt_from_device.sh"
 
 test:lite_bt_from_image:
@@ -301,6 +310,7 @@ test:lite_bt_from_image:
     - liteserver
   variables:
     TEST_ENV: "local"
+    FORCE_LOCAL: "true"
     TEST_SCRIPT: "jobs/test_lite_bt_from_image.sh"
 
 test:lite_multicast_from_image:
@@ -311,6 +321,7 @@ test:lite_multicast_from_image:
     - liteserver
   variables:
     TEST_ENV: "local"
+    FORCE_LOCAL: "true"
     TEST_SCRIPT: "jobs/test_lite_multicast_from_image.sh"
 
 test:lite_multicast_from_device:
@@ -321,6 +332,7 @@ test:lite_multicast_from_device:
     - liteserver
   variables:
     TEST_ENV: "local"
+    FORCE_LOCAL: "true"
     TEST_SCRIPT: "jobs/test_lite_multicast_from_device.sh"
 
 test:lite_raw_data:
@@ -331,6 +343,7 @@ test:lite_raw_data:
     - liteserver
   variables:
     TEST_ENV: "local"
+    FORCE_LOCAL: "true"
     TEST_SCRIPT: "jobs/test_lite_raw_data.sh"
 
 test:disk_512en_4kn_ext4_data:
