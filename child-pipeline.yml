@@ -71,7 +71,7 @@ build_zip:
   stage: test
   allow_failure: true
   environment:
-    name: "version/$ZIP_FILE_FROM_BUILD"
+    name: "test/${ARCH}/${TYPE}"
   variables:
     LIBGUESTFS_DEBUG: "0"
     LIBGUESTFS_TRACE: "0"
@@ -88,6 +88,12 @@ build_zip:
       echo "  CLONEZILLA VERSION DETECTED: ${ZIP_FILE_FROM_BUILD}"
       echo "================================================================================"
       echo -e "\e[0m"
+
+      # Create a summary for the job page
+      echo "## Test Summary" > summary.md
+      echo "* **Clonezilla Version:** \`${ZIP_FILE_FROM_BUILD}\`" >> summary.md
+      echo "* **Architecture:** \`${ARCH}\`" >> summary.md
+      echo "* **Type:** \`${TYPE:-unknown}\`" >> summary.md
 
       # Auto-detect Environment Strategy
       # If the job explicitly requests local execution (FORCE_LOCAL), we skip auto-detection.
@@ -218,6 +224,8 @@ build_zip:
     paths:
       - logs/
       - results/
+    reports:
+      summary: summary.md
     expire_in: 5 days
   timeout: 2h
 
