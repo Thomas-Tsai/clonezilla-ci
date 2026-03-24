@@ -70,6 +70,8 @@ build_zip:
 .test_template:
   stage: test
   allow_failure: true
+  environment:
+    name: "version/$ZIP_FILE_FROM_BUILD"
   variables:
     LIBGUESTFS_DEBUG: "0"
     LIBGUESTFS_TRACE: "0"
@@ -80,6 +82,13 @@ build_zip:
     - build_zip
   before_script:
     - |
+      # Display a prominent banner in the logs
+      echo -e "\e[1;32m"
+      echo "================================================================================"
+      echo "  CLONEZILLA VERSION DETECTED: ${ZIP_FILE_FROM_BUILD}"
+      echo "================================================================================"
+      echo -e "\e[0m"
+
       # Auto-detect Environment Strategy
       # If the job explicitly requests local execution (FORCE_LOCAL), we skip auto-detection.
       if [ "$FORCE_LOCAL" = "true" ]; then
