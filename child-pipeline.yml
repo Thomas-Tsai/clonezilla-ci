@@ -2,7 +2,7 @@
 # It expects ARCH and TYPE to be passed as variables from the parent pipeline.
 
 stages:
-  - build
+  - download
   - test
   - deploy
 
@@ -19,8 +19,8 @@ variables:
   ZIP_DIR: "zip"
   CURL_OPTS: "-fsSL"
 
-build_zip:
-  stage: build
+download_zip:
+  stage: download
   tags:
     - clonezilla
   rules:
@@ -79,7 +79,7 @@ build_zip:
     SLURM_ACCOUNT: "GOV109092"
     SIF_IMAGE: "/home/u1597171/clonezilla-ci/slurm/clonezilla-ci.sif"
   dependencies:
-    - build_zip
+    - download_zip
   before_script:
     - |
       # Display a prominent banner in the logs
