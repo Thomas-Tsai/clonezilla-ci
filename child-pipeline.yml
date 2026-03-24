@@ -89,11 +89,8 @@ build_zip:
       echo "================================================================================"
       echo -e "\e[0m"
 
-      # Create a summary for the job page
-      echo "## Test Summary" > summary.md
-      echo "* **Clonezilla Version:** \`${ZIP_FILE_FROM_BUILD}\`" >> summary.md
-      echo "* **Architecture:** \`${ARCH}\`" >> summary.md
-      echo "* **Type:** \`${TYPE:-unknown}\`" >> summary.md
+      # Create a version file artifact for visibility
+      touch "version-${ZIP_FILE_FROM_BUILD}"
 
       # Auto-detect Environment Strategy
       # If the job explicitly requests local execution (FORCE_LOCAL), we skip auto-detection.
@@ -224,8 +221,7 @@ build_zip:
     paths:
       - logs/
       - results/
-    reports:
-      summary: summary.md
+      - "version-*"
     expire_in: 5 days
   timeout: 2h
 
