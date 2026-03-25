@@ -36,6 +36,9 @@ ip link set "${IFACE}" up
 ip a add 192.168.0.1/24 dev "${IFACE}"
 ip r add default via 192.168.0.1
 
+# Signal that image creation is complete so the host can stop waiting.
+touch /home/partimag/image_creation_complete
+
 echo "Info: Running Clonezilla lite server multicast device"
 ocs-live-feed-img -cbm both -dm start-new-dhcpd -lscm massive-deployment -mdst from-device -cdt disk-2-mdisks -bsdf sfsck -g auto -e1 auto -e2 -r -x -j2 -k0 -p true -md multicast --clients-to-wait 1 start "${OCS_IMG_NAME:-vda}" vda
 
