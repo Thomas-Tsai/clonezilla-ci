@@ -45,6 +45,9 @@ if [ -d "/home/partimag/$IMG_NAME" ]; then
 fi
 /usr/sbin/ocs-sr -b -q2 -c -j2 -edio -z9p -i 0 -sfsck -scs -senc -p command savedisk "$IMG_NAME" vda
 
+# Signal that image creation is complete so the host can stop waiting.
+touch /home/partimag/image_creation_complete
+
 echo "Info: Running Clonezilla lite server multicast image"
 mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag
 ocs-live-feed-img -cbm both -dm start-new-dhcpd -lscm massive-deployment -mdst from-image -g auto -e1 auto -e2 -x -j2 -edio -k0 -sc0 -p command -md bittorrent start "$IMG_NAME" vda
