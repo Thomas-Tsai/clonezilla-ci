@@ -2,23 +2,34 @@
 # This script is for Clonezilla lite server BitTorrent test.
 # It sets up the server-side network.
 
-# Dynamically find an unconfigured network interface (excluding loopback)
-# This is to avoid hardcoding interface names and ensure we configure a fresh interface.
+# Select network interface. If PRIVNET_MAC is provided, use it strictly.
+# Otherwise, dynamically find an unconfigured network interface (excluding loopback).
 IFACE=""
-for i in $(ip -o link show | awk -F': ' '!/lo/ {print $2}'); do
-  if ! ip -o a show dev "$i" | grep -q "inet "; then
-    IFACE="$i"
-    break
+if [ -n "${PRIVNET_MAC:-}" ]; then
+  IFACE=$(ip -o link show | grep -i "\b${PRIVNET_MAC}\b" | awk -F': ' '{print $2}')
+  if [ -z "$IFACE" ]; then
+    echo "Error: Could not find network interface with MAC ${PRIVNET_MAC}" >&2
+    echo "DEBUG: No unconfigured interface found" > /dev/ttyS0
+    exit 1
   fi
-done
+  echo "Info: Found network interface by MAC ($PRIVNET_MAC): $IFACE"
+  echo "DEBUG: Found interface $IFACE" > /dev/ttyS0
+else
+  for i in $(ip -o link show | awk -F': ' '!/lo/ {print $2}'); do
+    if ! ip -o a show dev "$i" | grep -q "inet "; then
+      IFACE="$i"
+      break
+    fi
+  done
 
-if [ -z "$IFACE" ]; then
-  echo "Error: Could not find an unconfigured network interface to use for the server." >&2
-  echo "DEBUG: No unconfigured interface found" > /dev/ttyS0
-  exit 1
+  if [ -z "$IFACE" ]; then
+    echo "Error: Could not find an unconfigured network interface to use for the server." >&2
+    echo "DEBUG: No unconfigured interface found" > /dev/ttyS0
+    exit 1
+  fi
+  echo "Info: Found unconfigured network interface for server: $IFACE"
+  echo "DEBUG: Found interface $IFACE" > /dev/ttyS0
 fi
-echo "Info: Found unconfigured network interface for server: $IFACE"
-echo "DEBUG: Found interface $IFACE" > /dev/ttyS0
 
 # In lite server mode, the server has to set a static IP address and run DHCP service,
 # so the client can lease an IP address and find the server.

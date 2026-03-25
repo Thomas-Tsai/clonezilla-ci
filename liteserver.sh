@@ -394,6 +394,10 @@ main() {
     CLIENT_PID=""
     PRIVATE_PORT=$((10000 + (RANDOM % 50000)))
     info "Using private network port: $PRIVATE_PORT"
+    SERVER_MAC=$(printf '52:54:99:%02X:%02X:%02X' $((RANDOM%256)) $((RANDOM%256)) $((RANDOM%256)))
+    CLIENT_MAC=$(printf '52:54:99:%02X:%02X:%02X' $((RANDOM%256)) $((RANDOM%256)) $((RANDOM%256)))
+    info "Generated SERVER_MAC: $SERVER_MAC"
+    info "Generated CLIENT_MAC: $CLIENT_MAC"
 
     if [ "$DEBUG_MODE" = true ]; then
         info "--- Running in DEBUG MODE ---"
@@ -409,13 +413,13 @@ main() {
             "--arch" "$ARCH"
             "--ssh-port" "$SERVER_SSH_PORT"
             "--interactive"
-            "--cmd" "bash"
+            "--cmd" "export PRIVNET_MAC=$SERVER_MAC; bash"
         )
         for disk in "${TEMP_SERVER_DISKS[@]}"; do
             SERVER_QEMU_RUN_ARGS+=("--disk" "$disk")
         done
         SERVER_QEMU_RUN_ARGS+=(
-            "--qemu-args" "-netdev socket,id=privnet,listen=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
+            "--qemu-args" "-netdev socket,id=privnet,listen=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet,mac=$SERVER_MAC"
         )
 
         # Start Server in debug mode
@@ -433,8 +437,8 @@ main() {
             "--arch" "$ARCH"
             "--ssh-port" "$CLIENT_SSH_PORT"
             "--interactive"
-            "--cmd" "bash"
-            "--qemu-args" "-netdev socket,id=privnet,connect=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
+            "--cmd" "export PRIVNET_MAC=$CLIENT_MAC; bash"
+            "--qemu-args" "-netdev socket,id=privnet,connect=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet,mac=$CLIENT_MAC"
         )
         for disk in "${CLIENT_DISKS[@]}"; do
             CLIENT_QEMU_RUN_ARGS+=("--disk" "$disk")
@@ -473,21 +477,48 @@ main() {
             SERVER_QEMU_RUN_ARGS+=("--disk" "$disk")
         done
         if [[ -n "$CMD" ]]; then
-            SERVER_QEMU_RUN_ARGS+=("--cmd" "$CMD")
+            SERVER_QEMU_RUN_ARGS+=("--cmd" "export PRIVNET_MAC=$SERVER_MAC; $CMD")
         elif [[ -n "$CMDPATH" ]]; then
-            SERVER_QEMU_RUN_ARGS+=("--cmdpath" "$CMDPATH")
+            mkdir -p "$PARTIMAG_DIR/cmd_scripts"
+            cp "$CMDPATH" "$PARTIMAG_DIR/cmd_scripts/"
+            local script_basename
+            script_basename=$(basename "$CMDPATH")
+            SERVER_QEMU_RUN_ARGS+=("--cmd" "export PRIVNET_MAC=$SERVER_MAC; bash /home/partimag/cmd_scripts/$script_basename")
         fi
         SERVER_QEMU_RUN_ARGS+=(
-            "--qemu-args" "-netdev socket,id=privnet,listen=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
+            "--qemu-args" "-netdev socket,id=privnet,listen=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet,mac=$SERVER_MAC"
         )
 
         # Start Server
         info "Starting Lite Server in the background..."
         ./qemu-clonezilla-ci-run.sh "${SERVER_QEMU_RUN_ARGS[@]}" &
         SERVER_PID=$!
-        info "Server started with PID: $SERVER_PID. Waiting for it to boot..."
-        info "sleep 60 seconds to wait for server to boot..."
-        sleep 60
+        info "Server started with PID: $SERVER_PID. Waiting for it to create the image..."
+        
+        # Poll for the flag file that indicates the server has finished creating the image
+        FLAG_FILE="$PARTIMAG_DIR/image_creation_complete"
+        WAIT_TIMEOUT=600 # 10 minutes
+        SECONDS_WAITED=0
+        
+        # First, remove any stale flag file from a previous run
+        rm -f "$FLAG_FILE"
+
+        while [ ! -f "$FLAG_FILE" ]; do
+            if [ $SECONDS_WAITED -ge $WAIT_TIMEOUT ]; then
+                error "Timeout ($WAIT_TIMEOUT seconds) reached waiting for server to create image. Flag file not found: $FLAG_FILE"
+            fi
+            
+            # Check if server process is still alive
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+                error "Server process (PID $SERVER_PID) died unexpectedly while waiting for image creation. Check server logs."
+            fi
+
+            sleep 5
+            SECONDS_WAITED=$((SECONDS_WAITED + 5))
+            echo -n "." # Progress indicator
+        done
+        echo "" # Newline after progress dots
+        info "Image creation complete. Proceeding to start client."
 
         # Prepare client command args
         CLIENT_QEMU_RUN_ARGS=(
@@ -498,39 +529,39 @@ main() {
             "--no-ssh-forward"
             "--cmdpath" "dev/ocscmd/lite-client.sh"
             "--arch" "$ARCH"
-            "--qemu-args" "-netdev socket,id=privnet,connect=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet"
+            "--qemu-args" "-netdev socket,id=privnet,connect=127.0.0.1:$PRIVATE_PORT -device virtio-net-pci,netdev=privnet,mac=$CLIENT_MAC"
         )
         
-        # Pass OCS_IMG_NAME to the client via environment variable in the script command
+        # Pass variables to the client via environment variable in the script command
+        local CLIENT_CMD="export PRIVNET_MAC=$CLIENT_MAC; "
         if [ -n "${OCS_IMG_NAME:-}" ]; then
-            # We override the default bash command constructed by qemu-clonezilla-ci-run.sh
-            # to include the environment variable.
-            # qemu-clonezilla-ci-run.sh will mount the script at /home/partimag/cmd_scripts/lite-client.sh
-            local CLIENT_CMD="export OCS_IMG_NAME=$OCS_IMG_NAME; bash /home/partimag/cmd_scripts/lite-client.sh"
-            CLIENT_QEMU_RUN_ARGS+=(
-                "--cmd" "$CLIENT_CMD"
-            )
-            # Since we are using --cmd, qemu-clonezilla-ci-run.sh won't copy the script.
-            # We must do it manually here.
-            mkdir -p "$PARTIMAG_DIR/cmd_scripts"
-            cp "dev/ocscmd/lite-client.sh" "$PARTIMAG_DIR/cmd_scripts/"
-
-            # Remove --cmdpath as we are using --cmd now
-            local NEW_CLIENT_ARGS=()
-            local SKIP_NEXT=false
-            for arg in "${CLIENT_QEMU_RUN_ARGS[@]}"; do
-                if [ "$SKIP_NEXT" = true ]; then
-                    SKIP_NEXT=false
-                    continue
-                fi
-                if [[ "$arg" == "--cmdpath" ]]; then
-                    SKIP_NEXT=true
-                    continue
-                fi
-                NEW_CLIENT_ARGS+=("$arg")
-            done
-            CLIENT_QEMU_RUN_ARGS=("${NEW_CLIENT_ARGS[@]}")
+            CLIENT_CMD+="export OCS_IMG_NAME=$OCS_IMG_NAME; "
         fi
+        CLIENT_CMD+="bash /home/partimag/cmd_scripts/lite-client.sh"
+        CLIENT_QEMU_RUN_ARGS+=(
+            "--cmd" "$CLIENT_CMD"
+        )
+        
+        # Since we are using --cmd, qemu-clonezilla-ci-run.sh won't copy the script.
+        # We must do it manually here.
+        mkdir -p "$PARTIMAG_DIR/cmd_scripts"
+        cp "dev/ocscmd/lite-client.sh" "$PARTIMAG_DIR/cmd_scripts/"
+
+        # Remove --cmdpath as we are using --cmd now
+        local NEW_CLIENT_ARGS=()
+        local SKIP_NEXT=false
+        for arg in "${CLIENT_QEMU_RUN_ARGS[@]}"; do
+            if [ "$SKIP_NEXT" = true ]; then
+                SKIP_NEXT=false
+                continue
+            fi
+            if [[ "$arg" == "--cmdpath" ]]; then
+                SKIP_NEXT=true
+                continue
+            fi
+            NEW_CLIENT_ARGS+=("$arg")
+        done
+        CLIENT_QEMU_RUN_ARGS=("${NEW_CLIENT_ARGS[@]}")
         for disk in "${CLIENT_DISKS[@]}"; do
             CLIENT_QEMU_RUN_ARGS+=("--disk" "$disk")
         done
