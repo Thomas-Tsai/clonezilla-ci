@@ -62,6 +62,7 @@ trigger:arm64:
   <<: *trigger_template
   variables:
     ARCH: 'arm64'
+    TYPE: 'experimental'
 
 # --- RISCV64 Triggers ---
 
@@ -69,6 +70,7 @@ trigger:riscv64:
   <<: *trigger_template
   variables:
     ARCH: 'riscv64'
+    TYPE: 'experimental'
 
 # Add more combinations as needed.
 # For example, to add alternative-stable for amd64:
