@@ -344,6 +344,12 @@ test:disk_512en_4kn_ext4_data:
     FORCE_LOCAL: "true"
     TEST_SCRIPT: "jobs/test_disk_512n_to_4kn_ext4.sh"
 
+test:dev_to_dev:
+  extends: .test_template
+  variables:
+    TEST_ENV: "slurm"
+    TEST_SCRIPT: "jobs/test_dev_to_dev.sh"
+
 pages:
   stage: deploy
   needs:
@@ -365,6 +371,7 @@ pages:
     - test:lite_multicast_from_device
     - test:lite_raw_data
     - test:disk_512en_4kn_ext4_data
+    - test:dev_to_dev
   script:
     - chmod +x jobs/publish_reports.sh
     - jobs/publish_reports.sh
