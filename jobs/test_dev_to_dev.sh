@@ -6,6 +6,8 @@
 # Source the common script
 . "$(dirname "$0")/common.sh"
 
+NO_SSH_FORWARD_ARG=""
+
 # --- Argument Parsing ---
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -16,6 +18,14 @@ while [ "$#" -gt 0 ]; do
         --arch)
             ARCH="$2"
             shift 2
+            ;;
+        --type)
+            TYPE="$2"
+            shift 2
+            ;;
+        --no-ssh-forward)
+            NO_SSH_FORWARD_ARG="--no-ssh-forward"
+            shift 1
             ;;
         -h|--help)
             usage
@@ -123,8 +133,8 @@ EOF
 
     # Run the command and capture its stdout/stderr
     local output
-    echo "RUNNING: qemu-clonezilla-ci-run.sh --zip $CLONEZILLA_ZIP --disk qemu/disk-a.qcow2 --disk qemu/disk-b.qcow2 --arch $ARCH --cmdpath dev/ocscmd/dev_to_dev_test.sh"
-    output=$( (cd .. && ./qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/disk-a.qcow2 --disk qemu/disk-b.qcow2 --arch "$ARCH" --cmdpath dev/ocscmd/dev_to_dev_test.sh) 2>&1)
+    echo "RUNNING: qemu-clonezilla-ci-run.sh --zip $CLONEZILLA_ZIP --disk qemu/disk-a.qcow2 --disk qemu/disk-b.qcow2 --arch $ARCH --cmdpath dev/ocscmd/dev_to_dev_test.sh $NO_SSH_FORWARD_ARG"
+    output=$( (cd .. && ./qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/disk-a.qcow2 --disk qemu/disk-b.qcow2 --arch "$ARCH" --cmdpath dev/ocscmd/dev_to_dev_test.sh $NO_SSH_FORWARD_ARG) 2>&1)
     echo "$output" # Show the output for debugging
 
     # Extract the log file path from the output, removing any carriage returns
