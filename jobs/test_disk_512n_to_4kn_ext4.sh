@@ -164,12 +164,15 @@ test_512n_to_4kn_ext4() {
     # Create the verification script
     cat > "$VERIFY_SCRIPT" <<EOF
 #!/bin/bash
+set -x
+exec > /dev/ttyS0 2>&1
 sudo mount /dev/nvme0n1p1 /mnt
 if [ -d /mnt/testData ]; then
   cd /mnt/testData && find . -type f -exec md5sum {} + | env LC_ALL=C sort -k 2 > /home/partimag/$VM_MD5_FILE
 else
   echo 'ERROR: testData directory not found' > /home/partimag/error.log
 fi
+sync
 sudo poweroff
 EOF
     chmod +x "$VERIFY_SCRIPT"
