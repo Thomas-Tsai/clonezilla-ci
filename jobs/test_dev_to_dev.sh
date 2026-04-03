@@ -63,13 +63,17 @@ sgdisk -Z /dev/vda
 sgdisk -n 1:0:+8G -c 1:"part1" /dev/vda
 sgdisk -n 2:0:+8G -c 2:"part2" /dev/vda
 partprobe /dev/vda
+udevadm settle
+sleep 2
 
 # Format vda1
 mkfs.ext4 -F /dev/vda1
+sync
+sleep 2
 
 # Create random files and checksum
 mkdir -p /mnt/a
-mount /dev/vda1 /mnt/a
+mount -t ext4 /dev/vda1 /mnt/a
 mkdir -p /mnt/a/random_files
 for i in $(seq 1 10); do
     echo "Creating file_$i.bin (10M)..."
@@ -89,7 +93,7 @@ sleep 2
 
 # Verify Case 1
 mkdir -p /mnt/b
-mount /dev/vdb1 /mnt/b
+mount -t ext4 /dev/vdb1 /mnt/b
 cd /mnt/b/random_files
 echo "Verifying checksums for Case 1..."
 if md5sum -c /tmp/expected_checksum.md5 > /dev/null 2>&1; then
@@ -107,7 +111,7 @@ echo "=== [3/3] Running Case 2: disk to disk (vda -> vdb) ==="
 sleep 2
 
 # Verify Case 2
-mount /dev/vdb1 /mnt/b
+mount -t ext4 /dev/vdb1 /mnt/b
 cd /mnt/b/random_files
 echo "Verifying checksums for Case 2..."
 if md5sum -c /tmp/expected_checksum.md5 > /dev/null 2>&1; then
