@@ -66,11 +66,6 @@ oneTimeSetUp() {
     # Create source disk
     qemu-img create -f qcow2 "$SOURCE_DISK" 5G
 
-    # Resolve testData symlink to real path (e.g., for GitLab Runner)
-    # Using realpath ensures we have the underlying path, but tar -h will follow the symlink.
-    local TESTDATA_REALPATH
-    TESTDATA_REALPATH=$(realpath "${PROJECT_ROOT}/dev/testData")
-
     # Use guestfish to setup partitions and data.
     # We use GPT for all architectures as requested for modern support.
     # We explicitly start at sector 2048 (1 MiB) to ensure compatibility with 4Kn targets
@@ -82,9 +77,15 @@ part-add /dev/sda primary 2048 10485000
 mkfs ext4 /dev/sda1
 mount /dev/sda1 /"
 
-    # Create a tarball on the host, following symlinks (-h)
+    info "Generating 10 1MB random files for testing..."
+    mkdir -p "$WORK_DIR/random_data"
+    for i in $(seq 1 10); do
+        dd if=/dev/urandom of="$WORK_DIR/random_data/file_$i.bin" bs=1M count=1 status=none
+    done
+
+    # Create a tarball on the host to transfer into guestfish
     local TESTDATA_TAR="$WORK_DIR/testData.tar"
-    (cd "$(dirname "$TESTDATA_REALPATH")" && tar -chf "$TESTDATA_TAR" "$(basename "$TESTDATA_REALPATH")")
+    (cd "$WORK_DIR" && tar -chf "$TESTDATA_TAR" "random_data")
 
     guestfish --rw -a "$SOURCE_DISK" <<EOF
 $GUESTFISH_CMDS
@@ -94,10 +95,9 @@ umount /
 EOF
     rm -f "$TESTDATA_TAR"
 
-    # Generate source MD5 (relative to testData)
+    # Generate source MD5
     info "Generating source MD5 checksums..."
-    # checksums of files INSIDE dev/testData
-    (cd "${PROJECT_ROOT}/dev/testData" && find . -type f -exec md5sum {} + | env LC_ALL=C sort -k 2) > "$SRC_MD5_FILE"
+    (cd "$WORK_DIR/random_data" && find . -type f -name '*.bin' -exec md5sum {} + | env LC_ALL=C sort -k 2) > "$SRC_MD5_FILE"
 }
 
 oneTimeTearDown() {
@@ -167,10 +167,10 @@ test_512n_to_4kn_ext4() {
 set -x
 exec > /dev/ttyS0 2>&1
 sudo mount /dev/nvme0n1p1 /mnt
-if [ -d /mnt/testData ]; then
-  cd /mnt/testData && find . -type f -exec md5sum {} + | env LC_ALL=C sort -k 2 > /home/partimag/$VM_MD5_FILE
+if [ -d /mnt/random_data ]; then
+  cd /mnt/random_data && find . -type f -name '*.bin' -exec md5sum {} + | env LC_ALL=C sort -k 2 > /home/partimag/$VM_MD5_FILE
 else
-  echo 'ERROR: testData directory not found' > /home/partimag/error.log
+  echo 'ERROR: random_data directory not found' > /home/partimag/error.log
 fi
 sync
 sudo poweroff
