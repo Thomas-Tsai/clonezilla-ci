@@ -58,10 +58,10 @@ test_dev_to_dev() {
 # This script runs inside the Clonezilla Live environment
 
 echo "=== [1/3] Preparing disk-a (vda) ==="
-# Partition vda: two 10G partitions
+# Partition vda: two 8G partitions
 sgdisk -Z /dev/vda
-sgdisk -n 1:0:+10G -c 1:"part1" /dev/vda
-sgdisk -n 2:0:+10G -c 2:"part2" /dev/vda
+sgdisk -n 1:0:+8G -c 1:"part1" /dev/vda
+sgdisk -n 2:0:+8G -c 2:"part2" /dev/vda
 partprobe /dev/vda
 
 # Format vda1
