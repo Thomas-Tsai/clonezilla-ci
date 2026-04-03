@@ -114,10 +114,21 @@ autodownload_clonezilla_zip() {
 
 # Check for shunit2
 check_shunit2() {
-    if ! command -v shunit2 >/dev/null 2>&1; then
-        echo "shunit2 is not installed. Please install it to continue."
-        echo "You can download it from https://github.com/kward/shunit2"
-        exit 1
+    if ! command -v shunit2 >/dev/null 2>&1 && [ ! -f "./shunit2" ]; then
+        echo "shunit2 is not installed. Downloading locally to $(pwd)..."
+        if command -v curl >/dev/null 2>&1; then
+            curl -sLo "./shunit2" "https://raw.githubusercontent.com/kward/shunit2/master/shunit2"
+        elif command -v wget >/dev/null 2>&1; then
+            wget -qO "./shunit2" "https://raw.githubusercontent.com/kward/shunit2/master/shunit2"
+        else
+            echo "curl or wget not found. Cannot download shunit2."
+            exit 1
+        fi
+        chmod +x "./shunit2"
+        if [ ! -f "./shunit2" ]; then
+            echo "shunit2 failed to download."
+            exit 1
+        fi
     fi
 }
 
