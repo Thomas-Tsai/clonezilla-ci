@@ -338,10 +338,8 @@ test:disk_512en_4kn_ext4_data:
   extends: .test_template
   tags:
     - clonezilla
-    - liteserver
   variables:
-    TEST_ENV: "local"
-    FORCE_LOCAL: "true"
+    TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_disk_512n_to_4kn_ext4.sh"
 
 test:dev_to_dev:
