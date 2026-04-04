@@ -229,7 +229,7 @@ build_singularity:
         EXTRA_BINDS="$EXTRA_BINDS --bind /dev/kvm:/dev/kvm"
       else
         echo "WARNING: /dev/kvm not found. Forcing libguestfs TCG (software emulation) mode."
-        GUESTFS_ENV="export LIBGUESTFS_BACKEND=direct LIBGUESTFS_BACKEND_SETTINGS=force_tcg;"
+        GUESTFS_ENV="export LIBGUESTFS_BACKEND=direct LIBGUESTFS_BACKEND_SETTINGS=force_tcg LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1;"
       fi
       [ -d "/data/cloudimages" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/cloudimages"
       [ -d "/data/dataSets" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/dataSets"
