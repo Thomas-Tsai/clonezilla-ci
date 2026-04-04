@@ -42,13 +42,20 @@ RUN apt-get update && \
         "amd64") apt-get install -y --no-install-recommends linux-image-amd64 ;; \
         "arm64") apt-get install -y --no-install-recommends linux-image-arm64 ;; \
         "riscv64") \
-            # Debian 'bookworm' might not have a direct 'linux-image-riscv64' or it's named differently.
-            # We'll install a generic kernel-image if available, or skip if not.
-            # For Debian bookworm, 'linux-image-riscv64' should exist for that architecture.
             apt-get install -y --no-install-recommends linux-image-riscv64 ;; \
         *) echo "No specific linux-image package for TARGETARCH: ${TARGETARCH}. Skipping specific kernel image installation." && true ;; \
     esac && \
     rm -rf /var/lib/apt/lists/*
+
+# Copy kernel and modules to /opt/kernel/ so they remain accessible when running
+# inside Singularity containers (which may overlay host's /boot over container's /boot).
+RUN mkdir -p /opt/kernel && \
+    KVER=$(ls /lib/modules/ | head -1) && \
+    cp /boot/vmlinuz-${KVER} /opt/kernel/vmlinuz && \
+    cp -a /lib/modules/${KVER} /opt/kernel/modules
+
+ENV SUPERMIN_KERNEL=/opt/kernel/vmlinuz
+ENV SUPERMIN_MODULES=/opt/kernel/modules
 
 
 # Set the working directory
