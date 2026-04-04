@@ -114,6 +114,7 @@ build_singularity:
     SLURM_ACCOUNT: "GOV109092"
   dependencies:
     - download_zip
+    - build_singularity
   before_script:
     - |
       # Display a prominent banner in the logs
