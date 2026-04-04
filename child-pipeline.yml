@@ -124,6 +124,8 @@ build_singularity:
       # If no local SIF found, try pulling from GitLab Container Registry
       if [ -z "${SIF_IMAGE}" ] && command -v singularity &> /dev/null && [ -n "${CI_REGISTRY_IMAGE}" ]; then
         echo "No local SIF found. Pulling from registry: docker://${CI_REGISTRY_IMAGE}:latest ..."
+        export SINGULARITY_DOCKER_USERNAME="${CI_REGISTRY_USER}"
+        export SINGULARITY_DOCKER_PASSWORD="${CI_REGISTRY_PASSWORD}"
         mkdir -p slurm
         singularity pull slurm/clonezilla-ci.sif "docker://${CI_REGISTRY_IMAGE}:latest" && \
           export SIF_IMAGE="${CI_PROJECT_DIR}/slurm/clonezilla-ci.sif" && \
