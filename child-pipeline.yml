@@ -23,8 +23,6 @@ variables:
 
 download_zip:
   stage: download
-  tags:
-    - clonezilla
   rules:
     - when: on_success
   allow_failure: false
@@ -326,16 +324,12 @@ test:lite_multicast_from_device:
 
 test:lite_raw_data:
   extends: .test_template
-  tags:
-    - clonezilla
   variables:
     TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_lite_raw_data.sh"
 
 test:disk_512en_4kn_ext4_data:
   extends: .test_template
-  tags:
-    - clonezilla
   variables:
     TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_disk_512n_to_4kn_ext4.sh"
