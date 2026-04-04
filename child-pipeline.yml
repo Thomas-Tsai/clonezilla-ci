@@ -76,11 +76,11 @@ build_singularity:
       - slurm/clonezilla-ci.sif
       - slurm/.sif_image_id
   script:
-    - echo "Building Docker image (uses Docker cache if no changes)..."
-    - docker build -t clonezilla-ci-img:latest .
-    - IMAGE_ID=$(docker inspect -f '{{.Id}}' clonezilla-ci-img:latest)
-    - echo "Current Docker Image ID: $IMAGE_ID"
     - |
+      echo "Building Docker image (uses Docker cache if no changes)..."
+      docker build -t clonezilla-ci-img:latest .
+      IMAGE_ID=$(docker inspect -f '{{.Id}}' clonezilla-ci-img:latest)
+      echo "Current Docker Image ID: $IMAGE_ID"
       if [ -f slurm/clonezilla-ci.sif ] && [ -f slurm/.sif_image_id ] && [ "$(cat slurm/.sif_image_id)" == "$IMAGE_ID" ]; then
         echo "Singularity image is up-to-date with Docker image. Skipping Apptainer build."
       else
