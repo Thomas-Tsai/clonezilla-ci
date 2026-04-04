@@ -136,6 +136,12 @@ build_singularity:
           echo "No Slurm environment detected. Using local shell execution."
           export TEST_ENV="local"
         fi
+      elif [ "$TEST_ENV" = "slurm" ]; then
+        # Validate that slurm is actually available on this runner
+        if ! command -v srun &> /dev/null || [ ! -f "${SIF_IMAGE}" ]; then
+          echo "WARNING: TEST_ENV=slurm requested but srun or SIF not available. Falling back to local."
+          export TEST_ENV="local"
+        fi
       fi
 
       if [ "$TEST_ENV" = "slurm" ]; then
