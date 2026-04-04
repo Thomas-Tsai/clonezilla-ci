@@ -70,37 +70,17 @@ build_singularity:
   stage: download
   tags:
     - build
-  cache:
-    key: "slurm-singularity-sif-v1"
-    paths:
-      - slurm/clonezilla-ci.sif
-      - slurm/.sif_image_id
   script:
     - |
-      echo "Building Docker image (uses Docker cache if no changes)..."
-      docker build -t clonezilla-ci-img:latest .
-      IMAGE_ID=$(docker inspect -f '{{.Id}}' clonezilla-ci-img:latest)
-      echo "Current Docker Image ID: $IMAGE_ID"
-      if [ -f slurm/clonezilla-ci.sif ] && [ -f slurm/.sif_image_id ] && [ "$(cat slurm/.sif_image_id)" == "$IMAGE_ID" ]; then
-        echo "Singularity image is up-to-date with Docker image. Skipping Apptainer build."
-      else
-        echo "Changes detected or SIF missing. Building Singularity image..."
-        docker save clonezilla-ci-img:latest -o clonezilla-ci.tar
-        mkdir -p slurm
-        rm -f slurm/clonezilla-ci.sif
-        # Try both sudo and non-sudo apptainer/singularity builds
-        if command -v apptainer >/dev/null; then
-          sudo apptainer build slurm/clonezilla-ci.sif docker-archive://clonezilla-ci.tar || apptainer build slurm/clonezilla-ci.sif docker-archive://clonezilla-ci.tar
-        else
-          sudo singularity build slurm/clonezilla-ci.sif docker-archive://clonezilla-ci.tar || singularity build slurm/clonezilla-ci.sif docker-archive://clonezilla-ci.tar
-        fi
-        echo "$IMAGE_ID" > slurm/.sif_image_id
-        rm -f clonezilla-ci.tar
-      fi
-  artifacts:
-    paths:
-      - slurm/clonezilla-ci.sif
-    expire_in: 30 days
+      echo "Logging into GitLab Container Registry..."
+      docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
+
+      echo "Building Docker image..."
+      docker build -t "${CI_REGISTRY_IMAGE}:latest" .
+
+      echo "Pushing image to GitLab Container Registry..."
+      docker push "${CI_REGISTRY_IMAGE}:latest"
+      echo "Docker image pushed to ${CI_REGISTRY_IMAGE}:latest"
 
 .test_template:
   stage: test
@@ -114,7 +94,6 @@ build_singularity:
     SLURM_ACCOUNT: "GOV109092"
   dependencies:
     - download_zip
-    - build_singularity
   before_script:
     - |
       # Display a prominent banner in the logs
@@ -127,19 +106,33 @@ build_singularity:
       # Create a version file artifact for visibility
       touch "version-${ZIP_FILE_FROM_BUILD}"
 
-      # Dynamically locate the Singularity Image (SIF)
+      # Dynamically locate or pull the Singularity Image (SIF)
       export SIF_IMAGE=""
       POSSIBLE_SIFS=(
         "${CI_PROJECT_DIR}/slurm/clonezilla-ci.sif"
+        "/opt/clonezilla-ci/clonezilla-ci.sif"
         "/home/u1597171/clonezilla-ci/slurm/clonezilla-ci.sif"
       )
       for p in "${POSSIBLE_SIFS[@]}"; do
         if [ -f "$p" ]; then
           export SIF_IMAGE="$p"
-          echo "Found Singularity Image at: ${SIF_IMAGE}"
+          echo "Found local Singularity Image at: ${SIF_IMAGE}"
           break
         fi
       done
+
+      # If no local SIF found, try pulling from GitLab Container Registry
+      if [ -z "${SIF_IMAGE}" ] && command -v singularity &> /dev/null && [ -n "${CI_REGISTRY_IMAGE}" ]; then
+        echo "No local SIF found. Pulling from registry: docker://${CI_REGISTRY_IMAGE}:latest ..."
+        mkdir -p slurm
+        singularity pull slurm/clonezilla-ci.sif "docker://${CI_REGISTRY_IMAGE}:latest" && \
+          export SIF_IMAGE="${CI_PROJECT_DIR}/slurm/clonezilla-ci.sif" && \
+          echo "Successfully pulled SIF to ${SIF_IMAGE}"
+      fi
+
+      if [ -z "${SIF_IMAGE}" ]; then
+        echo "WARNING: No Singularity image available (local or registry). Will fall back to raw local execution."
+      fi
 
       # Auto-detect Environment Strategy
       # If the job explicitly requests local execution (FORCE_LOCAL), we skip auto-detection.
