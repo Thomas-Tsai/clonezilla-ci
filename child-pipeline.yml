@@ -110,55 +110,35 @@ build_singularity:
       # Create a version file artifact for visibility
       touch "version-${ZIP_FILE_FROM_BUILD}"
 
-      # Dynamically locate or pull the Singularity Image (SIF)
+      # Dynamically locate the Singularity Image (SIF) for Slurm jobs
       export SIF_IMAGE=""
       POSSIBLE_SIFS=(
         "${CI_PROJECT_DIR}/slurm/clonezilla-ci.sif"
-        "/opt/clonezilla-ci/clonezilla-ci.sif"
         "/home/u1597171/clonezilla-ci/slurm/clonezilla-ci.sif"
       )
       for p in "${POSSIBLE_SIFS[@]}"; do
         if [ -f "$p" ]; then
           export SIF_IMAGE="$p"
-          echo "Found local Singularity Image at: ${SIF_IMAGE}"
+          echo "Found Singularity Image at: ${SIF_IMAGE}"
           break
         fi
       done
 
-      # If no local SIF found, try pulling from GitLab Container Registry
-      if [ -z "${SIF_IMAGE}" ] && command -v singularity &> /dev/null && [ -n "${CI_REGISTRY_IMAGE}" ]; then
-        echo "No local SIF found. Pulling from registry: docker://${CI_REGISTRY_IMAGE}:latest ..."
-        export SINGULARITY_DOCKER_USERNAME="${CI_REGISTRY_USER}"
-        export SINGULARITY_DOCKER_PASSWORD="${CI_REGISTRY_PASSWORD}"
-        mkdir -p slurm
-        singularity pull --force slurm/clonezilla-ci.sif "docker://${CI_REGISTRY_IMAGE}:latest" && \
-          export SIF_IMAGE="${CI_PROJECT_DIR}/slurm/clonezilla-ci.sif" && \
-          echo "Successfully pulled SIF to ${SIF_IMAGE}"
-      fi
-
-      if [ -z "${SIF_IMAGE}" ]; then
-        echo "WARNING: No Singularity image available (local or registry). Will fall back to raw local execution."
-      fi
-
       # Auto-detect Environment Strategy
-      # If the job explicitly requests local execution (FORCE_LOCAL), we skip auto-detection.
       if [ "$FORCE_LOCAL" = "true" ]; then
         echo "FORCE_LOCAL is true, setting TEST_ENV to local."
         export TEST_ENV="local"
-      else
+      elif [ -z "$TEST_ENV" ]; then
         if command -v srun &> /dev/null && [ -f "${SIF_IMAGE}" ]; then
           echo "Detected Slurm environment (srun and SIF_IMAGE available). Setting TEST_ENV=slurm."
           export TEST_ENV="slurm"
-        elif command -v singularity &> /dev/null && [ -f "${SIF_IMAGE}" ]; then
-          echo "Detected local Singularity environment. Setting TEST_ENV=local-singularity."
-          export TEST_ENV="local-singularity"
         else
-          echo "No Slurm or proper Singularity environment detected. Defaulting to TEST_ENV=local."
+          echo "No Slurm environment detected. Using local shell execution."
           export TEST_ENV="local"
         fi
       fi
 
-      if [[ "$TEST_ENV" == "slurm" || "$TEST_ENV" == "local-singularity" ]]; then
+      if [ "$TEST_ENV" = "slurm" ]; then
         echo "Verifying Singularity image exists at ${SIF_IMAGE}..."
         if [ ! -f "${SIF_IMAGE}" ]; then
           echo "Error: Singularity image not found at ${SIF_IMAGE}!" >&2
@@ -210,12 +190,11 @@ build_singularity:
       echo "Preparing log directory..."
       export LOG_DIR="./logs"
       mkdir -p $LOG_DIR
-      
+
       echo "Setting up test data directory..."
       if [ -d "/data/dataSets" ]; then
-        # Ensure dev/testData directory exists before creating symlink target
         mkdir -p dev
-        rm -rf dev/testData # Remove existing placeholder if any
+        rm -rf dev/testData
         ln -s /data/dataSets dev/testData
         echo "Linked /data/dataSets to dev/testData."
       else
@@ -227,38 +206,22 @@ build_singularity:
         echo "Error: TEST_SCRIPT is not set for this job!"
         exit 1
       fi
-      EXTRA_BINDS=""
-      GUESTFS_ENV=""
-      if [ -e "/dev/kvm" ]; then
-        EXTRA_BINDS="$EXTRA_BINDS --bind /dev/kvm:/dev/kvm"
-      else
-        echo "WARNING: /dev/kvm not found. Forcing libguestfs TCG (software emulation) mode."
-        # Clear stale supermin appliance cache on the host
-        rm -rf /var/tmp/.guestfs-* 2>/dev/null || true
-        GUESTFS_ENV="if [ -f /opt/kernel/env ]; then . /opt/kernel/env; export SUPERMIN_KERNEL SUPERMIN_MODULES; fi; export LIBGUESTFS_BACKEND=direct LIBGUESTFS_BACKEND_SETTINGS=force_tcg LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1;"
-      fi
-      [ -d "/data/cloudimages" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/cloudimages"
-      [ -d "/data/dataSets" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/dataSets"
 
       if [ "$TEST_ENV" = "slurm" ]; then
         echo "Submitting Slurm job for ${TEST_SCRIPT}..."
-        # Use srun for synchronous execution in GitLab CI so it waits for completion
-        # Evaluate TEST_SCRIPT locally first to handle embedded variables like ${FS}
         EVAL_TEST_SCRIPT=$(eval echo "$TEST_SCRIPT")
+        EXTRA_BINDS=""
+        [ -e "/dev/kvm" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /dev/kvm:/dev/kvm"
+        [ -d "/data/cloudimages" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/cloudimages"
+        [ -d "/data/dataSets" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/dataSets"
         srun -p "${SLURM_PARTITION}" --account="${SLURM_ACCOUNT}" \
              --job-name="ci_$(basename ${EVAL_TEST_SCRIPT} .sh)" \
              --mem=8G --cpus-per-task=4 \
-             singularity exec --contain --no-home --bind .:/app --bind /tmp ${EXTRA_BINDS} \
+             singularity exec --bind .:/app ${EXTRA_BINDS} \
              "${SIF_IMAGE}" \
-             bash -c "${GUESTFS_ENV} unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
-      elif [ "$TEST_ENV" = "local-singularity" ]; then
-        echo "Running locally via Singularity for ${TEST_SCRIPT}..."
-        EVAL_TEST_SCRIPT=$(eval echo "$TEST_SCRIPT")
-        singularity exec --contain --no-home --bind .:/app --bind /tmp ${EXTRA_BINDS} \
-             "${SIF_IMAGE}" \
-             bash -c "${GUESTFS_ENV} unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
+             bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
       else
-        echo "Running raw locally for ${TEST_SCRIPT}..."
+        echo "Running locally for ${TEST_SCRIPT}..."
         cd jobs
         EVAL_TEST_SCRIPT=$(eval echo "$TEST_SCRIPT")
         ./${EVAL_TEST_SCRIPT#jobs/} --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
