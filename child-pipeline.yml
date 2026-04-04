@@ -66,6 +66,41 @@ download_zip:
     reports:
       dotenv: build.env
 
+build_singularity:
+  stage: download
+  tags:
+    - build
+  cache:
+    key: "slurm-singularity-sif-v1"
+    paths:
+      - slurm/clonezilla-ci.sif
+      - slurm/.sif_image_id
+  script:
+    - echo "Building Docker image (uses Docker cache if no changes)..."
+    - docker build -t clonezilla-ci-img:latest .
+    - IMAGE_ID=$(docker inspect -f '{{.Id}}' clonezilla-ci-img:latest)
+    - echo "Current Docker Image ID: $IMAGE_ID"
+    - |
+      if [ -f slurm/clonezilla-ci.sif ] && [ -f slurm/.sif_image_id ] && [ "$(cat slurm/.sif_image_id)" == "$IMAGE_ID" ]; then
+        echo "Singularity image is up-to-date with Docker image. Skipping Apptainer build."
+      else
+        echo "Changes detected or SIF missing. Building Singularity image..."
+        docker save clonezilla-ci-img:latest -o clonezilla-ci.tar
+        mkdir -p slurm
+        rm -f slurm/clonezilla-ci.sif
+        # Try both sudo and non-sudo apptainer/singularity builds
+        if command -v apptainer >/dev/null; then
+          sudo apptainer build slurm/clonezilla-ci.sif docker-archive://clonezilla-ci.tar || apptainer build slurm/clonezilla-ci.sif docker-archive://clonezilla-ci.tar
+        else
+          sudo singularity build slurm/clonezilla-ci.sif docker-archive://clonezilla-ci.tar || singularity build slurm/clonezilla-ci.sif docker-archive://clonezilla-ci.tar
+        fi
+        echo "$IMAGE_ID" > slurm/.sif_image_id
+        rm -f clonezilla-ci.tar
+      fi
+  artifacts:
+    paths:
+      - slurm/clonezilla-ci.sif
+    expire_in: 30 days
 
 .test_template:
   stage: test
@@ -77,7 +112,6 @@ download_zip:
     LIBGUESTFS_TRACE: "0"
     SLURM_PARTITION: "ct112"
     SLURM_ACCOUNT: "GOV109092"
-    SIF_IMAGE: "/home/u1597171/clonezilla-ci/slurm/clonezilla-ci.sif"
   dependencies:
     - download_zip
   before_script:
@@ -92,23 +126,39 @@ download_zip:
       # Create a version file artifact for visibility
       touch "version-${ZIP_FILE_FROM_BUILD}"
 
+      # Dynamically locate the Singularity Image (SIF)
+      export SIF_IMAGE=""
+      POSSIBLE_SIFS=(
+        "${CI_PROJECT_DIR}/slurm/clonezilla-ci.sif"
+        "/home/u1597171/clonezilla-ci/slurm/clonezilla-ci.sif"
+      )
+      for p in "${POSSIBLE_SIFS[@]}"; do
+        if [ -f "$p" ]; then
+          export SIF_IMAGE="$p"
+          echo "Found Singularity Image at: ${SIF_IMAGE}"
+          break
+        fi
+      done
+
       # Auto-detect Environment Strategy
       # If the job explicitly requests local execution (FORCE_LOCAL), we skip auto-detection.
       if [ "$FORCE_LOCAL" = "true" ]; then
         echo "FORCE_LOCAL is true, setting TEST_ENV to local."
         export TEST_ENV="local"
       else
-        # Auto-detect if we landed on a Slurm runner by checking for the Singularity image
-        if [ -f "${SIF_IMAGE}" ] || command -v srun &> /dev/null; then
-          echo "Detected Slurm environment (SIF_IMAGE found or srun available). Setting TEST_ENV=slurm."
+        if command -v srun &> /dev/null && [ -f "${SIF_IMAGE}" ]; then
+          echo "Detected Slurm environment (srun and SIF_IMAGE available). Setting TEST_ENV=slurm."
           export TEST_ENV="slurm"
+        elif command -v singularity &> /dev/null && [ -f "${SIF_IMAGE}" ]; then
+          echo "Detected local Singularity environment. Setting TEST_ENV=local-singularity."
+          export TEST_ENV="local-singularity"
         else
-          echo "No Slurm environment detected. Defaulting to TEST_ENV=local."
+          echo "No Slurm or proper Singularity environment detected. Defaulting to TEST_ENV=local."
           export TEST_ENV="local"
         fi
       fi
 
-      if [ "$TEST_ENV" = "slurm" ]; then
+      if [[ "$TEST_ENV" == "slurm" || "$TEST_ENV" == "local-singularity" ]]; then
         echo "Verifying Singularity image exists at ${SIF_IMAGE}..."
         if [ ! -f "${SIF_IMAGE}" ]; then
           echo "Error: Singularity image not found at ${SIF_IMAGE}!" >&2
@@ -192,7 +242,14 @@ download_zip:
              singularity exec --bind .:/app --bind /dev/kvm:/dev/kvm ${EXTRA_BINDS} \
              "${SIF_IMAGE}" \
              bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
+      elif [ "$TEST_ENV" = "local-singularity" ]; then
+        echo "Running locally via Singularity for ${TEST_SCRIPT}..."
+        EVAL_TEST_SCRIPT=$(eval echo "$TEST_SCRIPT")
+        singularity exec --bind .:/app --bind /dev/kvm:/dev/kvm ${EXTRA_BINDS} \
+             "${SIF_IMAGE}" \
+             bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
       else
+        echo "Running raw locally for ${TEST_SCRIPT}..."
         cd jobs
         EVAL_TEST_SCRIPT=$(eval echo "$TEST_SCRIPT")
         ./${EVAL_TEST_SCRIPT#jobs/} --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
