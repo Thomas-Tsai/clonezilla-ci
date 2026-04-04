@@ -35,33 +35,39 @@ RUN apt-get update && \
     # Clean up APT cache (after main install)
     rm -rf /var/lib/apt/lists/*
 
-# Install kernel package required by libguestfs to build its appliance for the TARGETARCH
+# Install kernel package required by libguestfs to build its appliance.
 # This prevents 'supermin exited with error status 1' by providing kernel modules.
+# Note: TARGETARCH may not be set in Docker legacy builder; use dpkg as fallback.
 RUN apt-get update && \
-    case ${TARGETARCH} in \
+    REAL_ARCH="${TARGETARCH:-$(dpkg --print-architecture)}" && \
+    echo "Detected architecture: ${REAL_ARCH}" && \
+    case ${REAL_ARCH} in \
         "amd64") apt-get install -y --no-install-recommends linux-image-amd64 ;; \
         "arm64") apt-get install -y --no-install-recommends linux-image-arm64 ;; \
-        "riscv64") \
-            apt-get install -y --no-install-recommends linux-image-riscv64 ;; \
-        *) echo "No specific linux-image package for TARGETARCH: ${TARGETARCH}. Skipping specific kernel image installation." && true ;; \
+        "riscv64") apt-get install -y --no-install-recommends linux-image-riscv64 ;; \
+        *) echo "No specific linux-image package for arch: ${REAL_ARCH}." && true ;; \
     esac && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    echo "Kernel files in /boot:" && ls -la /boot/vmlinuz-* 2>/dev/null || echo "(none)" && \
+    echo "Modules dirs:" && ls -d /lib/modules/*/ /usr/lib/modules/*/ 2>/dev/null || echo "(none)"
 
 # Copy kernel and modules to /opt/kernel/ so they remain accessible when running
 # inside Singularity containers (which may overlay host's /boot over container's /boot).
-# Debian trixie may place modules in /usr/lib/modules/ instead of /lib/modules/.
 # IMPORTANT: supermin requires the kernel filename to contain the version string.
 RUN mkdir -p /opt/kernel/boot /opt/kernel/lib/modules && \
-    VMLINUZ=$(find /boot /usr/lib -name 'vmlinuz-*' -type f 2>/dev/null | head -1) && \
+    VMLINUZ=$(find /boot -name 'vmlinuz-*' -type f 2>/dev/null | head -1) && \
     MODDIR=$(find /lib/modules /usr/lib/modules -maxdepth 1 -mindepth 1 -type d 2>/dev/null | head -1) && \
-    echo "Found kernel: ${VMLINUZ}" && \
-    echo "Found modules: ${MODDIR}" && \
-    if [ -n "$VMLINUZ" ]; then cp "$VMLINUZ" /opt/kernel/boot/; fi && \
-    if [ -n "$MODDIR" ]; then cp -a "$MODDIR" /opt/kernel/lib/modules/; fi && \
-    ls -laR /opt/kernel/boot/ && ls /opt/kernel/lib/modules/ && \
-    echo "SUPERMIN_KERNEL=/opt/kernel/boot/$(basename $VMLINUZ)" > /opt/kernel/env && \
-    echo "SUPERMIN_MODULES=/opt/kernel/lib/modules/$(basename $MODDIR)" >> /opt/kernel/env && \
-    cat /opt/kernel/env
+    echo "Found kernel: [${VMLINUZ}]" && \
+    echo "Found modules: [${MODDIR}]" && \
+    if [ -z "$VMLINUZ" ]; then echo "ERROR: No kernel found!" && exit 1; fi && \
+    if [ -z "$MODDIR" ]; then echo "ERROR: No modules found!" && exit 1; fi && \
+    cp "$VMLINUZ" /opt/kernel/boot/ && \
+    cp -a "$MODDIR" /opt/kernel/lib/modules/ && \
+    KNAME=$(basename "$VMLINUZ") && \
+    MNAME=$(basename "$MODDIR") && \
+    echo "SUPERMIN_KERNEL=/opt/kernel/boot/${KNAME}" > /opt/kernel/env && \
+    echo "SUPERMIN_MODULES=/opt/kernel/lib/modules/${MNAME}" >> /opt/kernel/env && \
+    echo "--- /opt/kernel/env ---" && cat /opt/kernel/env
 
 
 # Set the working directory
