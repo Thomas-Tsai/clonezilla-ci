@@ -50,17 +50,18 @@ RUN apt-get update && \
 # Copy kernel and modules to /opt/kernel/ so they remain accessible when running
 # inside Singularity containers (which may overlay host's /boot over container's /boot).
 # Debian trixie may place modules in /usr/lib/modules/ instead of /lib/modules/.
-RUN mkdir -p /opt/kernel && \
+# IMPORTANT: supermin requires the kernel filename to contain the version string.
+RUN mkdir -p /opt/kernel/boot /opt/kernel/lib/modules && \
     VMLINUZ=$(find /boot /usr/lib -name 'vmlinuz-*' -type f 2>/dev/null | head -1) && \
     MODDIR=$(find /lib/modules /usr/lib/modules -maxdepth 1 -mindepth 1 -type d 2>/dev/null | head -1) && \
     echo "Found kernel: ${VMLINUZ}" && \
     echo "Found modules: ${MODDIR}" && \
-    if [ -n "$VMLINUZ" ]; then cp "$VMLINUZ" /opt/kernel/vmlinuz; fi && \
-    if [ -n "$MODDIR" ]; then cp -a "$MODDIR" /opt/kernel/modules; fi && \
-    ls -la /opt/kernel/
-
-ENV SUPERMIN_KERNEL=/opt/kernel/vmlinuz
-ENV SUPERMIN_MODULES=/opt/kernel/modules
+    if [ -n "$VMLINUZ" ]; then cp "$VMLINUZ" /opt/kernel/boot/; fi && \
+    if [ -n "$MODDIR" ]; then cp -a "$MODDIR" /opt/kernel/lib/modules/; fi && \
+    ls -laR /opt/kernel/boot/ && ls /opt/kernel/lib/modules/ && \
+    echo "SUPERMIN_KERNEL=/opt/kernel/boot/$(basename $VMLINUZ)" > /opt/kernel/env && \
+    echo "SUPERMIN_MODULES=/opt/kernel/lib/modules/$(basename $MODDIR)" >> /opt/kernel/env && \
+    cat /opt/kernel/env
 
 
 # Set the working directory
