@@ -229,7 +229,13 @@ build_singularity:
         exit 1
       fi
       EXTRA_BINDS=""
-      [ -e "/dev/kvm" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /dev/kvm:/dev/kvm"
+      EXTRA_ENVS=""
+      if [ -e "/dev/kvm" ]; then
+        EXTRA_BINDS="$EXTRA_BINDS --bind /dev/kvm:/dev/kvm"
+      else
+        echo "WARNING: /dev/kvm not found. Forcing libguestfs TCG (software emulation) mode."
+        EXTRA_ENVS="$EXTRA_ENVS --env LIBGUESTFS_BACKEND_SETTINGS=force_tcg"
+      fi
       [ -d "/data/cloudimages" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/cloudimages"
       [ -d "/data/dataSets" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/dataSets"
 
@@ -241,13 +247,13 @@ build_singularity:
         srun -p "${SLURM_PARTITION}" --account="${SLURM_ACCOUNT}" \
              --job-name="ci_$(basename ${EVAL_TEST_SCRIPT} .sh)" \
              --mem=8G --cpus-per-task=4 \
-             singularity exec --bind .:/app ${EXTRA_BINDS} \
+             singularity exec --bind .:/app ${EXTRA_BINDS} ${EXTRA_ENVS} \
              "${SIF_IMAGE}" \
              bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
       elif [ "$TEST_ENV" = "local-singularity" ]; then
         echo "Running locally via Singularity for ${TEST_SCRIPT}..."
         EVAL_TEST_SCRIPT=$(eval echo "$TEST_SCRIPT")
-        singularity exec --bind .:/app ${EXTRA_BINDS} \
+        singularity exec --bind .:/app ${EXTRA_BINDS} ${EXTRA_ENVS} \
              "${SIF_IMAGE}" \
              bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
       else
