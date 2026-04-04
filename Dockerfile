@@ -49,10 +49,15 @@ RUN apt-get update && \
 
 # Copy kernel and modules to /opt/kernel/ so they remain accessible when running
 # inside Singularity containers (which may overlay host's /boot over container's /boot).
+# Debian trixie may place modules in /usr/lib/modules/ instead of /lib/modules/.
 RUN mkdir -p /opt/kernel && \
-    KVER=$(ls /lib/modules/ | head -1) && \
-    cp /boot/vmlinuz-${KVER} /opt/kernel/vmlinuz && \
-    cp -a /lib/modules/${KVER} /opt/kernel/modules
+    VMLINUZ=$(find /boot /usr/lib -name 'vmlinuz-*' -type f 2>/dev/null | head -1) && \
+    MODDIR=$(find /lib/modules /usr/lib/modules -maxdepth 1 -mindepth 1 -type d 2>/dev/null | head -1) && \
+    echo "Found kernel: ${VMLINUZ}" && \
+    echo "Found modules: ${MODDIR}" && \
+    if [ -n "$VMLINUZ" ]; then cp "$VMLINUZ" /opt/kernel/vmlinuz; fi && \
+    if [ -n "$MODDIR" ]; then cp -a "$MODDIR" /opt/kernel/modules; fi && \
+    ls -la /opt/kernel/
 
 ENV SUPERMIN_KERNEL=/opt/kernel/vmlinuz
 ENV SUPERMIN_MODULES=/opt/kernel/modules
