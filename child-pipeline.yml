@@ -94,6 +94,10 @@ build_singularity:
     SLURM_ACCOUNT: "GOV109092"
   dependencies:
     - download_zip
+  needs:
+    - job: download_zip
+    - job: build_singularity
+      artifacts: false
   before_script:
     - |
       # Display a prominent banner in the logs
@@ -127,7 +131,7 @@ build_singularity:
         export SINGULARITY_DOCKER_USERNAME="${CI_REGISTRY_USER}"
         export SINGULARITY_DOCKER_PASSWORD="${CI_REGISTRY_PASSWORD}"
         mkdir -p slurm
-        singularity pull slurm/clonezilla-ci.sif "docker://${CI_REGISTRY_IMAGE}:latest" && \
+        singularity pull --force slurm/clonezilla-ci.sif "docker://${CI_REGISTRY_IMAGE}:latest" && \
           export SIF_IMAGE="${CI_PROJECT_DIR}/slurm/clonezilla-ci.sif" && \
           echo "Successfully pulled SIF to ${SIF_IMAGE}"
       fi
@@ -229,7 +233,7 @@ build_singularity:
         EXTRA_BINDS="$EXTRA_BINDS --bind /dev/kvm:/dev/kvm"
       else
         echo "WARNING: /dev/kvm not found. Forcing libguestfs TCG (software emulation) mode."
-        GUESTFS_ENV="export LIBGUESTFS_BACKEND=direct LIBGUESTFS_BACKEND_SETTINGS=force_tcg SUPERMIN_KERNEL=/opt/kernel/vmlinuz SUPERMIN_MODULES=/opt/kernel/modules LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1;"
+        GUESTFS_ENV="if [ -f /opt/kernel/env ]; then . /opt/kernel/env; export SUPERMIN_KERNEL SUPERMIN_MODULES; fi; export LIBGUESTFS_BACKEND=direct LIBGUESTFS_BACKEND_SETTINGS=force_tcg LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1;"
       fi
       [ -d "/data/cloudimages" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/cloudimages"
       [ -d "/data/dataSets" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/dataSets"
