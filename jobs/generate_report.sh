@@ -162,7 +162,7 @@ for month in $UNIQUE_MONTHS; do
             </thead>
             <tbody>
 EOF
-    jq -r --arg month "$month" '.
+    jq -r --arg month "$month" '
       .[] | select(.date | startswith($month)) |
       "<tr>
           <td>" + .zip_name + "</td>
