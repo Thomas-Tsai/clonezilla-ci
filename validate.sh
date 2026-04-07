@@ -245,7 +245,17 @@ LOG_FILE="logs/cci_validate_$(basename "$DISK_IMAGE")_$(date +%s).log"
             ;;
         "riscv64")
             QEMU_BINARY="qemu-system-riscv64"
-            QEMU_MACHINE_ARGS=("-machine" "virt" "-kernel" "/usr/lib/u-boot/qemu-riscv64_smode/uboot.elf" "-append" "root=LABEL=rootfs console=ttyS0")
+            UBOOT_PATH="/usr/lib/u-boot/qemu-riscv64_smode/uboot.elf"
+            if [ ! -f "$UBOOT_PATH" ]; then
+                # Try fallback path for some distributions
+                UBOOT_PATH="/usr/lib/u-boot/qemu-riscv64/uboot.elf"
+            fi
+            
+            if [ ! -f "$UBOOT_PATH" ]; then
+                echo "Error: RISC-V U-Boot (uboot.elf) not found. Please install 'u-boot-qemu' package." >&2
+                exit 1
+            fi
+            QEMU_MACHINE_ARGS=("-machine" "virt" "-kernel" "$UBOOT_PATH" "-append" "root=LABEL=rootfs console=ttyS0")
             ;;
         *)
             echo "Error: Unsupported architecture: $ARCH" >&2

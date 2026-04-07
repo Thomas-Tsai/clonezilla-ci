@@ -82,6 +82,35 @@ build_singularity:
       docker push "${CI_REGISTRY_IMAGE}:latest"
       echo "Docker image pushed to ${CI_REGISTRY_IMAGE}:latest"
 
+# 專門在具備 Singularity 的 Login Node 更新 SIF 檔案
+update_sif:
+  stage: download
+  tags:
+    - build_sif  # 指定專屬 Tag，確保在正確的 Login Node 執行
+  needs:
+    - build_singularity
+  script:
+    - |
+      echo "Starting SIF build from Docker Registry..."
+      export SINGULARITY_DOCKER_USERNAME="${CI_REGISTRY_USER}"
+      export SINGULARITY_DOCKER_PASSWORD="${CI_REGISTRY_PASSWORD}"
+      
+      # 定義 SIF 存放路徑
+      DEST_DIR="/home/u1597171/clonezilla-ci/slurm"
+      if [ ! -d "$DEST_DIR" ]; then
+        echo "Warning: Global directory $DEST_DIR not found, using local project directory."
+        DEST_DIR="$(pwd)/slurm"
+        mkdir -p "$DEST_DIR"
+      fi
+      
+      SIF_PATH="${DEST_DIR}/clonezilla-ci.sif"
+      echo "Target SIF: ${SIF_PATH}"
+      
+      # 使用 -F 強制覆蓋舊檔，確保後續 Slurm 測試使用最新環境
+      singularity build -F "${SIF_PATH}" docker://${CI_REGISTRY_IMAGE}:latest
+      
+      echo "Success: Updated SIF at ${SIF_PATH}"
+
 .test_template:
   stage: test
   allow_failure: true

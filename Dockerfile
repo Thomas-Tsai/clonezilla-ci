@@ -29,7 +29,8 @@ RUN apt-get update && \
     qemu-system-x86 \
     qemu-system-arm \
     qemu-system-riscv \
-    qemu-efi-aarch64 && \
+    qemu-efi-aarch64 \
+    u-boot-qemu && \
     # Ensure xfsprogs is included in the libguestfs appliance
     find /usr/lib -name supermin.d -type d -exec sh -c 'echo xfsprogs >> {}/packages' \; && \
     # Clean up APT cache (after main install)
