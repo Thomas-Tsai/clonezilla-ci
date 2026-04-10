@@ -41,6 +41,8 @@ usage() {
     echo "  log [job_id]                Fetch and display the log for a given job"
     echo "  artifacts [job_id]          Download and unzip job artifacts into job_<id> directory"
     echo "  debug [jobs|child|job] [id] Show raw JSON for debugging"
+    echo "  failed-logs                 Download logs for all failed jobs and analyze with AI"
+    echo "  failed-summary              Aggregate AI analysis of failed job logs into a summary file"
     echo ""
     echo "Examples:"
     echo "  $0 pipelines 5"
@@ -149,6 +151,112 @@ get_log() {
     curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${GITLAB_API_URL}/projects/${PROJECT_ID}/jobs/${job_id}/trace"
 }
 
+# Download logs for all failed jobs and analyze with Fabric AI
+download_failed_logs() {
+    echo "Fetching failed jobs..."
+    local failed_jobs_json=$(api_get "jobs?scope[]=failed")
+    local job_ids=$(echo "$failed_jobs_json" | jq -r '.[].id')
+    mkdir -p failed_logs
+    for job_id in $job_ids; do
+        echo "Downloading log for job $job_id..."
+        local log_path="failed_logs/job_${job_id}.log"
+        curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${GITLAB_API_URL}/projects/${PROJECT_ID}/jobs/${job_id}/trace" -o "$log_path"
+        if [ -s "$log_path" ]; then
+            # Capture AI analysis output and store it alongside the log
+            local analysis_output=$(analyze_failure_with_ai "$log_path")
+            echo "$analysis_output" > "${log_path}.analysis"
+        else
+            echo "Log for job $job_id is empty or failed to download."
+        fi
+    done
+    echo "All failed logs processed."
+}
+
+# Aggregate AI analysis results from all failed logs into a single summary file
+aggregate_failed_analysis() {
+    local summary_file="failed_logs/summary.txt"
+    echo "AI Failure Analysis Summary" > "$summary_file"
+    echo "Generated on $(date)" >> "$summary_file"
+    echo "----------------------------------------" >> "$summary_file"
+    for analysis in failed_logs/*.analysis; do
+        [ -e "$analysis" ] || continue
+        echo "--- $(basename "$analysis" .analysis) ---" >> "$summary_file"
+        cat "$analysis" >> "$summary_file"
+        echo -e "\n" >> "$summary_file"
+    done
+    echo "Summary written to $summary_file"
+}
+
+
+# Analyze a log file using Fabric AI
+analyze_failure_with_ai() {
+    local log_file="$1"
+    # Internal GenAI API configuration
+    local baseurl="${INTERNAL_API_BASEURL:-https://inner-medusa.genai.nchc.org.tw/v1/}"
+    if [ -z "$INTERNAL_API_KEY" ]; then
+        echo "INTERNAL_API_KEY not set; skipping AI analysis."
+        return 1
+    fi
+    echo "Analyzing $log_file with internal GenAI API..."
+    # Extract last 200 lines to limit size
+    tail -n 200 "$log_file" > "${log_file}.snippet"
+    local snippet=$(cat "${log_file}.snippet")
+    # Build payload compatible with internal GenAI API (expects messages array)
+    # Default model can be overridden via INTERNAL_API_MODEL env var.
+    # Choose a model that the team is permitted to use, e.g., "llama-3.1-8B-m1-raft-v1.1.4-ep5".
+    local model="${INTERNAL_API_MODEL:-llama-3.1-8B-m1-raft-v1.1.4-ep5}"
+    local payload=$(jq -n --arg ctx "$snippet" --arg mdl "$model" '{"model":$mdl,"messages":[{"role":"user","content":$ctx}],"temperature":0.2}')
+    # Primary endpoint – assume chat completions
+    local endpoint="${INTERNAL_API_ENDPOINT:-${baseurl%/}/chat/completions}"
+    local response=$(curl -s -X POST "$endpoint" \
+        -H "Authorization: Bearer ${INTERNAL_API_KEY}" \
+        -H "Content-Type: application/json" \
+        -d "$payload")
+    # If response contains an error, attempt fallback to /v1/analyze if provided
+    if echo "$response" | grep -q "detail"; then
+        local fallback="${INTERNAL_API_FALLBACK_ENDPOINT:-${baseurl%/}/analyze}"
+        response=$(curl -s -X POST "$fallback" \
+            -H "Authorization: Bearer ${INTERNAL_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$payload")
+    fi
+    if echo "$response" | grep -q "detail"; then
+        echo "AI analysis failed: $(echo "$response" | jq -r '.detail // .')"
+        rm -f "${log_file}.snippet"
+        return 1
+    else
+        # Extract content from typical OpenAI‑style response
+        local analysis=$(echo "$response" | jq -r '.choices[0].message.content // .analysis // .')
+        echo "AI analysis result:"
+        echo "$analysis"
+        rm -f "${log_file}.snippet"
+    fi
+    echo "Analyzing $log_file with internal GenAI API..."
+    # Extract last 200 lines to limit size
+    tail -n 200 "$log_file" > "${log_file}.snippet"
+    local snippet=$(cat "${log_file}.snippet")
+    # Build JSON payload (you can adjust model/prompt as needed)
+    # Build payload compatible with internal GenAI API (expects messages array)
+    # Default model can be overridden via INTERNAL_API_MODEL env var.
+    # Choose a model that the team is permitted to use, e.g., "llama-3.1-8B-m1-raft-v1.1.4-ep5".
+    local model="${INTERNAL_API_MODEL:-llama-3.1-8B-m1-raft-v1.1.4-ep5}"
+    local payload=$(jq -n --arg ctx "$snippet" --arg mdl "$model" '{"model":$mdl,"messages":[{"role":"user","content":$ctx}],"temperature":0.2}')
+    local endpoint="${baseurl}analyze"
+    local response=$(curl -s -X POST "$endpoint" \
+        -H "Authorization: Bearer ${INTERNAL_API_KEY}" \
+        -H "Content-Type: application/json" \
+        -d "$payload")
+    if echo "$response" | grep -q "detail"; then
+        echo "AI analysis failed: $(echo "$response" | jq -r '.detail // .')"
+        rm -f "${log_file}.snippet"
+        return 1
+    else
+        echo "AI analysis result:"
+        echo "$response" | jq -r '.analysis // .'
+        rm -f "${log_file}.snippet"
+    fi
+}
+
 download_artifacts() {
     local job_id="$1"
     if [ -z "$job_id" ]; then
@@ -205,13 +313,15 @@ debug_api() {
 }
 
 case "$1" in
-    pipelines) list_pipelines "$2" "$3" ;;
-    running)   list_running_pipelines ;;
-    child)     list_child_pipelines "$2" ;;
-    jobs)      list_jobs "$2" ;;
-    job)       get_job_info "$2" ;;
-    log|trace) get_log "$2" ;;
-    artifacts|download) download_artifacts "$2" ;;
-    debug)     debug_api "$@" ;;
-    *)         usage ;;
-esac
+  pipelines) list_pipelines "$2" "$3" ;;
+  running)   list_running_pipelines ;;
+  child)     list_child_pipelines "$2" ;;
+  jobs)      list_jobs "$2" ;;
+  job)       get_job_info "$2" ;;
+  log|trace) get_log "$2" ;;
+  artifacts|download) download_artifacts "$2" ;;
+  debug)     debug_api "$@" ;;
+  failed-logs) download_failed_logs ;;
+  failed-summary) aggregate_failed_analysis ;;
+  *)         usage ;;
+ esac
