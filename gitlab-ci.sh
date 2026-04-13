@@ -41,11 +41,12 @@ usage() {
     echo "  log [job_id]                Fetch and display the log for a given job"
     echo "  artifacts [job_id]          Download and unzip job artifacts into job_<id> directory"
     echo "  debug [jobs|child|job] [id] Show raw JSON for debugging"
-    echo "  failed-logs                 Download logs for all failed jobs and analyze with AI"
+    echo "  failed-logs [hours]         Download logs for failed jobs (optionally within the last [hours])"
     echo "  failed-summary              Aggregate AI analysis of failed job logs into a summary file"
     echo ""
     echo "Examples:"
     echo "  $0 pipelines 5"
+    echo "  $0 failed-logs 24"
     echo "  $0 job 13788739616"
     echo "  $0 artifacts 13788739616"
     exit 1
@@ -151,11 +152,31 @@ get_log() {
     curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${GITLAB_API_URL}/projects/${PROJECT_ID}/jobs/${job_id}/trace"
 }
 
-# Download logs for all failed jobs and analyze with Fabric AI
+# Download logs for failed jobs and analyze with Fabric AI
 download_failed_logs() {
-    echo "Fetching failed jobs..."
-    local failed_jobs_json=$(api_get "jobs?scope[]=failed")
+    local hours_ago=$1
+    local api_endpoint="jobs?scope[]=failed"
+
+    if [ -n "$hours_ago" ]; then
+        if ! [[ "$hours_ago" =~ ^[0-9]+$ ]]; then
+            echo "Error: Hours must be a positive integer."
+            exit 1
+        fi
+        local cutoff_date=$(date -d "$hours_ago hours ago" -u +"%Y-%m-%dT%H:%M:%SZ")
+        api_endpoint="${api_endpoint}&updated_after=${cutoff_date}"
+        echo "Fetching failed jobs from the last $hours_ago hours..."
+    else
+        echo "Fetching all failed jobs..."
+    fi
+
+    local failed_jobs_json=$(api_get "$api_endpoint")
     local job_ids=$(echo "$failed_jobs_json" | jq -r '.[].id')
+
+    if [ -z "$job_ids" ]; then
+        echo "No failed jobs found in the specified timeframe."
+        return
+    fi
+
     mkdir -p failed_logs
     for job_id in $job_ids; do
         echo "Downloading log for job $job_id..."
@@ -274,7 +295,7 @@ download_artifacts() {
 
     echo "Downloading artifacts for job $job_id..."
     # Using -f to fail on HTTP errors (like 404)
-    local http_code=$(curl -sL -o "$zip_file" -w "%{http_code}" \
+    local http_code=$(curl -sL -o "$zip_file" -w "%{\http_code}" \
          --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
          "${GITLAB_API_URL}/projects/${PROJECT_ID}/jobs/${job_id}/artifacts")
 
@@ -321,7 +342,7 @@ case "$1" in
   log|trace) get_log "$2" ;;
   artifacts|download) download_artifacts "$2" ;;
   debug)     debug_api "$@" ;;
-  failed-logs) download_failed_logs ;;
+  failed-logs) download_failed_logs "$2" ;;
   failed-summary) aggregate_failed_analysis ;;
   *)         usage ;;
  esac

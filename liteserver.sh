@@ -497,7 +497,7 @@ main() {
         
         # Poll for the flag file that indicates the server has finished creating the image
         FLAG_FILE="$PARTIMAG_DIR/image_creation_complete"
-        WAIT_TIMEOUT=600 # 10 minutes
+        WAIT_TIMEOUT=1800 # 30 minutes
         SECONDS_WAITED=0
         
         # First, remove any stale flag file from a previous run
