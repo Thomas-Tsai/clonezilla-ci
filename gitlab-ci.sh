@@ -41,14 +41,13 @@ usage() {
     echo "  log [job_id]                Fetch and display the log for a given job"
     echo "  artifacts [job_id]          Download and unzip job artifacts into job_<id> directory"
     echo "  debug [jobs|child|job] [id] Show raw JSON for debugging"
-    echo "  failed-logs [hours]         Download logs for failed jobs (optionally within the last [hours])"
-    echo "  failed-summary              Aggregate AI analysis of failed job logs into a summary file"
+    echo "  failed-logs [hours]         List and download logs for failed jobs (optionally within the last [hours])"
+    echo "  failed-summary [prompt]     Analyze and aggregate AI analysis of failed job logs with an optional prompt"
     echo ""
     echo "Examples:"
     echo "  $0 pipelines 5"
     echo "  $0 failed-logs 24"
-    echo "  $0 job 13788739616"
-    echo "  $0 artifacts 13788739616"
+    echo "  $0 failed-summary \"以繁體中文回應，字數少於100字\""
     exit 1
 }
 
@@ -152,129 +151,232 @@ get_log() {
     curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${GITLAB_API_URL}/projects/${PROJECT_ID}/jobs/${job_id}/trace"
 }
 
-# Download logs for failed jobs and analyze with Fabric AI
+# Download logs for failed jobs
 download_failed_logs() {
     local hours_ago=$1
-    local api_endpoint="jobs?scope[]=failed"
+    local api_endpoint="jobs?scope=failed&per_page=100"
+    local cutoff_ts=0
 
-    if [ -n "$hours_ago" ]; then
+    if [ -n "$hours_ago" ] && [ "$hours_ago" != "0" ]; then
         if ! [[ "$hours_ago" =~ ^[0-9]+$ ]]; then
             echo "Error: Hours must be a positive integer."
             exit 1
         fi
-        local cutoff_date=$(date -d "$hours_ago hours ago" -u +"%Y-%m-%dT%H:%M:%SZ")
-        api_endpoint="${api_endpoint}&updated_after=${cutoff_date}"
-        echo "Fetching failed jobs from the last $hours_ago hours..."
+        # Calculate cutoff timestamp in seconds
+        cutoff_ts=$(date -d "$hours_ago hours ago" +%s)
+        local cutoff_date_iso=$(date -d "@$cutoff_ts" -u +"%Y-%m-%dT%H:%M:%SZ")
+        api_endpoint="${api_endpoint}&updated_after=${cutoff_date_iso}"
+        echo "Fetching failed jobs since $cutoff_date_iso ($hours_ago hours ago)..."
     else
-        echo "Fetching all failed jobs..."
+        echo "Fetching all failed jobs (limit: 100)..."
     fi
 
     local failed_jobs_json=$(api_get "$api_endpoint")
-    local job_ids=$(echo "$failed_jobs_json" | jq -r '.[].id')
+    local count=$(echo "$failed_jobs_json" | jq '. | length' 2>/dev/null)
 
-    if [ -z "$job_ids" ]; then
-        echo "No failed jobs found in the specified timeframe."
+    if [ -z "$count" ] || [ "$count" -eq 0 ]; then
+        echo "No failed jobs found."
         return
     fi
 
     mkdir -p failed_logs
-    for job_id in $job_ids; do
-        echo "Downloading log for job $job_id..."
-        local log_path="failed_logs/job_${job_id}.log"
-        curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${GITLAB_API_URL}/projects/${PROJECT_ID}/jobs/${job_id}/trace" -o "$log_path"
-        if [ -s "$log_path" ]; then
-            # Capture AI analysis output and store it alongside the log
-            local analysis_output=$(analyze_failure_with_ai "$log_path")
-            echo "$analysis_output" > "${log_path}.analysis"
-        else
-            echo "Log for job $job_id is empty or failed to download."
+
+    # Table Header
+    printf "%-12s | %-12s | %-15s | %-25s | %-30s | %-s\n" \
+           "Job ID" "Pipeline ID" "Trigger Name" "Test Name" "Clonezilla Version" "Log Folder"
+    echo "------------------------------------------------------------------------------------------------------------------------------------------------"
+
+    local processed_count=0
+    for row in $(echo "$failed_jobs_json" | jq -r '.[] | @base64'); do
+        _jq() {
+            echo "${row}" | base64 --decode | jq -r "${1}"
+        }
+        
+        local job_id=$(_jq '.id')
+        local finished_at=$(_jq '.finished_at // .created_at')
+        
+        # Manual time filter check
+        if [ "$cutoff_ts" -gt 0 ]; then
+            local job_ts=$(date -d "$finished_at" +%s 2>/dev/null)
+            if [ -n "$job_ts" ] && [ "$job_ts" -lt "$cutoff_ts" ]; then
+                continue
+            fi
         fi
+
+        processed_count=$((processed_count + 1))
+        local pipeline_id=$(_jq '.pipeline.id')
+        local pipeline_source=$(_jq '.pipeline.source')
+        local job_name=$(_jq '.name')
+        local target_dir="failed_logs/job_${job_id}"
+        mkdir -p "$target_dir"
+
+        echo -n "Processing Job $job_id ($finished_at)... "
+
+        # Download log
+        local log_path="${target_dir}/job.log"
+        curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "${GITLAB_API_URL}/projects/${PROJECT_ID}/jobs/${job_id}/trace" -o "$log_path"
+        
+        # Download artifacts if any
+        local artifacts_dir="${target_dir}/artifacts"
+        local zip_file="${target_dir}/artifacts.zip"
+        local http_code=$(curl -sL -o "$zip_file" -w "%{http_code}" \
+             --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+             "${GITLAB_API_URL}/projects/${PROJECT_ID}/jobs/${job_id}/artifacts")
+        
+        if [ "$http_code" -eq 200 ]; then
+            mkdir -p "$artifacts_dir"
+            unzip -qo "$zip_file" -d "$artifacts_dir" 2>/dev/null
+            rm -f "$zip_file"
+            # Remove unwanted version-* files
+            rm -f "$artifacts_dir"/version-*
+            echo -n "Log & Artifacts downloaded. "
+        else
+            rm -f "$zip_file"
+            echo -n "Log downloaded. No artifacts found. "
+        fi
+
+        # Find Clonezilla version from log
+        local clonezilla_version="N/A"
+        if [ -f "$log_path" ]; then
+             clonezilla_version=$(grep "CLONEZILLA VERSION DETECTED:" "$log_path" | head -n 1 | sed 's/.*VERSION DETECTED: //')
+             if [ -z "$clonezilla_version" ]; then
+                 clonezilla_version="Unknown"
+             fi
+        fi
+
+        local trigger_name="N/A"
+        if [ "$pipeline_source" = "parent_pipeline" ]; then
+            trigger_name="Child"
+        fi
+
+        echo "Done."
+        # Print Info to table
+        printf "%-12s | %-12s | %-15s | %-25s | %-30s | %-s\n" \
+               "$job_id" "$pipeline_id" "$trigger_name" "$job_name" "$clonezilla_version" "$target_dir"
+
     done
-    echo "All failed logs processed."
+
+    if [ "$processed_count" -eq 0 ]; then
+        echo "No failed jobs matched the time filter."
+    else
+        echo "Processed $processed_count failed jobs. Logs stored in failed_logs/"
+    fi
 }
 
 # Aggregate AI analysis results from all failed logs into a single summary file
-aggregate_failed_analysis() {
+analyze_and_summarize_failed() {
+    local user_prompt="$1"
     local summary_file="failed_logs/summary.txt"
     echo "AI Failure Analysis Summary" > "$summary_file"
     echo "Generated on $(date)" >> "$summary_file"
+    if [ -n "$user_prompt" ]; then
+        echo "Custom Prompt: $user_prompt" >> "$summary_file"
+    fi
     echo "----------------------------------------" >> "$summary_file"
-    for analysis in failed_logs/*.analysis; do
-        [ -e "$analysis" ] || continue
-        echo "--- $(basename "$analysis" .analysis) ---" >> "$summary_file"
-        cat "$analysis" >> "$summary_file"
-        echo -e "\n" >> "$summary_file"
+    
+    # Iterate through all job folders in failed_logs
+    for job_dir in failed_logs/job_*; do
+        [ -d "$job_dir" ] || continue
+        local job_id=$(basename "$job_dir" | sed 's/job_//')
+        local analysis_file="${job_dir}/job.log.analysis"
+
+        # If user provides a custom prompt, we always re-analyze to respect it
+        if [ ! -s "$analysis_file" ] || [ -n "$user_prompt" ]; then
+            echo "Analyzing Job $job_id (combining all logs)..."
+            analyze_failure_with_ai_combined "$job_dir" "$user_prompt" > "$analysis_file"
+        fi
+        
+        if [ -s "$analysis_file" ]; then
+            echo "--- Job $job_id ---" >> "$summary_file"
+            cat "$analysis_file" >> "$summary_file"
+            echo -e "\n" >> "$summary_file"
+        else
+            echo "--- Job $job_id (Analysis Failed) ---" >> "$summary_file"
+            echo -e "\n" >> "$summary_file"
+        fi
     done
     echo "Summary written to $summary_file"
 }
 
+# New function to analyze combined logs from a job directory
+analyze_failure_with_ai_combined() {
+    local job_dir="$1"
+    local user_prompt="$2"
+    local combined_snippet="${job_dir}/combined_logs.snippet"
+    rm -f "$combined_snippet"
 
-# Analyze a log file using Fabric AI
-analyze_failure_with_ai() {
-    local log_file="$1"
-    # Internal GenAI API configuration
-    local baseurl="${INTERNAL_API_BASEURL:-https://inner-medusa.genai.nchc.org.tw/v1/}"
-    if [ -z "$INTERNAL_API_KEY" ]; then
-        echo "INTERNAL_API_KEY not set; skipping AI analysis."
+    # Add job.log
+    if [ -f "${job_dir}/job.log" ]; then
+        echo "=== Main GitLab Job Log ===" >> "$combined_snippet"
+        tail -n 150 "${job_dir}/job.log" >> "$combined_snippet"
+        echo -e "\n" >> "$combined_snippet"
+    fi
+
+    # Add artifact logs
+    local artifact_logs=$(find "${job_dir}/artifacts/logs" -name "*.log" 2>/dev/null)
+    for log in $artifact_logs; do
+        echo "=== Artifact Log: $(basename "$log") ===" >> "$combined_snippet"
+        tail -n 150 "$log" >> "$combined_snippet"
+        echo -e "\n" >> "$combined_snippet"
+    done
+
+    if [ ! -s "$combined_snippet" ]; then
+        echo "No log content found for analysis." >&2
+        rm -f "$combined_snippet"
         return 1
     fi
-    echo "Analyzing $log_file with internal GenAI API..."
-    # Extract last 200 lines to limit size
-    tail -n 200 "$log_file" > "${log_file}.snippet"
-    local snippet=$(cat "${log_file}.snippet")
-    # Build payload compatible with internal GenAI API (expects messages array)
-    # Default model can be overridden via INTERNAL_API_MODEL env var.
-    # Choose a model that the team is permitted to use, e.g., "llama-3.1-8B-m1-raft-v1.1.4-ep5".
-    local model="${INTERNAL_API_MODEL:-llama-3.1-8B-m1-raft-v1.1.4-ep5}"
-    local payload=$(jq -n --arg ctx "$snippet" --arg mdl "$model" '{"model":$mdl,"messages":[{"role":"user","content":$ctx}],"temperature":0.2}')
-    # Primary endpoint – assume chat completions
+
+    # AI analysis
+    local result=$(call_ai_api "$combined_snippet" "$user_prompt")
+    echo "$result"
+    rm -f "$combined_snippet"
+}
+
+# Generic AI API call function
+call_ai_api() {
+    local input_file="$1"
+    local user_prompt="$2"
+    local baseurl="${INTERNAL_API_BASEURL:-https://inner-medusa.genai.nchc.org.tw/v1/}"
+    if [ -z "$INTERNAL_API_KEY" ]; then
+        echo "INTERNAL_API_KEY not set." >&2
+        return 1
+    fi
+
+    local snippet=$(cat "$input_file")
+    local final_content="$snippet"
+    
+    # If custom prompt is provided, prepend it
+    if [ -n "$user_prompt" ]; then
+        final_content="Instruction: ${user_prompt}\n\nLogs:\n${snippet}"
+    fi
+
+    # Default to gemma-4-31B-it
+    local model="${INTERNAL_API_MODEL:-gemma-4-31B-it}"
+    local payload=$(jq -n --arg ctx "$final_content" --arg mdl "$model" '{"model":$mdl,"messages":[{"role":"user","content":$ctx}],"temperature":0.1}')
+    
     local endpoint="${INTERNAL_API_ENDPOINT:-${baseurl%/}/chat/completions}"
     local response=$(curl -s -X POST "$endpoint" \
         -H "Authorization: Bearer ${INTERNAL_API_KEY}" \
         -H "Content-Type: application/json" \
         -d "$payload")
-    # If response contains an error, attempt fallback to /v1/analyze if provided
-    if echo "$response" | grep -q "detail"; then
-        local fallback="${INTERNAL_API_FALLBACK_ENDPOINT:-${baseurl%/}/analyze}"
-        response=$(curl -s -X POST "$fallback" \
-            -H "Authorization: Bearer ${INTERNAL_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "$payload")
-    fi
-    if echo "$response" | grep -q "detail"; then
-        echo "AI analysis failed: $(echo "$response" | jq -r '.detail // .')"
-        rm -f "${log_file}.snippet"
+
+    # Error checking
+    if echo "$response" | grep -q "\"detail\""; then
+        echo "AI API Error: $(echo "$response" | jq -r '.detail // .')" >&2
         return 1
-    else
-        # Extract content from typical OpenAI‑style response
-        local analysis=$(echo "$response" | jq -r '.choices[0].message.content // .analysis // .')
-        echo "AI analysis result:"
+    fi
+
+    local analysis=$(echo "$response" | jq -r '.choices[0].message.content // .analysis // empty')
+    if [ -z "$analysis" ]; then
+        # Fallback for different API response structures
+        analysis=$(echo "$response" | jq -r '.content // .analysis // empty')
+    fi
+
+    if [ -n "$analysis" ]; then
         echo "$analysis"
-        rm -f "${log_file}.snippet"
-    fi
-    echo "Analyzing $log_file with internal GenAI API..."
-    # Extract last 200 lines to limit size
-    tail -n 200 "$log_file" > "${log_file}.snippet"
-    local snippet=$(cat "${log_file}.snippet")
-    # Build JSON payload (you can adjust model/prompt as needed)
-    # Build payload compatible with internal GenAI API (expects messages array)
-    # Default model can be overridden via INTERNAL_API_MODEL env var.
-    # Choose a model that the team is permitted to use, e.g., "llama-3.1-8B-m1-raft-v1.1.4-ep5".
-    local model="${INTERNAL_API_MODEL:-llama-3.1-8B-m1-raft-v1.1.4-ep5}"
-    local payload=$(jq -n --arg ctx "$snippet" --arg mdl "$model" '{"model":$mdl,"messages":[{"role":"user","content":$ctx}],"temperature":0.2}')
-    local endpoint="${baseurl}analyze"
-    local response=$(curl -s -X POST "$endpoint" \
-        -H "Authorization: Bearer ${INTERNAL_API_KEY}" \
-        -H "Content-Type: application/json" \
-        -d "$payload")
-    if echo "$response" | grep -q "detail"; then
-        echo "AI analysis failed: $(echo "$response" | jq -r '.detail // .')"
-        rm -f "${log_file}.snippet"
-        return 1
     else
-        echo "AI analysis result:"
-        echo "$response" | jq -r '.analysis // .'
-        rm -f "${log_file}.snippet"
+        echo "AI returned empty result. Raw response: $response" >&2
+        return 1
     fi
 }
 
@@ -295,7 +397,7 @@ download_artifacts() {
 
     echo "Downloading artifacts for job $job_id..."
     # Using -f to fail on HTTP errors (like 404)
-    local http_code=$(curl -sL -o "$zip_file" -w "%{\http_code}" \
+    local http_code=$(curl -sL -o "$zip_file" -w "%{http_code}" \
          --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
          "${GITLAB_API_URL}/projects/${PROJECT_ID}/jobs/${job_id}/artifacts")
 
@@ -319,6 +421,8 @@ download_artifacts() {
     mkdir -p "$target_dir"
     unzip -o "$zip_file" -d "$target_dir"
     rm "$zip_file"
+    # Remove unwanted version-* files
+    rm -f "$target_dir"/version-*
     echo "Done. Artifacts are in $target_dir"
 }
 
@@ -343,6 +447,6 @@ case "$1" in
   artifacts|download) download_artifacts "$2" ;;
   debug)     debug_api "$@" ;;
   failed-logs) download_failed_logs "$2" ;;
-  failed-summary) aggregate_failed_analysis ;;
+  failed-summary) analyze_and_summarize_failed "$2" ;;
   *)         usage ;;
  esac
