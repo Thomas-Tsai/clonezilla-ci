@@ -4,3 +4,12 @@ isos/*.iso
 logs/*
 dev/testData/*
 partimag/*
+
+# Local environment / secrets
+.env
+.env.*
+*.swp
+*.swo
+
+# Local CI state (only the committed state/*.json should be tracked)
+state/local-*

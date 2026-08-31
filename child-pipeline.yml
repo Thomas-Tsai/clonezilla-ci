@@ -1,7 +1,17 @@
 # This is a child pipeline configuration.
 # It expects ARCH and TYPE to be passed as variables from the parent pipeline.
+#
+# Version-gated scheduled runs:
+#   When triggered by a schedule, the first job (check_version) compares the
+#   latest Clonezilla version on the NCHC mirror against state/last-tested-versions.json.
+#   - If the version is unchanged, downstream test jobs are skipped and the
+#     pipeline exits cleanly (no wasted runner time).
+#   - If a new version is detected, the state file is committed/pushed and the
+#     full test suite runs against the new zip.
+#   Manual triggers always run the full suite regardless of version state.
 
 stages:
+  - check
   - download
   - test
   - deploy
@@ -20,10 +30,44 @@ variables:
   CLONEZILLA_ZIP_URL: ""
   ZIP_DIR: "zip"
   CURL_OPTS: "-fsSL"
+  # VERSION_STATUS is set by check_version job's dotenv artifact.
+  VERSION_STATUS: ""
+
+# --- Version check (scheduled runs only) -----------------------------------
+# Compares NCHC mirror vs reports.json on the test-reports branch.
+# Emits a dotenv artifact with VERSION_STATUS and LATEST_URL for downstream jobs.
+# Reuses the existing reports.json infrastructure (updated by the pages job);
+# no separate state file or token is needed.
+check_version:
+  stage: check
+  rules:
+    # Only run version gate on scheduled pipelines.
+    # Manual/branch pipelines skip this and always run tests.
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: on_success
+    - when: never
+  before_script:
+    - chmod +x scripts/check-version-update.sh download-clonezilla.sh
+  script:
+    - ./scripts/check-version-update.sh --arch "$ARCH" --type "$TYPE" | tee version_check.env
+    - echo "--- version_check.env ---"
+    - cat version_check.env
+  artifacts:
+    name: "version-check-${ARCH}-${TYPE}"
+    reports:
+      dotenv: version_check.env
+    expire_in: 1 day
+  # Allow failure: if the check itself errors, fall through to the normal
+  # download path (which will fetch whatever is current) rather than blocking
+  # the whole pipeline.
+  allow_failure: true
 
 download_zip:
   stage: download
   rules:
+    # Scheduled runs: skip download if no new version was detected.
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $VERSION_STATUS == "no_change"'
+      when: never
     - when: on_success
   allow_failure: false
   script:
@@ -70,6 +114,11 @@ build_singularity:
   stage: download
   tags:
     - build
+  rules:
+    # Skip image rebuild on scheduled no-change runs.
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $VERSION_STATUS == "no_change"'
+      when: never
+    - when: on_success
   script:
     - |
       echo "Logging into GitLab Container Registry..."
