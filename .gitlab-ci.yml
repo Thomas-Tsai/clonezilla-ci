@@ -13,6 +13,10 @@ trigger:scheduled:
   stage: trigger
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  variables:
+    # Forward the schedule source to the child pipeline, since child pipelines
+    # report CI_PIPELINE_SOURCE=parent_pipeline (not "schedule").
+    PARENT_PIPELINE_SOURCE: "schedule"
   trigger:
     include: 'child-pipeline.yml'
     strategy: depend
