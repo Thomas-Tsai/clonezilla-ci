@@ -192,7 +192,11 @@ update_sif:
 
 .test_template:
   stage: test
-  allow_failure: true
+  # Note: allow_failure: true was removed to work around a GitLab pipeline
+  # status calculation bug where child pipelines with allow_failure jobs
+  # are marked as "failed" even when all jobs succeed. Individual test
+  # failures will now properly fail the pipeline; the version-gate early
+  # exit (exit 0) ensures skipped tests don't cause failures.
   environment:
     name: "test/${ARCH}/${TYPE}"
   variables:
