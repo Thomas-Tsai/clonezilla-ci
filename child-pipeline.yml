@@ -61,10 +61,12 @@ check_version:
     reports:
       dotenv: version_check.env
     expire_in: 1 day
-  # Allow failure: if the check itself errors, fall through to the normal
-  # download path (which will fetch whatever is current) rather than blocking
-  # the whole pipeline.
-  allow_failure: true
+  # Note: previously had allow_failure: true here, but that caused a GitLab
+  # pipeline status calculation bug where the child pipeline was marked as
+  # "failed" even when all 22 jobs succeeded. The script itself handles
+  # errors with proper exit codes (0=success, 1=fetch error, 2=api error),
+  # and downstream jobs use optional: true on the needs dependency, so a
+  # hard failure here is safe and won't block the pipeline.
 
 download_zip:
   stage: download
