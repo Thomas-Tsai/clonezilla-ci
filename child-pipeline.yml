@@ -74,13 +74,19 @@ download_zip:
     - job: check_version
       optional: true
       artifacts: true
-  rules:
-    # Scheduled runs: skip download if no new version was detected.
-    - if: '$PARENT_PIPELINE_SOURCE == "schedule" && $VERSION_STATUS == "no_change"'
-      when: never
-    - when: on_success
   allow_failure: false
   script:
+    - |
+      # Version gate: on scheduled runs with no version change, skip the download.
+      # (dotenv artifact variables like VERSION_STATUS are not available in
+      # rules:if, so we check at script runtime instead.)
+      if [ "${PARENT_PIPELINE_SOURCE}" = "schedule" ] && [ "${VERSION_STATUS}" = "no_change" ]; then
+        echo "VERSION_STATUS=no_change: skipping download. No new Clonezilla version to test."
+        # Still emit the dotenv artifact so downstream jobs can read the skip signal.
+        echo "ZIP_FILE_FROM_BUILD=" > build.env
+        echo "VERSION_STATUS=no_change" >> build.env
+        exit 0
+      fi
     - mkdir -p "${ZIP_DIR}"
     - chmod +x download-clonezilla.sh
     - |
@@ -128,13 +134,13 @@ build_singularity:
     - job: check_version
       optional: true
       artifacts: true
-  rules:
-    # Skip image rebuild on scheduled no-change runs.
-    - if: '$PARENT_PIPELINE_SOURCE == "schedule" && $VERSION_STATUS == "no_change"'
-      when: never
-    - when: on_success
   script:
     - |
+      # Version gate: skip image rebuild on scheduled no-change runs.
+      if [ "${PARENT_PIPELINE_SOURCE}" = "schedule" ] && [ "${VERSION_STATUS}" = "no_change" ]; then
+        echo "VERSION_STATUS=no_change: skipping Docker image rebuild."
+        exit 0
+      fi
       echo "Logging into GitLab Container Registry..."
       docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
 
@@ -152,8 +158,16 @@ update_sif:
     - build_sif  # 指定專屬 Tag，確保在正確的 Login Node 執行
   needs:
     - build_singularity
+    - job: check_version
+      optional: true
+      artifacts: true
   script:
     - |
+      # Version gate: skip SIF rebuild on scheduled no-change runs.
+      if [ "${VERSION_STATUS}" = "no_change" ]; then
+        echo "VERSION_STATUS=no_change: skipping SIF update."
+        exit 0
+      fi
       echo "Starting SIF build from Docker Registry..."
       export SINGULARITY_DOCKER_USERNAME="${CI_REGISTRY_USER}"
       export SINGULARITY_DOCKER_PASSWORD="${CI_REGISTRY_PASSWORD}"
@@ -192,6 +206,11 @@ update_sif:
       artifacts: false
   before_script:
     - |
+      # Version gate: skip tests on scheduled no-change runs.
+      if [ "${VERSION_STATUS}" = "no_change" ]; then
+        echo "VERSION_STATUS=no_change: skipping test (no new Clonezilla version)."
+        exit 0
+      fi
       # Display a prominent banner in the logs
       echo -e "\e[1;32m"
       echo "================================================================================"
@@ -300,6 +319,12 @@ update_sif:
       fi
   script:
     - |
+      # Version gate: skip tests on scheduled no-change runs.
+      if [ "${VERSION_STATUS}" = "no_change" ]; then
+        echo "VERSION_STATUS=no_change: skipping test (no new Clonezilla version)."
+        exit 0
+      fi
+
       if [ -z "$TEST_SCRIPT" ]; then
         echo "Error: TEST_SCRIPT is not set for this job!"
         exit 1
@@ -490,6 +515,12 @@ pages:
     - test:disk_512en_4kn_ext4_data
     - test:dev_to_dev
   script:
+    - |
+      # Version gate: skip report publishing on scheduled no-change runs.
+      if [ "${VERSION_STATUS}" = "no_change" ]; then
+        echo "VERSION_STATUS=no_change: skipping pages (no tests ran)."
+        exit 0
+      fi
     - chmod +x jobs/publish_reports.sh
     - jobs/publish_reports.sh
   artifacts:
