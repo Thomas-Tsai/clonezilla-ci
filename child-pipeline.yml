@@ -521,8 +521,8 @@ pages:
         echo "VERSION_STATUS=no_change: skipping pages (no tests ran)."
         exit 0
       fi
-    - chmod +x jobs/publish_reports.sh
-    - jobs/publish_reports.sh
+      chmod +x jobs/publish_reports.sh
+      jobs/publish_reports.sh
   artifacts:
     paths:
       - public
