@@ -498,7 +498,7 @@ test:dev_to_dev:
     TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_dev_to_dev.sh"
 
-pages:
+publish_reports:
   stage: deploy
   needs:
     - job: check_version
