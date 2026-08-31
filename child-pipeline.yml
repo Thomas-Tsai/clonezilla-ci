@@ -522,6 +522,10 @@ pages:
       # Version gate: skip report publishing on scheduled no-change runs.
       if [ "${VERSION_STATUS}" = "no_change" ]; then
         echo "VERSION_STATUS=no_change: skipping pages (no tests ran)."
+        # Create an empty public/ dir so the artifacts upload step succeeds
+        # (GitLab marks the pipeline as failed if artifacts.paths has no
+        # matching files, even when the job script itself exits 0).
+        mkdir -p public
         exit 0
       fi
       chmod +x jobs/publish_reports.sh
