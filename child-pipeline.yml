@@ -68,6 +68,12 @@ check_version:
 
 download_zip:
   stage: download
+  needs:
+    # On scheduled runs, depend on check_version for the VERSION_STATUS dotenv.
+    # On manual runs, check_version is skipped so this need is optional.
+    - job: check_version
+      optional: true
+      artifacts: true
   rules:
     # Scheduled runs: skip download if no new version was detected.
     - if: '$PARENT_PIPELINE_SOURCE == "schedule" && $VERSION_STATUS == "no_change"'
@@ -118,6 +124,10 @@ build_singularity:
   stage: download
   tags:
     - build
+  needs:
+    - job: check_version
+      optional: true
+      artifacts: true
   rules:
     # Skip image rebuild on scheduled no-change runs.
     - if: '$PARENT_PIPELINE_SOURCE == "schedule" && $VERSION_STATUS == "no_change"'
