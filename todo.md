@@ -71,6 +71,7 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] 將 `jobs/common.sh` 中的自動下載邏輯替換為呼叫 `download-clonezilla.sh` 腳本，並支援 `--type` 參數。
 - [x] 更新 `jobs/**` 下所有測試腳本的參數解析，使其支援傳遞 `--type` 參數。
 - [x] 在 `jobs/common.sh` 中新增檢查，強制所有測試腳本必須從 `jobs/` 目錄內執行，否則將顯示錯誤並退出。
+- [ ] 修復 `jobs/test_sample.sh` 已解析 `--no-ssh-forward` 卻未傳入 qemu-clonezilla-ci-run.sh，導致平行 CI jobs 時 port 2222 衝突。(待驗證)
 
 ## liteserver.sh 改進事項：
 開發一個 liteserver.sh 腳本，這個腳本主要用來啟動一個簡易的 clonezilla lite server 來提供 clonezilla server 服務的場景
@@ -106,6 +107,8 @@ $ ./qemu-clonezilla-ci-run.sh -i --zip zip/clonezilla-live-20251124-resolute-amd
 - [x] 增加--clientzip 參數，可以指定lite client 使用的 clonezilla zip 檔案, 允許與server 相同得zip 檔案
 - [x] 以 COW 方式處理 tmpl 取代 copy qcow2 檔案，減少磁碟空間使用量與加快備份還原速度
 - [x] client 要 loop 去等server ready//10 times
+- [ ] 修復 arm64/riscv64 pipeline 失敗：Clonezilla 3.3.3-32 (forky/sid base) 移除 isc-dhcp-client，ocs_prerun 改為 `dhclient || true`，避免卡在 Press Enter。(待驗證)
+- [ ] 等待 image_creation_complete 逾時或 server 異常死亡時，自動印出最新 server QEMU log 的最後 50 行，加速診斷。(待驗證)
 
 ## data-clone-restore.sh 改進事項：
 - [x] 整個 script flow 需要開發，完整flow, 參數說明
@@ -204,6 +207,7 @@ initrd.img,                  --initrd <path>         Path to the initrd file.
 - [x] `qemu-clonezilla-ci-run.sh` 增加 `--efi` 選項，啟用 AMD64 EFI 開機支援。
 - [x] `qemu-clonezilla-ci-run.sh` 增加 `--temp-dir` 選項，用於指定臨時檔案存放目錄，支援 UEFI VARS 檔案清理。
 - [x] `qemu-clonezilla-ci-run.sh` 將 UEFI 相關的 `-pflash` 參數改為明確的 `-drive if=pflash,format=raw...` 語法。
+- [ ] 修復 SC2199 與 PCI_BUS_NAME 自動調整邏輯：原區塊誤植於 `--disk-driver` 參數解析 case 內（且巢狀結構錯亂），已移出至架構 case 之後執行，`${arr[@]}` 改為 `${arr[*]}` 明確串接，並一併涵蓋 `EXTRA_QEMU_ARGS` 中的 q35 檢查。(待驗證)
 
 ## clonezilla-zip2qcow.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。

@@ -30,6 +30,19 @@ error() {
     exit 1
 }
 
+# Dump the tail of the newest server QEMU log to speed up diagnosis.
+dump_server_log_tail() {
+    local latest_log
+    latest_log=$(ls -1t "$LOG_DIR"/clonezilla_ci_*.log 2>/dev/null | head -n 1)
+    if [[ -n "$latest_log" && -f "$latest_log" ]]; then
+        echo "--- Last 50 lines of server QEMU log ($latest_log) ---" >&2
+        tail -n 50 "$latest_log" >&2
+        echo "--- End of server QEMU log tail ---" >&2
+    else
+        echo "[WARN] - No server QEMU log found under $LOG_DIR/ to dump." >&2
+    fi
+}
+
 # --- Usage and Argument Parsing ---
 usage() {
     cat <<EOF
@@ -505,11 +518,13 @@ main() {
 
         while [ ! -f "$FLAG_FILE" ]; do
             if [ $SECONDS_WAITED -ge $WAIT_TIMEOUT ]; then
+                dump_server_log_tail
                 error "Timeout ($WAIT_TIMEOUT seconds) reached waiting for server to create image. Flag file not found: $FLAG_FILE"
             fi
-            
+
             # Check if server process is still alive
             if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+                dump_server_log_tail
                 error "Server process (PID $SERVER_PID) died unexpectedly while waiting for image creation. Check server logs."
             fi
 

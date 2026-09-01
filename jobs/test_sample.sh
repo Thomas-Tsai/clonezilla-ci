@@ -54,8 +54,8 @@ test_sample() {
 
     # Run the command and capture its stdout/stderr
     local output
-    echo "RUNNING: qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/sample_restore.qcow2  --arch "$ARCH" --cmd pwd"
-    output=$( (cd .. && ./qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/sample_restore.qcow2  --arch "$ARCH" --cmd pwd) 2>&1)
+    echo "RUNNING: qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/sample_restore.qcow2  --arch "$ARCH" $NO_SSH_FORWARD_ARG --cmd pwd"
+    output=$( (cd .. && ./qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/sample_restore.qcow2  --arch "$ARCH" $NO_SSH_FORWARD_ARG --cmd pwd) 2>&1)
     echo "$output" # Show the output for debugging
 
     # Extract the log file path from the output, removing any carriage returns

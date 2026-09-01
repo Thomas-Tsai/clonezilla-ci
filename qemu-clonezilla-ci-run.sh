@@ -331,13 +331,7 @@ while [[ "$#" -gt 0 ]]; do
                 else
                     echo "Error: Invalid value for --disk-driver. Must be 'virtio-blk' or 'nvme'." >&2
                     print_usage
-fi
-# Auto-adjust PCI bus name for NVMe and q35 machines
-if [[ "$DISK_DRIVER" == "nvme" ]] || [[ " ${QEMU_MACHINE_ARGS[@]} " =~ " q35 " ]]; then
-    PCI_BUS_NAME="pcie.0"
-else
-    PCI_BUS_NAME="pci.0"
-fi
+                fi
             else
                 echo "Error: --disk-driver requires a value." >&2
                 print_usage
@@ -591,6 +585,20 @@ case "$ARCH" in
         ;;
 esac
 
+# Auto-adjust PCI bus name for amd64 NVMe and q35 machines. This must run
+# after the architecture case above, where QEMU_MACHINE_ARGS is populated.
+# (arm64/riscv64 already use pcie.0 via their "virt" machine; do not
+# override PCI_BUS_NAME for them here.)
+# Note: use "${array[*]}" (explicit join) instead of "${array[@]}" to avoid
+# triggering SC2199 and to make the concatenation intent explicit.
+if [[ "$ARCH" == "amd64" ]]; then
+    if [[ "$DISK_DRIVER" == "nvme" ]] || [[ " ${QEMU_MACHINE_ARGS[*]} ${EXTRA_QEMU_ARGS[*]} " =~ " q35 " ]]; then
+        PCI_BUS_NAME="pcie.0"
+    else
+        PCI_BUS_NAME="pci.0"
+    fi
+fi
+
 # Check if QEMU binary exists
 if ! command -v "$QEMU_BINARY" &> /dev/null; then
     echo "Error: QEMU binary not found for architecture '$ARCH': $QEMU_BINARY" >&2
@@ -697,7 +705,11 @@ else
 
     APPEND_ARGS+=" locales=en_US.UTF-8 keyboard-layouts=us live-getty ${CONSOLE_ARG}"
     APPEND_ARGS+=" live-media=${LIVE_MEDIA_WITH_PARTITION} live-media-path=/live toram"
-    APPEND_ARGS+=" ocs_prerun=\"dhclient\" ocs_prerun1=\"mkdir -p /home/partimag\""
+    # Note: Clonezilla >= 3.3.3-32 (Debian forky/sid base) removed isc-dhcp-client.
+    # Append "|| true" so a missing dhclient does not make ocs-run-boot-param
+    # pause at "Press Enter to continue" and hang the VM forever. External
+    # network is not required for the tests (9p hostshare + private static IP).
+    APPEND_ARGS+=" ocs_prerun=\"dhclient || true\" ocs_prerun1=\"mkdir -p /home/partimag\""
     ocs_prerun2_mount="mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag"
     # For NVMe, the QEMU machine needs to be explicitly specified for 9p to work reliably on some systems
     if [[ "$DISK_DRIVER" == "nvme" ]] && [[ "$ARCH" == "amd64" ]]; then
