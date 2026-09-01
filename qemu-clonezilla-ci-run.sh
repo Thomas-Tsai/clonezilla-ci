@@ -706,10 +706,13 @@ else
     APPEND_ARGS+=" locales=en_US.UTF-8 keyboard-layouts=us live-getty ${CONSOLE_ARG}"
     APPEND_ARGS+=" live-media=${LIVE_MEDIA_WITH_PARTITION} live-media-path=/live toram"
     # Note: Clonezilla >= 3.3.3-32 (Debian forky/sid base) removed isc-dhcp-client.
-    # Append "|| true" so a missing dhclient does not make ocs-run-boot-param
-    # pause at "Press Enter to continue" and hang the VM forever. External
-    # network is not required for the tests (9p hostshare + private static IP).
-    APPEND_ARGS+=" ocs_prerun=\"dhclient || true\" ocs_prerun1=\"mkdir -p /home/partimag\""
+    # The dhclient command may not exist, so we guard with "|| true" to prevent
+    # ocs-run-boot-param from pausing at "Press Enter to continue" and hanging
+    # the VM forever. If dhclient does exist, -nw forks to background (no wait)
+    # and -timeout 10 prevents hanging on private socket networks (e.g. lite
+    # server tests) where no DHCP server exists. External network is not
+    # required for the tests (9p hostshare + private static IP).
+    APPEND_ARGS+=" ocs_prerun=\"dhclient -nw -timeout 10 2>/dev/null || true\" ocs_prerun1=\"mkdir -p /home/partimag\""
     ocs_prerun2_mount="mount -t 9p -o trans=virtio,version=9p2000.L hostshare /home/partimag"
     # For NVMe, the QEMU machine needs to be explicitly specified for 9p to work reliably on some systems
     if [[ "$DISK_DRIVER" == "nvme" ]] && [[ "$ARCH" == "amd64" ]]; then
