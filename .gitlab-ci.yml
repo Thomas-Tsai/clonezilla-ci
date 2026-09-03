@@ -127,4 +127,22 @@ trigger:amd64-alternative-testing-new-vm:
     TYPE: 'alternative-testing'
     RUNNER_TAG: 'new-vm'
 
+# --- ARM64 (new-vm) ---
+
+trigger:arm64-new-vm:
+  <<: *trigger_template_new_vm
+  variables:
+    ARCH: 'arm64'
+    TYPE: 'experimental'
+    RUNNER_TAG: 'new-vm'
+
+# --- RISCV64 (new-vm) ---
+
+trigger:riscv64-new-vm:
+  <<: *trigger_template_new_vm
+  variables:
+    ARCH: 'riscv64'
+    TYPE: 'experimental'
+    RUNNER_TAG: 'new-vm'
+
 # Add more combinations as needed.
