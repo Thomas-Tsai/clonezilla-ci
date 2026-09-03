@@ -76,11 +76,55 @@ trigger:riscv64:
     ARCH: 'riscv64'
     TYPE: 'experimental'
 
-# Add more combinations as needed.
-# For example, to add alternative-stable for amd64:
+# --- Test on specific runner (e.g. new VM) -------------------------------
+# These manual trigger jobs pass RUNNER_TAG to the child pipeline so that
+# all test jobs run on the specified runner tag instead of the default
+# "clonezilla" tag.  Useful for testing new runners without affecting
+# scheduled pipelines.
 #
-# trigger:amd64-alternative-stable:
-#   <<: *trigger_template
-#   variables:
-#     ARCH: 'amd64'
-#     TYPE: 'alternative-stable'
+# Currently targets "new-vm" (ubuntu-2404-vm-runner, ID 55772072).
+# Note: update_sif (needs build_sif tag) and test:os:windows11 (needs
+# windows tag) are NOT affected — they keep their dedicated tags and will
+# NOT run on the new VM.
+
+.trigger_template_new_vm: &trigger_template_new_vm
+  stage: trigger
+  rules:
+    - when: manual
+  trigger:
+    include: 'child-pipeline.yml'
+    strategy: depend
+    forward:
+      pipeline_variables: true
+
+# --- AMD64 (new-vm) ---
+
+trigger:amd64-stable-new-vm:
+  <<: *trigger_template_new_vm
+  variables:
+    ARCH: 'amd64'
+    TYPE: 'stable'
+    RUNNER_TAG: 'new-vm'
+
+trigger:amd64-testing-new-vm:
+  <<: *trigger_template_new_vm
+  variables:
+    ARCH: 'amd64'
+    TYPE: 'testing'
+    RUNNER_TAG: 'new-vm'
+
+trigger:amd64-alternative-stable-new-vm:
+  <<: *trigger_template_new_vm
+  variables:
+    ARCH: 'amd64'
+    TYPE: 'alternative-stable'
+    RUNNER_TAG: 'new-vm'
+
+trigger:amd64-alternative-testing-new-vm:
+  <<: *trigger_template_new_vm
+  variables:
+    ARCH: 'amd64'
+    TYPE: 'alternative-testing'
+    RUNNER_TAG: 'new-vm'
+
+# Add more combinations as needed.

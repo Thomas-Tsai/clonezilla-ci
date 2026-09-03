@@ -19,8 +19,13 @@ stages:
 default:
   timeout: 120m
   retry: 1
-  tags:
-    - clonezilla
+  # Note: no global tags here. Each job specifies its own tags.
+  # - check_version, download_zip, .test_template: use $RUNNER_TAG
+  #   (default "clonezilla", set to "new-vm" via new-vm trigger jobs)
+  # - build_singularity: tag "build"
+  # - update_sif: tag "build_sif"
+  # - test:os:windows11: tags "clonezilla, windows" (always uses clonezilla,
+  #   not affected by RUNNER_TAG, since it needs the physical asus pn42)
 
 variables:
   # ARCH and TYPE are provided by the parent pipeline.
@@ -32,6 +37,13 @@ variables:
   CURL_OPTS: "-fsSL"
   # VERSION_STATUS is set by check_version job's dotenv artifact.
   VERSION_STATUS: ""
+  # RUNNER_TAG controls which runner tag the test jobs use.
+  # - Default: "clonezilla" (matches all self-hosted clonezilla runners)
+  # - Set to "new-vm" via the new-vm manual trigger jobs to route all
+  #   test jobs to ubuntu-2404-vm-runner for testing new runners.
+  # Note: update_sif (tag: build_sif) and test:os:windows11 (tag: windows)
+  # are NOT affected by this variable — they keep their dedicated tags.
+  RUNNER_TAG: "clonezilla"
 
 # --- Version check (scheduled runs only) -----------------------------------
 # Compares NCHC mirror vs reports.json on the test-reports branch.
@@ -44,6 +56,8 @@ variables:
 # via trigger variables so we can detect scheduled runs here.
 check_version:
   stage: check
+  tags:
+    - "$RUNNER_TAG"
   rules:
     # Only run version gate on scheduled pipelines.
     # Manual/branch pipelines skip this and always run tests.
@@ -70,6 +84,8 @@ check_version:
 
 download_zip:
   stage: download
+  tags:
+    - "$RUNNER_TAG"
   needs:
     # On scheduled runs, depend on check_version for the VERSION_STATUS dotenv.
     # On manual runs, check_version is skipped so this need is optional.
@@ -192,6 +208,8 @@ update_sif:
 
 .test_template:
   stage: test
+  tags:
+    - "$RUNNER_TAG"
   # Note: allow_failure: true was removed to work around a GitLab pipeline
   # status calculation bug where child pipelines with allow_failure jobs
   # are marked as "failed" even when all jobs succeed. Individual test
@@ -500,6 +518,8 @@ test:dev_to_dev:
 
 publish_reports:
   stage: deploy
+  tags:
+    - "$RUNNER_TAG"
   needs:
     - job: check_version
       optional: true
