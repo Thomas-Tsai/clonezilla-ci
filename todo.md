@@ -38,6 +38,7 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] Pipeline ID 將line 69 追加 顯示 id (iid) ，如： `${CI_PIPELINE_IID}(${CI_PIPELINE_ID})`
 - [x] per-run report, REPORT_DIR/index.htm , log 那欄 連結換成 gitlab.com CI_JOB_URL，但是保留 logs/ 資料
 - [x] 刪除 ... `click on the link in the 'Log' column or <a href="./log` ...
+- [ ] 修復 GitLab Pages 網站停止更新問題：在 test-reports 分支新增 .gitlab-ci.yml 的 pages job，由 publish_reports push 觸發部署（原本 main child pipeline 的 pages job 改名為 publish_reports 後不再部署）(待驗證)
 
 ### generate_report.sh
 - [x] reports.json,  generate_report.sh  須增加顯示 CI_PIPELINE_ID 方便與 pipeline 網頁對應

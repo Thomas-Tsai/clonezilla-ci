@@ -516,6 +516,14 @@ test:dev_to_dev:
     TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_dev_to_dev.sh"
 
+# Publishes test reports to the 'test-reports' branch.
+#
+# WARNING: Do NOT rename this job to 'pages'. GitLab only deploys Pages from a
+# job named 'pages' (or with 'pages: true'), and the internal pages:deploy step
+# inside child pipelines has pipeline-status side effects (see a98b086b).
+# Instead, the script's push to the test-reports branch triggers a pipeline on
+# that branch, whose own .gitlab-ci.yml contains the real 'pages' job that
+# deploys https://clonezilla-ci-036aa1.gitlab.io/ .
 publish_reports:
   stage: deploy
   tags:
