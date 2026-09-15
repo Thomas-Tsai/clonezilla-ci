@@ -3,11 +3,16 @@
 #
 # Version-gated scheduled runs:
 #   When triggered by a schedule, the first job (check_version) compares the
-#   latest Clonezilla version on the NCHC mirror against state/last-tested-versions.json.
-#   - If the version is unchanged, downstream test jobs are skipped and the
-#     pipeline exits cleanly (no wasted runner time).
-#   - If a new version is detected, the state file is committed/pushed and the
-#     full test suite runs against the new zip.
+#   latest Clonezilla version on the NCHC mirror against reports.json on the
+#   test-reports branch.
+#   - If the version was already tested, downstream test jobs are skipped and
+#     the pipeline exits cleanly (no wasted runner time).
+#   - If a new version is detected, check_version immediately records a claim
+#     in in-progress.json on the test-reports branch (12h TTL) and the full
+#     test suite runs against the new zip. Later schedules seeing a fresh
+#     claim for the same version get VERSION_STATUS=in_progress and skip, so
+#     only one pipeline tests a given version at a time (claims are cleared
+#     by publish_reports; canceled pipelines expire via the TTL).
 #   Manual triggers always run the full suite regardless of version state.
 
 stages:
@@ -95,14 +100,15 @@ download_zip:
   allow_failure: false
   script:
     - |
-      # Version gate: on scheduled runs with no version change, skip the download.
+      # Version gate: on scheduled runs with no version change (or a version
+      # already claimed by another in-flight pipeline), skip the download.
       # (dotenv artifact variables like VERSION_STATUS are not available in
       # rules:if, so we check at script runtime instead.)
-      if [ "${PARENT_PIPELINE_SOURCE}" = "schedule" ] && [ "${VERSION_STATUS}" = "no_change" ]; then
-        echo "VERSION_STATUS=no_change: skipping download. No new Clonezilla version to test."
+      if [ "${PARENT_PIPELINE_SOURCE}" = "schedule" ] && { [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; }; then
+        echo "VERSION_STATUS=${VERSION_STATUS}: skipping download. No new Clonezilla version to test."
         # Still emit the dotenv artifact so downstream jobs can read the skip signal.
         echo "ZIP_FILE_FROM_BUILD=" > build.env
-        echo "VERSION_STATUS=no_change" >> build.env
+        echo "VERSION_STATUS=${VERSION_STATUS}" >> build.env
         exit 0
       fi
     - mkdir -p "${ZIP_DIR}"
@@ -154,9 +160,9 @@ build_singularity:
       artifacts: true
   script:
     - |
-      # Version gate: skip image rebuild on scheduled no-change runs.
-      if [ "${PARENT_PIPELINE_SOURCE}" = "schedule" ] && [ "${VERSION_STATUS}" = "no_change" ]; then
-        echo "VERSION_STATUS=no_change: skipping Docker image rebuild."
+      # Version gate: skip image rebuild on scheduled no-change / in-progress runs.
+      if [ "${PARENT_PIPELINE_SOURCE}" = "schedule" ] && { [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; }; then
+        echo "VERSION_STATUS=${VERSION_STATUS}: skipping Docker image rebuild."
         exit 0
       fi
       echo "Logging into GitLab Container Registry..."
@@ -184,9 +190,9 @@ update_sif:
       artifacts: true
   script:
     - |
-      # Version gate: skip SIF rebuild on scheduled no-change runs.
-      if [ "${VERSION_STATUS}" = "no_change" ]; then
-        echo "VERSION_STATUS=no_change: skipping SIF update."
+      # Version gate: skip SIF rebuild on scheduled no-change / in-progress runs.
+      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; then
+        echo "VERSION_STATUS=${VERSION_STATUS}: skipping SIF update."
         exit 0
       fi
       echo "Starting SIF build from Docker Registry..."
@@ -233,9 +239,9 @@ update_sif:
       artifacts: false
   before_script:
     - |
-      # Version gate: skip tests on scheduled no-change runs.
-      if [ "${VERSION_STATUS}" = "no_change" ]; then
-        echo "VERSION_STATUS=no_change: skipping test (no new Clonezilla version)."
+      # Version gate: skip tests on scheduled no-change / in-progress runs.
+      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; then
+        echo "VERSION_STATUS=${VERSION_STATUS}: skipping test (no new Clonezilla version to test)."
         exit 0
       fi
       # Display a prominent banner in the logs
@@ -346,9 +352,9 @@ update_sif:
       fi
   script:
     - |
-      # Version gate: skip tests on scheduled no-change runs.
-      if [ "${VERSION_STATUS}" = "no_change" ]; then
-        echo "VERSION_STATUS=no_change: skipping test (no new Clonezilla version)."
+      # Version gate: skip tests on scheduled no-change / in-progress runs.
+      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; then
+        echo "VERSION_STATUS=${VERSION_STATUS}: skipping test (no new Clonezilla version to test)."
         exit 0
       fi
 
@@ -556,9 +562,9 @@ publish_reports:
     - test:dev_to_dev
   script:
     - |
-      # Version gate: skip report publishing on scheduled no-change runs.
-      if [ "${VERSION_STATUS}" = "no_change" ]; then
-        echo "VERSION_STATUS=no_change: skipping pages (no tests ran)."
+      # Version gate: skip report publishing on scheduled no-change / in-progress runs.
+      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; then
+        echo "VERSION_STATUS=${VERSION_STATUS}: skipping pages (no tests ran)."
         # Create an empty public/ dir so the artifacts upload step succeeds
         # (GitLab marks the pipeline as failed if artifacts.paths has no
         # matching files, even when the job script itself exits 0).

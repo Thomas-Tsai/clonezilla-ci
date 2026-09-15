@@ -129,3 +129,40 @@ Test results are shown in the console, and detailed logs for each major operatio
 - **`validate.sh`**: A helper script to verify that a restored OS disk image can boot successfully, using cloud-init for automation.
 
 For detailed command-line options for each script, see the **[Usage Guide](usage.md)**.
+
+## GitLab CI: Scheduled Version Gating
+
+Scheduled pipelines avoid re-testing the same Clonezilla version over and over:
+
+1. `check_version` (in `scripts/check-version-update.sh`) compares the latest
+   ZIP on the NCHC mirror against `reports.json` on the `test-reports` branch.
+2. If the version was already tested, `VERSION_STATUS=no_change` is emitted and
+   every downstream job (download / image build / tests / publish) exits early.
+3. If a **new** version is detected, `check_version` immediately records an
+   in-progress claim in `in-progress.json` on the `test-reports` branch
+   (pushed with `-o ci.skip`, so no extra pipeline is triggered), then the full
+   test suite runs.
+4. Schedules that fire while a full run is still in flight see the fresh claim
+   and emit `VERSION_STATUS=in_progress`, skipping the duplicate run. Only one
+   pipeline tests a given `<arch, type>` version at a time — this keeps the
+   project under the GitLab.com per-project active-jobs quota.
+5. `publish_reports` removes the claim together with the report commit.
+   Claims are timestamped and expire after a TTL (default 12h) so that a
+   canceled pipeline does not block re-testing forever.
+
+Manual (non-scheduled) triggers always run the full suite and never touch the
+claim state.
+
+## Troubleshooting
+
+### "Project exceeded the allowed number of jobs in active pipelines"
+
+GitLab.com Free tier allows at most 500 jobs in active (created / pending /
+running) pipelines per project. On a Clonezilla release day, several hourly
+schedules can each start a full 22-job child pipeline and pile up past that
+limit, so newly scheduled pipelines fail at creation with this message. The
+version-claim mechanism above prevents the pile-up. To recover manually:
+
+1. Deactivate the pipeline schedules (Build → Pipeline schedules).
+2. Cancel all active pipelines (parents *and* child pipelines).
+3. Re-enable the schedules.

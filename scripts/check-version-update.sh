@@ -10,11 +10,25 @@
 # CI_JOB_TOKEN, so no additional state file or token is needed.
 #
 # Output contract (stdout, machine-parseable, one KEY=VALUE per line):
-#   VERSION_STATUS=new_version | no_change | init
+#   VERSION_STATUS=new_version | no_change | in_progress | init
 #   LATEST_URL=<full URL of the latest zip on the mirror>
 #   LATEST_VERSION=<zip basename without .zip>
 #   PREVIOUS_VERSION=<version recorded in reports.json, empty if first run>
 #   STATE_KEY=<arch>_<type> key used for logging
+#   CLAIMED=true | false  (whether this run recorded an in-progress claim)
+#
+# Concurrency note:
+#   reports.json is only updated by publish_reports at the END of a full test
+#   run, which can take hours. Without an early reservation, every schedule
+#   that fires while a full run is still in flight would detect the same "new
+#   version" and start a duplicate 22-job run, eventually exceeding the
+#   GitLab.com per-project active-jobs quota. To prevent this, whenever a new
+#   version is detected this script immediately records a claim in
+#   `in-progress.json` on the test-reports branch. Later schedules see a fresh
+#   claim (younger than CLAIM_TTL_SECONDS, default 12h) and emit
+#   VERSION_STATUS=in_progress, which downstream jobs treat like a skip.
+#   publish_reports.sh removes the claim when the report is published; the TTL
+#   is the fallback for pipelines that get canceled mid-run.
 #
 # Exit codes:
 #   0  comparison succeeded (regardless of new/no-change)
@@ -53,6 +67,10 @@ DOWNLOAD_SCRIPT="${REPO_ROOT}/download-clonezilla.sh"
 GITLAB_API_URL="${CI_API_V4_URL:-https://gitlab.com/api/v4}"
 PROJECT_ID="${CI_PROJECT_ID:-freelabstw%2Fclonezilla-ci}"
 REPORTS_BRANCH="test-reports"
+
+# In-progress claim state (see header "Concurrency note").
+IN_PROGRESS_FILE="in-progress.json"
+CLAIM_TTL_SECONDS="${CLAIM_TTL_SECONDS:-43200}"   # 12 hours
 
 # --- Argument parsing -------------------------------------------------------
 print_usage() {
@@ -127,6 +145,115 @@ fetch_reports_json() {
         auth_header=(--header "JOB-TOKEN: ${CI_JOB_TOKEN}")
     fi
     curl -fsSL "${auth_header[@]}" "$url" 2>/dev/null
+}
+
+# Fetch in-progress.json from the test-reports branch via GitLab API.
+# Returns an empty string when the file does not exist yet.
+fetch_in_progress_json() {
+    local url="${GITLAB_API_URL}/projects/${PROJECT_ID}/repository/files/${IN_PROGRESS_FILE}/raw?ref=${REPORTS_BRANCH}"
+    local auth_header=()
+    if [[ -n "${CI_JOB_TOKEN:-}" ]]; then
+        auth_header=(--header "JOB-TOKEN: ${CI_JOB_TOKEN}")
+    fi
+    curl -fsSL "${auth_header[@]}" "$url" 2>/dev/null
+}
+
+# Print "<version>\t<claimed_at>" for STATE_KEY from the given JSON, or empty.
+get_in_progress_entry() {
+    local claims_json="$1"
+    echo "$claims_json" | jq -r --arg k "$STATE_KEY" \
+        '.[$k] // empty | "\(.version)\t\(.claimed_at)"' 2>/dev/null
+}
+
+# Return 0 if the given ISO-8601 timestamp is younger than CLAIM_TTL_SECONDS.
+# Timestamps up to 10 minutes in the future are still fresh (clock skew
+# between runners); undatable/malformed timestamps are treated as stale.
+is_claim_fresh() {
+    local claimed_at="$1"
+    local claimed_ts now_ts delta
+    claimed_ts="$(date -u -d "$claimed_at" +%s 2>/dev/null)" || return 1
+    [[ -n "$claimed_ts" ]] || return 1
+    now_ts="$(date -u +%s)"
+    delta=$(( now_ts - claimed_ts ))
+    (( delta < CLAIM_TTL_SECONDS && delta > -600 ))
+}
+
+# Record an in-progress claim for STATE_KEY/LATEST_VERSION on the
+# test-reports branch, pushing with -o ci.skip so the pages pipeline is not
+# triggered. Uses a fresh-shallow-clone + push retry loop to stay race-safe
+# against concurrently scheduled check_version jobs.
+# Returns: 0 claimed, 2 lost race (a fresh claim for the same version exists),
+#          3 skipped (no CI_JOB_TOKEN, e.g. local run), 4 push/write failure.
+claim_version() {
+    if [[ -z "${CI_JOB_TOKEN:-}" ]]; then
+        echo "Warning: CI_JOB_TOKEN not set; cannot write claim (local run?)." >&2
+        return 3
+    fi
+
+    local server_host="${CI_SERVER_HOST:-gitlab.com}"
+    local project_path="${CI_PROJECT_PATH:-freelabstw/clonezilla-ci}"
+    local git_url="https://gitlab-ci-token:${CI_JOB_TOKEN}@${server_host}/${project_path}.git"
+    local now_iso tmpdir attempt rc
+    now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    tmpdir="$(mktemp -d)"
+
+    for attempt in 1 2 3; do
+        rm -rf "${tmpdir}/repo"
+        if ! git clone --quiet --depth 1 --branch "${REPORTS_BRANCH}" \
+                "${git_url}" "${tmpdir}/repo" 2>"${tmpdir}/clone.err"; then
+            echo "Warning: clone of branch ${REPORTS_BRANCH} failed (attempt ${attempt}):" >&2
+            sed "s#${CI_JOB_TOKEN}#<token>#g" "${tmpdir}/clone.err" >&2 || true
+            rm -rf "$tmpdir"
+            return 4
+        fi
+
+        pushd "${tmpdir}/repo" >/dev/null
+
+        # Re-check the live state: another pipeline may have claimed meanwhile.
+        local entry ip_version ip_ts
+        entry="$(cat "${IN_PROGRESS_FILE}" 2>/dev/null || echo '{}')"
+        entry="$(get_in_progress_entry "$entry" || true)"
+        if [[ -n "$entry" ]]; then
+            IFS=$'\t' read -r ip_version ip_ts <<< "$entry"
+            if [[ "$ip_version" == "$LATEST_VERSION" ]] && is_claim_fresh "$ip_ts"; then
+                popd >/dev/null
+                rm -rf "$tmpdir"
+                return 2
+            fi
+        fi
+
+        [[ -f "${IN_PROGRESS_FILE}" ]] || echo '{}' > "${IN_PROGRESS_FILE}"
+        jq --arg k "$STATE_KEY" --arg ver "$LATEST_VERSION" --arg ts "$now_iso" \
+           --arg pid "${CI_PIPELINE_ID:-}" --arg url "${CI_PIPELINE_URL:-}" \
+           '.[$k] = {version: $ver, claimed_at: $ts, pipeline_id: $pid, pipeline_url: $url}' \
+           "${IN_PROGRESS_FILE}" > "${IN_PROGRESS_FILE}.tmp" \
+            && mv "${IN_PROGRESS_FILE}.tmp" "${IN_PROGRESS_FILE}"
+
+        git config user.name "GitLab CI Bot"
+        git config user.email "gitlab-ci-bot@${CI_PROJECT_NAMESPACE:-freelabstw}.gitlab.io"
+        git add "${IN_PROGRESS_FILE}"
+        if git diff --staged --quiet; then
+            # Nothing to commit (claim already identical); treat as success.
+            popd >/dev/null
+            rm -rf "$tmpdir"
+            return 0
+        fi
+        git commit --quiet -m "claim: ${STATE_KEY} testing ${LATEST_VERSION} (pipeline ${CI_PIPELINE_ID:-?})"
+
+        rc=0
+        git push --quiet -o ci.skip origin "${REPORTS_BRANCH}" 2>"${tmpdir}/push.err" || rc=$?
+        popd >/dev/null
+
+        if [[ "$rc" -eq 0 ]]; then
+            rm -rf "$tmpdir"
+            return 0
+        fi
+        echo "Warning: claim push failed (attempt ${attempt}), retrying..." >&2
+        sed "s#${CI_JOB_TOKEN}#<token>#g" "${tmpdir}/push.err" >&2 || true
+    done
+
+    rm -rf "$tmpdir"
+    return 4
 }
 
 # Check if a specific zip_name exists in reports.json (i.e. has been tested before).
@@ -208,14 +335,55 @@ else
     echo "  ${PREVIOUS_VERSION} -> ${LATEST_VERSION}" >&2
 fi
 
+# 3b. New version -> consult in-progress.json so that only one scheduled
+#     pipeline actually runs the full suite for this version (see the
+#     "Concurrency note" in the header).
+CLAIMED="false"
+if [[ "$STATUS" == "new_version" ]]; then
+    echo "Checking in-progress claims on ${REPORTS_BRANCH} branch..." >&2
+    CLAIMS_JSON="$(fetch_in_progress_json || true)"
+    entry="$(get_in_progress_entry "${CLAIMS_JSON:-{\}}" || true)"
+    if [[ -n "$entry" ]]; then
+        IFS=$'\t' read -r ip_version ip_ts <<< "$entry"
+        if [[ "$ip_version" == "$LATEST_VERSION" ]] && is_claim_fresh "$ip_ts"; then
+            STATUS="in_progress"
+            echo "Version ${LATEST_VERSION} is already being tested (claimed at ${ip_ts}). Skipping." >&2
+        fi
+    fi
+
+    if [[ "$STATUS" == "new_version" ]]; then
+        if [[ "$DRY_RUN" == "true" ]]; then
+            echo "[dry-run] Would record a claim for ${LATEST_VERSION} (${STATE_KEY}); skipping write." >&2
+        else
+            rc=0
+            claim_version || rc=$?
+            case "$rc" in
+                0)
+                    CLAIMED="true"
+                    echo "Claim recorded: ${STATE_KEY} will test ${LATEST_VERSION}." >&2
+                    ;;
+                2)
+                    STATUS="in_progress"
+                    echo "Another pipeline claimed ${LATEST_VERSION} first. Skipping." >&2
+                    ;;
+                *)
+                    echo "Warning: failed to record claim (rc=${rc}). Running tests anyway;" >&2
+                    echo "         duplicate runs are possible for this version." >&2
+                    ;;
+            esac
+        fi
+    fi
+fi
+echo >&2
+
 # 4. Emit machine-readable output for the CI dotenv artifact.
-#    No state file update is needed here: when tests run, the pages job will
-#    publish results + update reports.json on the test-reports branch, which
-#    is exactly what this script reads next time.
+#    reports.json is updated later by publish_reports.sh (see step 3b above
+#    for the early in-progress claim that prevents duplicate concurrent runs).
 echo "VERSION_STATUS=${STATUS}"
 echo "LATEST_URL=${LATEST_URL}"
 echo "LATEST_VERSION=${LATEST_VERSION}"
 echo "PREVIOUS_VERSION=${PREVIOUS_VERSION}"
 echo "STATE_KEY=${STATE_KEY}"
+echo "CLAIMED=${CLAIMED}"
 
 exit 0

@@ -151,6 +151,23 @@ jobs/generate_report.sh "$ZIP_BASENAME"
 # Step 5: Commit and Push
 echo "--- 5. Committing and pushing reports ---"
 cd reports_repo
+
+# Step 5a: Clear the in-progress claim for this arch/type.
+# check-version-update.sh records a claim in in-progress.json before the test
+# suite starts; publishing the report is the completion signal, so drop the
+# claim here. (Canceled pipelines never publish; their claims expire via the
+# 12h TTL enforced in check-version-update.sh.)
+TYPE_NORMALIZED="${TYPE:-stable}"
+if [ "${ARCH}" = "arm64" ] || [ "${ARCH}" = "riscv64" ]; then
+    TYPE_NORMALIZED="experimental"
+fi
+STATE_KEY="${ARCH}_${TYPE_NORMALIZED}"
+if [ -f in-progress.json ]; then
+    echo "INFO: Removing in-progress claim for ${STATE_KEY} (if present)..."
+    jq --arg k "${STATE_KEY}" 'del(.[$k])' in-progress.json > in-progress.json.tmp \
+        && mv in-progress.json.tmp in-progress.json
+fi
+
 echo "INFO: Committing and pushing changes to '${REPORTS_BRANCH}' branch..."
 git add .
 if git diff --staged --quiet; then

@@ -39,6 +39,14 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] per-run report, REPORT_DIR/index.htm , log 那欄 連結換成 gitlab.com CI_JOB_URL，但是保留 logs/ 資料
 - [x] 刪除 ... `click on the link in the 'Log' column or <a href="./log` ...
 - [ ] 修復 GitLab Pages 網站停止更新問題：在 test-reports 分支新增 .gitlab-ci.yml 的 pages job，由 publish_reports push 觸發部署（原本 main child pipeline 的 pages job 改名為 publish_reports 後不再部署）(待驗證)
+- [x] 發布 report 時於同一 commit 移除 `in-progress.json` 中對應 `<arch>_<type>` 的 claim 狀態，讓 schedule pipeline 知道該版本測試已完成（取消的 pipeline 由 12h TTL 兜底）(待驗證)
+
+### scripts/check-version-update.sh
+- [x] 新增 `in-progress.json` claim 機制：偵測到新版本時立即寫回 test-reports branch（`git push -o ci.skip`），後續 schedule 在 TTL（預設 12h）內看到同版本 claim 會輸出 `VERSION_STATUS=in_progress` 跳過測試，避免 release 日多個 pipeline 同時測試同一版本、active jobs 超過 GitLab.com Free tier 500 上限導致 "Project exceeded the allowed number of jobs in active pipelines"。(待驗證)
+- [x] claim 寫入採用 fresh clone + push retry（最多 3 次）防止並發搶佔，搶輸時改輸出 in_progress；claim 失敗時仍照常測試（允許重複，不阻塞 CI）。(待驗證)
+
+### .gitlab-ci.yml / child-pipeline.yml
+- [x] child-pipeline.yml 所有 version gate 支援 `in_progress` 狀態一併跳過（download_zip、build_singularity、update_sif、test_template before_script/script、publish_reports，共 6 處）。(待驗證)
 
 ### generate_report.sh
 - [x] reports.json,  generate_report.sh  須增加顯示 CI_PIPELINE_ID 方便與 pipeline 網頁對應
