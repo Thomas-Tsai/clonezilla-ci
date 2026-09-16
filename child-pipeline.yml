@@ -26,7 +26,7 @@ default:
   retry: 1
   # Note: no global tags here. Each job specifies its own tags.
   # - check_version, download_zip, .test_template: use $RUNNER_TAG
-  #   (default "clonezilla", set to "new-vm" via new-vm trigger jobs)
+  #   (default "clonezilla", override per-run when starting a manual pipeline)
   # - build_singularity: tag "build"
   # - update_sif: tag "build_sif"
   # - test:os:windows11: tags "clonezilla, windows" (always uses clonezilla,
@@ -44,8 +44,8 @@ variables:
   VERSION_STATUS: ""
   # RUNNER_TAG controls which runner tag the test jobs use.
   # - Default: "clonezilla" (matches all self-hosted clonezilla runners)
-  # - Set to "new-vm" via the new-vm manual trigger jobs to route all
-  #   test jobs to ubuntu-2404-vm-runner for testing new runners.
+  # - Override when starting a manual pipeline (Run pipeline → variables) to
+  #   route all test jobs to a different runner, e.g. for testing new runners.
   # Note: update_sif (tag: build_sif) and test:os:windows11 (tag: windows)
   # are NOT affected by this variable — they keep their dedicated tags.
   RUNNER_TAG: "clonezilla"

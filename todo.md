@@ -48,6 +48,7 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 ### .gitlab-ci.yml / child-pipeline.yml
 - [x] child-pipeline.yml 所有 version gate 支援 `in_progress` 狀態一併跳過（download_zip、build_singularity、update_sif、test_template before_script/script、publish_reports，共 6 處）。(待驗證)
 - [x] .gitlab-ci.yml 13 個手動 trigger jobs 限定只在 push/web/api/trigger 來源出現：schedule pipeline 從此只含 trigger:scheduled，狀態即時收斂為 success/failed，不再累積「永遠 manual」的殭屍 pipeline（手動測試請用 Run pipeline 或 push pipeline 頁面按鈕）。(待驗證)
+- [x] 移除 `trigger-*-new-vm` 6 個手動 trigger jobs 與 `.trigger_template_new_vm`（runner 驗證完畢）；之後要指定 runner 請在 Run pipeline 時設定 `RUNNER_TAG` 變數。(待驗證)
 
 ### generate_report.sh
 - [x] reports.json,  generate_report.sh  須增加顯示 CI_PIPELINE_ID 方便與 pipeline 網頁對應
