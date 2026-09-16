@@ -24,10 +24,16 @@ trigger:scheduled:
       pipeline_variables: true
 
 # This template is for the manual trigger jobs below.
+# These jobs only exist on push/web/api/trigger pipelines. On scheduled
+# pipelines they are excluded so the pipeline ends in a real final status
+# (success/failed) instead of lingering in "manual" state forever — thousands
+# of such zombie pipelines accumulated previously and confused status
+# recalculation during cleanup.
 .trigger_template: &trigger_template
   stage: trigger
   rules:
-    - when: manual
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger"'
+      when: manual
   trigger:
     include: 'child-pipeline.yml'
     strategy: depend
@@ -90,7 +96,8 @@ trigger:riscv64:
 .trigger_template_new_vm: &trigger_template_new_vm
   stage: trigger
   rules:
-    - when: manual
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger"'
+      when: manual
   trigger:
     include: 'child-pipeline.yml'
     strategy: depend
