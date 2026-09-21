@@ -248,6 +248,8 @@ initrd.img,                  --initrd <path>         Path to the initrd file.
 - [x] --all 下載所有zip
 - [x] --all --fry-run 列出所有url
 - [x] 找不到任何符合版本（mirror 目錄清空後正常狀態）改回傳獨立 exit code 3，與一般錯誤（exit 1：網路/參數/下載失敗）區分；usage.md 同步記載 exit codes。
+- [x] 新增 amd64 `unstable` type（NCHC mirror `clonezilla-live/unstable/`）：download 腳本解析（版本目錄格式同 testing，`archived/` 由 regex 自然排除）、`--all` 組合、check-version usage、`.gitlab-ci.yml` `trigger:amd64-unstable` 手動 job，以及 GitLab schedule `unstable amd64`（cron `5 * * * *`，id 4450955）。mirror 無 `alternative/unstable/`，故無 alternative-unstable。
+- [x] 修復 `--all --dry-run` 遇到任一 tree 為空（rc=3）會整個中斷的問題：改為跳過該組合並警告，其餘 URL 照常列出。
 
 ## debian-install.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。

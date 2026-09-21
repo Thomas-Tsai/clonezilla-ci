@@ -87,7 +87,7 @@ Usage: $0 --arch <ARCH> --type <TYPE> [--dry-run]
 
 Required:
   --arch <ARCH>   amd64 | arm64 | riscv64
-  --type <TYPE>   stable | testing | alternative-stable | alternative-testing | experimental
+  --type <TYPE>   stable | testing | unstable | alternative-stable | alternative-testing | experimental
                   (ignored for arm64/riscv64, which are always 'experimental')
 
 Options:

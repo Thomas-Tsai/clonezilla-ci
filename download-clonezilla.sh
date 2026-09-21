@@ -35,7 +35,7 @@ print_usage() {
     echo "" >&2
     echo "Options:" >&2
     echo "  --arch <ARCH>      Architecture: amd64, arm64, riscv64." >&2
-    echo "  --type <TYPE>      For amd64: stable, testing, alternative-stable, alternative-testing (default: stable)." >&2
+    echo "  --type <TYPE>      For amd64: stable, testing, unstable, alternative-stable, alternative-testing (default: stable)." >&2
     echo "  --all              Download all known stable/testing versions for all architectures. Ignores --arch and --type." >&2
     echo "  -o, --output <DIR> Directory to save the downloaded files (default: .)." >&2
     echo "  --dry-run          Print the final URLs and exit without downloading." >&2
@@ -109,6 +109,7 @@ download_single_zip() {
             case "$type" in
                 "stable") base_url="https://free.nchc.org.tw/clonezilla-live/stable/" ;;
                 "testing") base_url="https://free.nchc.org.tw/clonezilla-live/testing/" ;;
+                "unstable") base_url="https://free.nchc.org.tw/clonezilla-live/unstable/" ;;
                 "alternative-stable") base_url="https://free.nchc.org.tw/clonezilla-live/alternative/stable/" ;;
                 "alternative-testing") base_url="https://free.nchc.org.tw/clonezilla-live/alternative/testing/" ;;
                 *)
@@ -117,12 +118,12 @@ download_single_zip() {
                     ;;
             esac
             
-            if [[ "$type" == "testing" ]]; then
+            if [[ "$type" == "testing" || "$type" == "unstable" ]]; then
                 # Directories are version numbers, e.g., 3.3.1-15/
                 local latest_dir
                 latest_dir=$(find_links "$base_url" 'href="[0-9.-]+/"' | sort -V | tail -n1)
                 if [ -z "$latest_dir" ]; then
-                    echo "No matching version: no testing directories found in $base_url (mirror tree currently empty)" >&2
+                    echo "No matching version: no ${type} directories found in $base_url (mirror tree currently empty)" >&2
                     return 3
                 fi
                 base_url="${base_url}${latest_dir}"
@@ -217,6 +218,7 @@ if [ "$ALL_MODE" = true ]; then
     ALL_COMBINATIONS=(
         "amd64 stable"
         "amd64 testing"
+        "amd64 unstable"
         "amd64 alternative-stable"
         "amd64 alternative-testing"
         "arm64 stable"
@@ -228,9 +230,15 @@ if [ "$ALL_MODE" = true ]; then
         URL_LIST=()
         for combo in "${ALL_COMBINATIONS[@]}"; do
             read -r arch type <<< "$combo"
-            url=$(download_single_zip "$arch" "$type")
+            # Tolerate failures (rc 3 = mirror tree currently empty, normal
+            # between promotions) so one empty tree does not abort the listing.
+            url=""
+            rc=0
+            url=$(download_single_zip "$arch" "$type") || rc=$?
             if [ -n "$url" ]; then
                 URL_LIST+=("$url")
+            else
+                echo "Warning: skipping $arch/$type (rc=$rc, no URL found)." >&2
             fi
         done
         # Print all URLs at the end

@@ -54,6 +54,12 @@ trigger:amd64-testing:
     ARCH: 'amd64'
     TYPE: 'testing'
 
+trigger:amd64-unstable:
+  <<: *trigger_template
+  variables:
+    ARCH: 'amd64'
+    TYPE: 'unstable'
+
 trigger:amd64-alternative-stable:
   <<: *trigger_template
   variables:
