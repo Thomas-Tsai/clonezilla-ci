@@ -138,15 +138,20 @@ Scheduled pipelines avoid re-testing the same Clonezilla version over and over:
    ZIP on the NCHC mirror against `reports.json` on the `test-reports` branch.
 2. If the version was already tested, `VERSION_STATUS=no_change` is emitted and
    every downstream job (download / image build / tests / publish) exits early.
-3. If a **new** version is detected, `check_version` immediately records an
+3. If the mirror currently offers **no testable version at all** for an
+   arch/type (e.g. the `testing/` tree is emptied right after a testing →
+   stable promotion), `VERSION_STATUS=mirror_empty` is emitted and downstream
+   jobs skip. This is a normal state, not a failure; pipelines resume testing
+   automatically once the mirror publishes a new build.
+4. If a **new** version is detected, `check_version` immediately records an
    in-progress claim in `in-progress.json` on the `test-reports` branch
    (pushed with `-o ci.skip`, so no extra pipeline is triggered), then the full
    test suite runs.
-4. Schedules that fire while a full run is still in flight see the fresh claim
+5. Schedules that fire while a full run is still in flight see the fresh claim
    and emit `VERSION_STATUS=in_progress`, skipping the duplicate run. Only one
    pipeline tests a given `<arch, type>` version at a time — this keeps the
    project under the GitLab.com per-project active-jobs quota.
-5. `publish_reports` removes the claim together with the report commit.
+6. `publish_reports` removes the claim together with the report commit.
    Claims are timestamped and expire after a TTL (default 12h) so that a
    canceled pipeline does not block re-testing forever.
 

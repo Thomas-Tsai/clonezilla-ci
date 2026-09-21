@@ -9,6 +9,14 @@
 #   zip file based on the specified architecture and release type.
 #   On success, it prints the full path of the downloaded file to stdout.
 #
+# Exit codes:
+#   0  success
+#   1  general error (network/curl failure, invalid arguments, download failed)
+#   3  the mirror currently offers no matching version (e.g. the testing tree
+#      is empty right after a testing -> stable promotion; normal between
+#      releases). Callers such as scripts/check-version-update.sh map this to
+#      VERSION_STATUS=mirror_empty instead of treating it as a failure.
+#
 # ============================================================================
 
 set -e
@@ -114,8 +122,8 @@ download_single_zip() {
                 local latest_dir
                 latest_dir=$(find_links "$base_url" 'href="[0-9.-]+/"' | sort -V | tail -n1)
                 if [ -z "$latest_dir" ]; then
-                    echo "Error: Could not find latest testing directory in $base_url" >&2
-                    return 1
+                    echo "No matching version: no testing directories found in $base_url (mirror tree currently empty)" >&2
+                    return 3
                 fi
                 base_url="${base_url}${latest_dir}"
             elif [[ "$type" == "alternative-testing" ]]; then
@@ -123,8 +131,8 @@ download_single_zip() {
                 local latest_dir
                 latest_dir=$(find_links "$base_url" 'href="[0-9]+-[a-z0-9]+/"' | sort -V | tail -n1)
                 if [ -z "$latest_dir" ]; then
-                    echo "Error: Could not find latest alternative-testing directory in $base_url" >&2
-                    return 1
+                    echo "No matching version: no alternative-testing directories found in $base_url (mirror tree currently empty)" >&2
+                    return 3
                 fi
                 base_url="${base_url}${latest_dir}"
             fi
@@ -138,8 +146,8 @@ download_single_zip() {
             local latest_dir
             latest_dir=$(find_links "$base_url" 'href="[0-9.-]+/"' | grep -v '^old/$' | sort -V | tail -n1)
             if [ -z "$latest_dir" ]; then
-                echo "Error: Could not find latest arm64 directory in $base_url" >&2
-                return 1
+                echo "No matching version: no arm64 directories found in $base_url (mirror tree currently empty)" >&2
+                return 3
             fi
             base_url="${base_url}${latest_dir}"
             
@@ -152,8 +160,8 @@ download_single_zip() {
             local latest_dir
             latest_dir=$(find_links "$base_url" 'href="[0-9.-]+/"' | grep -v '^old/$' | sort -V | tail -n1)
             if [ -z "$latest_dir" ]; then
-                echo "Error: Could not find latest riscv64 directory in $base_url" >&2
-                return 1
+                echo "No matching version: no riscv64 directories found in $base_url (mirror tree currently empty)" >&2
+                return 3
             fi
             base_url="${base_url}${latest_dir}"
             
@@ -167,8 +175,8 @@ download_single_zip() {
     esac
 
     if [ -z "$zip_name" ]; then
-        echo "Error: Failed to determine zip file name for arch '$arch' and type '$type'." >&2
-        return 1
+        echo "No matching version: no zip file for arch '$arch' and type '$type' on the mirror." >&2
+        return 3
     fi
 
     echo "=================================================" >&2

@@ -44,9 +44,11 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 ### scripts/check-version-update.sh
 - [x] 新增 `in-progress.json` claim 機制：偵測到新版本時立即寫回 test-reports branch（`git push -o ci.skip`），後續 schedule 在 TTL（預設 12h）內看到同版本 claim 會輸出 `VERSION_STATUS=in_progress` 跳過測試，避免 release 日多個 pipeline 同時測試同一版本、active jobs 超過 GitLab.com Free tier 500 上限導致 "Project exceeded the allowed number of jobs in active pipelines"。(待驗證)
 - [x] claim 寫入採用 fresh clone + push retry（最多 3 次）防止並發搶佔，搶輸時改輸出 in_progress；claim 失敗時仍照常測試（允許重複，不阻塞 CI）。(待驗證)
+- [x] 新增 `VERSION_STATUS=mirror_empty`：testing→stable 晉升後 NCHC mirror 的 `testing/`、`alternative/testing/` 目錄會暫時清空（正常狀態），原本視為硬錯誤導致每小時 2 條 pipeline 硬失敗（2026-09-20 09:34Z 起 32 條皆為 check_version script_failure）。現改為 `download-clonezilla.sh` 找不到版本時回傳 exit 3，check_version 映射為 `mirror_empty` 並 exit 0，下游跳過；mirror 發新版後自動恢復測試。
 
 ### .gitlab-ci.yml / child-pipeline.yml
 - [x] child-pipeline.yml 所有 version gate 支援 `in_progress` 狀態一併跳過（download_zip、build_singularity、update_sif、test_template before_script/script、publish_reports，共 6 處）。(待驗證)
+- [x] child-pipeline.yml 所有 version gate（同樣 6 處）加入 `mirror_empty` 一併跳過；cron-report.sh 的 skip 統計亦納入 `in_progress`/`mirror_empty`。
 - [x] .gitlab-ci.yml 13 個手動 trigger jobs 限定只在 push/web/api/trigger 來源出現：schedule pipeline 從此只含 trigger:scheduled，狀態即時收斂為 success/failed，不再累積「永遠 manual」的殭屍 pipeline（手動測試請用 Run pipeline 或 push pipeline 頁面按鈕）。(待驗證)
 - [x] 移除 `trigger-*-new-vm` 6 個手動 trigger jobs 與 `.trigger_template_new_vm`（runner 驗證完畢）；之後要指定 runner 請在 Run pipeline 時設定 `RUNNER_TAG` 變數。(待驗證)
 
@@ -245,6 +247,7 @@ initrd.img,                  --initrd <path>         Path to the initrd file.
 - [x] arch : amd64, arm64, riscv64
 - [x] --all 下載所有zip
 - [x] --all --fry-run 列出所有url
+- [x] 找不到任何符合版本（mirror 目錄清空後正常狀態）改回傳獨立 exit code 3，與一般錯誤（exit 1：網路/參數/下載失敗）區分；usage.md 同步記載 exit codes。
 
 ## debian-install.sh 改進事項：
 - [x] 1. 增加參數檢查機制，確保使用者輸入的參數是有效的。例如，檢查檔案是否存在，參數格式是否正確等。

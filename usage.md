@@ -175,6 +175,13 @@ A powerful, standalone script to automatically find and download the latest Clon
 -   For `arm64` and `riscv64`, automatically finds the latest experimental version.
 -   `--dry-run` option to see the final URL without downloading.
 
+**Exit codes:**
+-   `0`: success.
+-   `1`: general error (network/curl failure, invalid arguments, download failed).
+-   `3`: the mirror currently offers no matching version (e.g. the `testing/` tree
+    is emptied right after a testing → stable promotion). CI scripts map this to
+    `VERSION_STATUS=mirror_empty` and skip the run instead of failing the pipeline.
+
 **Usage:**
 ```
 Usage: ./download-clonezilla.sh --arch <ARCH> [--type <TYPE>] [-o <OUTPUT_DIR>] [--dry-run]

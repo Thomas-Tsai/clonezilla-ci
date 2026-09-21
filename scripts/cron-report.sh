@@ -197,7 +197,7 @@ for p in recent:
                 "created_at": p.get("created_at"),
                 "web_url": p.get("web_url"),
             })
-        elif version_status == "no_change":
+        elif version_status in ("no_change", "in_progress", "mirror_empty"):
             no_change_count += 1
         elif version_status is None:
             # No check_version job — could be a push-triggered parent

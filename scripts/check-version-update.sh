@@ -10,12 +10,20 @@
 # CI_JOB_TOKEN, so no additional state file or token is needed.
 #
 # Output contract (stdout, machine-parseable, one KEY=VALUE per line):
-#   VERSION_STATUS=new_version | no_change | in_progress | init
+#   VERSION_STATUS=new_version | no_change | in_progress | mirror_empty | init
 #   LATEST_URL=<full URL of the latest zip on the mirror>
 #   LATEST_VERSION=<zip basename without .zip>
 #   PREVIOUS_VERSION=<version recorded in reports.json, empty if first run>
 #   STATE_KEY=<arch>_<type> key used for logging
 #   CLAIMED=true | false  (whether this run recorded an in-progress claim)
+#
+# mirror_empty:
+#   The mirror currently offers no testable version for this arch/type at all
+#   (e.g. the testing tree is emptied right after a testing -> stable
+#   promotion). This is a normal state between releases, NOT a failure: the
+#   script exits 0 and downstream jobs skip the run like VERSION_STATUS=
+#   no_change/in_progress. Pipelines return to normal automatically once the
+#   mirror publishes a new build.
 #
 # Concurrency note:
 #   reports.json is only updated by publish_reports at the END of a full test
@@ -31,8 +39,8 @@
 #   is the fallback for pipelines that get canceled mid-run.
 #
 # Exit codes:
-#   0  comparison succeeded (regardless of new/no-change)
-#   1  failed to fetch the latest version from NCHC
+#   0  comparison succeeded (including VERSION_STATUS=mirror_empty)
+#   1  failed to fetch the latest version from NCHC (network/parse failure)
 #   2  failed to fetch reports.json from test-reports branch
 #
 # Usage:
@@ -284,8 +292,25 @@ echo >&2
 
 # 1. Fetch the latest URL from NCHC.
 echo "Fetching latest version URL from NCHC..." >&2
-LATEST_URL="$(fetch_latest_url)"
-if [[ -z "$LATEST_URL" ]]; then
+rc=0
+LATEST_URL="$(fetch_latest_url)" || rc=$?
+if [[ "$rc" -eq 3 ]]; then
+    # The mirror offers no testable version for this arch/type right now
+    # (see the "mirror_empty" note in the header). Report success with a
+    # distinct status so downstream jobs skip the run without failing the
+    # pipeline.
+    echo "Mirror currently has no testable version for ${ARCH}/${TYPE}." >&2
+    echo "Treating as VERSION_STATUS=mirror_empty (skip, not a failure)." >&2
+    echo >&2
+    echo "VERSION_STATUS=mirror_empty"
+    echo "LATEST_URL="
+    echo "LATEST_VERSION="
+    echo "PREVIOUS_VERSION="
+    echo "STATE_KEY=${STATE_KEY}"
+    echo "CLAIMED=false"
+    exit 0
+fi
+if [[ "$rc" -ne 0 || -z "$LATEST_URL" ]]; then
     echo "Error: Could not determine latest zip URL for ${ARCH}/${TYPE}." >&2
     echo "VERSION_STATUS=error"
     exit 1

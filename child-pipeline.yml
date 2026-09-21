@@ -13,6 +13,10 @@
 #     claim for the same version get VERSION_STATUS=in_progress and skip, so
 #     only one pipeline tests a given version at a time (claims are cleared
 #     by publish_reports; canceled pipelines expire via the TTL).
+#   - If the mirror currently offers no testable version at all for an
+#     arch/type (e.g. the testing tree is emptied right after a testing ->
+#     stable promotion), check_version emits VERSION_STATUS=mirror_empty and
+#     downstream jobs skip; this is a normal state, not a failure.
 #   Manual triggers always run the full suite regardless of version state.
 
 stages:
@@ -101,10 +105,11 @@ download_zip:
   script:
     - |
       # Version gate: on scheduled runs with no version change (or a version
-      # already claimed by another in-flight pipeline), skip the download.
+      # already claimed by another in-flight pipeline, or a mirror currently
+      # offering no testable version), skip the download.
       # (dotenv artifact variables like VERSION_STATUS are not available in
       # rules:if, so we check at script runtime instead.)
-      if [ "${PARENT_PIPELINE_SOURCE}" = "schedule" ] && { [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; }; then
+      if [ "${PARENT_PIPELINE_SOURCE}" = "schedule" ] && { [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ] || [ "${VERSION_STATUS}" = "mirror_empty" ]; }; then
         echo "VERSION_STATUS=${VERSION_STATUS}: skipping download. No new Clonezilla version to test."
         # Still emit the dotenv artifact so downstream jobs can read the skip signal.
         echo "ZIP_FILE_FROM_BUILD=" > build.env
@@ -161,7 +166,7 @@ build_singularity:
   script:
     - |
       # Version gate: skip image rebuild on scheduled no-change / in-progress runs.
-      if [ "${PARENT_PIPELINE_SOURCE}" = "schedule" ] && { [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; }; then
+      if [ "${PARENT_PIPELINE_SOURCE}" = "schedule" ] && { [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ] || [ "${VERSION_STATUS}" = "mirror_empty" ]; }; then
         echo "VERSION_STATUS=${VERSION_STATUS}: skipping Docker image rebuild."
         exit 0
       fi
@@ -191,7 +196,7 @@ update_sif:
   script:
     - |
       # Version gate: skip SIF rebuild on scheduled no-change / in-progress runs.
-      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; then
+      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ] || [ "${VERSION_STATUS}" = "mirror_empty" ]; then
         echo "VERSION_STATUS=${VERSION_STATUS}: skipping SIF update."
         exit 0
       fi
@@ -240,7 +245,7 @@ update_sif:
   before_script:
     - |
       # Version gate: skip tests on scheduled no-change / in-progress runs.
-      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; then
+      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ] || [ "${VERSION_STATUS}" = "mirror_empty" ]; then
         echo "VERSION_STATUS=${VERSION_STATUS}: skipping test (no new Clonezilla version to test)."
         exit 0
       fi
@@ -353,7 +358,7 @@ update_sif:
   script:
     - |
       # Version gate: skip tests on scheduled no-change / in-progress runs.
-      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; then
+      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ] || [ "${VERSION_STATUS}" = "mirror_empty" ]; then
         echo "VERSION_STATUS=${VERSION_STATUS}: skipping test (no new Clonezilla version to test)."
         exit 0
       fi
@@ -563,7 +568,7 @@ publish_reports:
   script:
     - |
       # Version gate: skip report publishing on scheduled no-change / in-progress runs.
-      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ]; then
+      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ] || [ "${VERSION_STATUS}" = "mirror_empty" ]; then
         echo "VERSION_STATUS=${VERSION_STATUS}: skipping pages (no tests ran)."
         # Create an empty public/ dir so the artifacts upload step succeeds
         # (GitLab marks the pipeline as failed if artifacts.paths has no
