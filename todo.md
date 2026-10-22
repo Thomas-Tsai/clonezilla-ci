@@ -72,7 +72,8 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] 移除作業系統測試中 hardcode 的 release version，改為測試所有支援的 release (done)
 - [x] 提供 --help 參數 (done)
 - [x] os_clone_restore 與 data_clone_restore 兩個 使用 tee 來同時輸出到螢幕與log 檔
-- [ ] 增加timeout機制
+- [x] 增加timeout機制（2026-10-22：jobs/test_dev_to_dev.sh 的 QEMU 外層加入 timeout（TEST_TIMEOUT_SECONDS，預設 2700s，針對上游 ocs-sr "Press Enter" hang）；child-pipeline.yml .test_template 全面加入 TEST_TIMEOUT_SECONDS=6000 script 層 timeout，避免 CI 2h job timeout 砍掉導致 logs/results artifacts 無法上傳）
+- [x] 測試失敗也要發布 failed report 到 Pages（2026-10-22：publish_reports 改 when: always；publish_reports.sh 對缺失的結果檔以 EXPECTED_TEST_JOBS 合成 "failed (no report)" 列，並用 ZIP_FILE_FROM_BUILD 做全損 fallback；reports.json 因此會記錄失敗版本，止住 version-gate 每 12h 重測壞版本的寄信迴圈。背景：上游 3.3.4-10/3.3.4-12 part-to-part clone regression + ocs-sr batch 模式仍等 Enter 造成 dev_to_dev 掛死）
 
 ## jobs/** script 改進事項：
 先將 start.sh 裡面的測試拆分成多個不同的 jobs 來執行 ，檔案放 jobs/ 目錄底下

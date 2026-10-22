@@ -135,11 +135,24 @@ EOF
     # Handle libguestfs XDG_RUNTIME_DIR issue in containers
     unset XDG_RUNTIME_DIR
 
-    # Run the command and capture its stdout/stderr
-    local output
-    echo "RUNNING: qemu-clonezilla-ci-run.sh --zip $CLONEZILLA_ZIP --disk qemu/disk-a.qcow2 --disk qemu/disk-b.qcow2 --arch $ARCH --cmdpath dev/ocscmd/dev_to_dev_test.sh $NO_SSH_FORWARD_ARG"
-    output=$( (cd .. && ./qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/disk-a.qcow2 --disk qemu/disk-b.qcow2 --arch "$ARCH" --cmdpath dev/ocscmd/dev_to_dev_test.sh $NO_SSH_FORWARD_ARG) 2>&1)
+    # Run the command and capture its stdout/stderr.
+    # A hung QEMU (e.g. a guest-side prompt such as ocs-sr's "Press Enter to
+    # continue..." on error, which ignores batch mode) must fail this test
+    # quickly instead of blocking until the CI job timeout kills everything
+    # and no logs/artifacts are uploaded.
+    local output rc=0
+    local qemu_timeout="${TEST_TIMEOUT_SECONDS:-2700}"  # 45m; a healthy run takes ~11m
+    echo "RUNNING: qemu-clonezilla-ci-run.sh --zip $CLONEZILLA_ZIP --disk qemu/disk-a.qcow2 --disk qemu/disk-b.qcow2 --arch $ARCH --cmdpath dev/ocscmd/dev_to_dev_test.sh $NO_SSH_FORWARD_ARG (timeout: ${qemu_timeout}s)"
+    output=$( (cd .. && timeout -k 30 "$qemu_timeout" ./qemu-clonezilla-ci-run.sh --zip "$CLONEZILLA_ZIP" --disk qemu/disk-a.qcow2 --disk qemu/disk-b.qcow2 --arch "$ARCH" --cmdpath dev/ocscmd/dev_to_dev_test.sh $NO_SSH_FORWARD_ARG) 2>&1) || rc=$?
     echo "$output" # Show the output for debugging
+
+    if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+        echo "Error: QEMU run timed out after ${qemu_timeout}s. The guest likely hung (see log above)." >&2
+        return 1
+    elif [[ "$rc" -ne 0 ]]; then
+        echo "Error: qemu-clonezilla-ci-run.sh exited with code $rc." >&2
+        return 1
+    fi
 
     # Extract the log file path from the output, removing any carriage returns
     local log_file

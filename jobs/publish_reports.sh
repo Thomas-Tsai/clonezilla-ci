@@ -24,10 +24,48 @@ fi
 
 # Step 3: Prepare report data
 echo "--- 3. Preparing report data ---"
+mkdir -p results logs
+
+# Synthesize placeholder result files for expected test jobs whose artifacts
+# never arrived (e.g. the runner died mid-job so after_script never ran).
+# This keeps the failure visible in the published report instead of silently
+# dropping the job, and reports.json then records the version as failed —
+# which stops the version-gate retry loop for a broken Clonezilla release.
+for expected_job in ${EXPECTED_TEST_JOBS:-}; do
+  if [ ! -f "results/${expected_job}.yml" ]; then
+    echo "WARN: No result file for ${expected_job}; marking as failed (no report)." >&2
+    {
+      echo "job_name: ${expected_job}"
+      echo "job_status: failed (no report)"
+      echo "job_started_at: N/A"
+      echo "job_duration: N/A"
+      echo "arch: ${ARCH:-unknown}"
+      echo "zip: ${ZIP_FILE_FROM_BUILD:-unknown}"
+      echo "runner_description: N/A"
+    } > "results/${expected_job}.yml"
+  fi
+done
+
 FIRST_RESULT_FILE=$(find results -name "*.yml" -print -quit)
 if [ -z "$FIRST_RESULT_FILE" ]; then
-  echo "ERROR: No result files found." >&2
-  exit 1
+  # Total-loss fallback (e.g. every test artifact missing): still publish a
+  # minimal failed report so the broken version lands in reports.json.
+  if [ -n "${ZIP_FILE_FROM_BUILD:-}" ]; then
+    echo "WARN: No result files at all; generating minimal failed report for ${ZIP_FILE_FROM_BUILD}." >&2
+    {
+      echo "job_name: test-suite"
+      echo "job_status: failed (no report)"
+      echo "job_started_at: N/A"
+      echo "job_duration: N/A"
+      echo "arch: ${ARCH:-unknown}"
+      echo "zip: ${ZIP_FILE_FROM_BUILD}"
+      echo "runner_description: N/A"
+    } > "results/test-suite.yml"
+    FIRST_RESULT_FILE="results/test-suite.yml"
+  else
+    echo "ERROR: No result files found and no ZIP_FILE_FROM_BUILD fallback available." >&2
+    exit 1
+  fi
 fi
 ZIP_FILENAME=$(grep "zip:" "$FIRST_RESULT_FILE" | cut -d' ' -f2-)
 ZIP_BASENAME=$(basename "$ZIP_FILENAME" .zip)
@@ -113,7 +151,7 @@ for file in results/*.yml; do
     runner_desc=$(grep "runner_description:" "$file" | cut -d':' -f2- | xargs || echo "N/A")
     fs=$(grep "fs:" "$file" | cut -d' ' -f2 || echo "N/A")
     
-    if [ "$job_status" = "success" ]; then status_icon="✅"; elif [ "$job_status" = "failed" ]; then status_icon="❌"; else status_icon="❓"; fi
+    if [ "$job_status" = "success" ]; then status_icon="✅"; elif [[ "$job_status" == failed* ]]; then status_icon="❌"; else status_icon="❓"; fi
     job_started_formatted=$(date -d "$job_started" +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$job_started")
     
     job_id=$(grep "job_id:" "$file" | cut -d' ' -f2 || echo "")

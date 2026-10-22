@@ -53,6 +53,14 @@ variables:
   # Note: update_sif (tag: build_sif) and test:os:windows11 (tag: windows)
   # are NOT affected by this variable — they keep their dedicated tags.
   RUNNER_TAG: "clonezilla"
+  # TEST_TIMEOUT_SECONDS bounds a single test job's runtime at script level.
+  # Without it, a hung QEMU guest (e.g. an interactive upstream prompt that
+  # ignores batch mode) is only stopped by the CI job timeout (2h), which
+  # kills the job before logs/ and results/ artifacts can be uploaded —
+  # leaving no evidence for debugging and skipping report publishing.
+  # Default 6000s (100m) stays well below the 2h job timeout and above the
+  # slowest healthy test (~60m incl. lite modes with their own 3600s limit).
+  TEST_TIMEOUT_SECONDS: "6000"
 
 # --- Version check (scheduled runs only) -----------------------------------
 # Compares NCHC mirror vs reports.json on the test-reports branch.
@@ -368,6 +376,7 @@ update_sif:
         exit 1
       fi
 
+      rc=0
       if [ "$TEST_ENV" = "slurm" ]; then
         echo "Submitting Slurm job for ${TEST_SCRIPT}..."
         EVAL_TEST_SCRIPT=$(eval echo "$TEST_SCRIPT")
@@ -375,18 +384,24 @@ update_sif:
         [ -e "/dev/kvm" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /dev/kvm:/dev/kvm"
         [ -d "/data/cloudimages" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/cloudimages"
         [ -d "/data/dataSets" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/dataSets"
+        timeout -k 30 "${TEST_TIMEOUT_SECONDS}" \
         srun -p "${SLURM_PARTITION}" --account="${SLURM_ACCOUNT}" \
              --job-name="ci_$(basename ${EVAL_TEST_SCRIPT} .sh)" \
              --mem=8G --cpus-per-task=4 \
              singularity exec --bind .:/app ${EXTRA_BINDS} \
              "${SIF_IMAGE}" \
-             bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward"
+             bash -c "unset XDG_RUNTIME_DIR; cd /app/jobs && ./${EVAL_TEST_SCRIPT#jobs/} --zip ${ZIP_FILE_PATH} --arch ${ARCH} --no-ssh-forward" || rc=$?
       else
         echo "Running locally for ${TEST_SCRIPT}..."
         cd jobs
         EVAL_TEST_SCRIPT=$(eval echo "$TEST_SCRIPT")
-        ./${EVAL_TEST_SCRIPT#jobs/} --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward
+        timeout -k 30 "${TEST_TIMEOUT_SECONDS}" \
+        ./${EVAL_TEST_SCRIPT#jobs/} --zip "../${ZIP_DIR}/${ZIP_FILE_FROM_BUILD}" --arch "$ARCH" --no-ssh-forward || rc=$?
       fi
+      if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+        echo "ERROR: ${TEST_SCRIPT} timed out after ${TEST_TIMEOUT_SECONDS}s (guest hang?). Failing fast so logs/results still upload." >&2
+      fi
+      exit "$rc"
   after_script:
     - |
       mkdir -p results
@@ -542,9 +557,18 @@ publish_reports:
   stage: deploy
   tags:
     - "$RUNNER_TAG"
+  variables:
+    # Used by publish_reports.sh to synthesize "failed (no report)" rows for
+    # test jobs whose artifacts never arrived (e.g. runner died mid-job).
+    # Must stay in sync with the `needs:` list below.
+    EXPECTED_TEST_JOBS: "test:os:ubuntu test:os:debian test:os:windows11 test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev"
   needs:
     - job: check_version
       optional: true
+      artifacts: true
+    # Also pull the download_zip dotenv so ZIP_FILE_FROM_BUILD is available
+    # here as a fallback zip name when no test result files exist at all.
+    - job: download_zip
       artifacts: true
     - test:os:ubuntu
     - test:os:debian
@@ -582,8 +606,14 @@ publish_reports:
     paths:
       - public
     expire_in: 30 days
+  # when: always is required — publishing must also happen when some test
+  # jobs FAILED. The report then records status=failed in reports.json,
+  # which both publishes the failure to Pages and stops the version-gate
+  # retry loop (a failed version used to leave no report behind, so the
+  # next schedule retested the same broken version every ~12h and spammed
+  # failure notification mails).
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: on_success
+      when: always
     - if: '$CI_COMMIT_BRANCH == "test-reports"'
-      when: on_success
+      when: always
