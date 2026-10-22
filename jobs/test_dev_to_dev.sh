@@ -85,9 +85,22 @@ cat /mnt/a/checksum.md5 > /tmp/expected_checksum.md5
 cd /
 umount /mnt/a
 
+echo "=== [2/3] Preparing target partition on disk-b (vdb) ==="
+# Since Clonezilla 3.3.4-10, part-to-part mode forces -k (never create a
+# partition table on the target disk) to protect the destination disk
+# (upstream fix for issue #195): -k0/-k1/-k2 are honored in disk mode only.
+# The target partition must therefore exist before cloning.
+sgdisk -Z /dev/vdb
+sgdisk -n 1:0:+8G -c 1:"part1" /dev/vdb
+partprobe /dev/vdb
+udevadm settle
+sleep 2
+
 echo "=== [2/3] Running Case 1: part to part (vda1 -> vdb1) ==="
-# Case 1 Command
-/usr/sbin/ocs-onthefly -b -e1 auto -e2 -j2 -r -sfsck -k1 -icds -p true -f vda1 -d vdb1
+# Case 1 Command (no -k1: partition table creation is not allowed in
+# partition clone mode; with a pre-existing vdb1 this works on both old
+# and new Clonezilla versions)
+/usr/sbin/ocs-onthefly -b -e1 auto -e2 -j2 -r -sfsck -icds -p true -f vda1 -d vdb1
 # Wait a moment for partprobe
 sleep 2
 
