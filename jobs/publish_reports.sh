@@ -208,13 +208,33 @@ fi
 
 echo "INFO: Committing and pushing changes to '${REPORTS_BRANCH}' branch..."
 git add .
+PUSHED=false
 if git diff --staged --quiet; then
   echo "INFO: No changes detected in reports. Nothing to commit."
 else
   git commit -m "Update test reports for pipeline ${CI_PIPELINE_IID}" -m "Clonezilla version: ${ZIP_BASENAME}"
   git push origin "${REPORTS_BRANCH}"
+  PUSHED=true
 fi
 cd ..
+
+# Step 5b: Trigger the pages pipeline on the reports branch.
+# Commits pushed with CI_JOB_TOKEN do not create pipelines (only human/SSH
+# pushes do), so without an explicit API trigger the GitLab Pages site is
+# never redeployed. CI_JOB_TOKEN is accepted by the pipeline trigger
+# endpoint for the job's own project. Non-fatal on failure: the reports
+# are already committed and the next trigger will still deploy them.
+if [ "${PUSHED}" = "true" ]; then
+  echo "INFO: Triggering pages pipeline on '${REPORTS_BRANCH}'..."
+  if curl -fsSL -X POST \
+      --form "token=${CI_JOB_TOKEN}" \
+      --form "ref=${REPORTS_BRANCH}" \
+      "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline" > /dev/null; then
+    echo "INFO: pages pipeline triggered — site will update shortly."
+  else
+    echo "WARN: Failed to trigger pages pipeline on '${REPORTS_BRANCH}'. The site may stay stale until manually triggered." >&2
+  fi
+fi
 
 # Step 6: Prepare GitLab Pages artifact
 echo "--- 6. Preparing public directory ---"

@@ -73,6 +73,7 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] 提供 --help 參數 (done)
 - [x] os_clone_restore 與 data_clone_restore 兩個 使用 tee 來同時輸出到螢幕與log 檔
 - [x] 增加timeout機制（2026-10-22：jobs/test_dev_to_dev.sh 的 QEMU 外層加入 timeout（TEST_TIMEOUT_SECONDS，預設 2700s，針對上游 ocs-sr "Press Enter" hang）；child-pipeline.yml .test_template 全面加入 TEST_TIMEOUT_SECONDS=6000 script 層 timeout，避免 CI 2h job timeout 砍掉導致 logs/results artifacts 無法上傳）
+- [x] GitLab Pages 報表不會自動更新（2026-10-23：last deploy 停在 2026-09-15；原因是 CI_JOB_TOKEN 的 git push 不會在 test-reports 分支觸發 pipeline → publish_reports.sh 改用 pipeline trigger API 顯式觸發 pages job；目前 3.3.4-12 / 20261022-tenacious 紀錄已手動補部署上線）
 - [x] 測試失敗也要發布 failed report 到 Pages（2026-10-22：publish_reports 改 when: always；publish_reports.sh 對缺失的結果檔以 EXPECTED_TEST_JOBS 合成 "failed (no report)" 列，並用 ZIP_FILE_FROM_BUILD 做全損 fallback；reports.json 因此會記錄失敗版本，止住 version-gate 每 12h 重測壞版本的寄信迴圈。背景：上游 3.3.4-10/3.3.4-12 part-to-part clone regression + ocs-sr batch 模式仍等 Enter 造成 dev_to_dev 掛死）
 
 ## jobs/** script 改進事項：

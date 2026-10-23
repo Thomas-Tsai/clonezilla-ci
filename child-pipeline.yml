@@ -550,9 +550,10 @@ test:dev_to_dev:
 # WARNING: Do NOT rename this job to 'pages'. GitLab only deploys Pages from a
 # job named 'pages' (or with 'pages: true'), and the internal pages:deploy step
 # inside child pipelines has pipeline-status side effects (see a98b086b).
-# Instead, the script's push to the test-reports branch triggers a pipeline on
-# that branch, whose own .gitlab-ci.yml contains the real 'pages' job that
-# deploys https://clonezilla-ci-036aa1.gitlab.io/ .
+# Note: pushes made with CI_JOB_TOKEN do NOT trigger a pipeline on the
+# test-reports branch, so publish_reports.sh additionally triggers the pages
+# pipeline via the pipeline trigger API. The test-reports branch's own
+# .gitlab-ci.yml 'pages' job then deploys https://clonezilla-ci-036aa1.gitlab.io/ .
 publish_reports:
   stage: deploy
   tags:
