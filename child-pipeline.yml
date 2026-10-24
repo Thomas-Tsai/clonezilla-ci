@@ -564,11 +564,6 @@ publish_reports:
   stage: deploy
   tags:
     - "$RUNNER_TAG"
-  variables:
-    # Used by publish_reports.sh to synthesize "failed (no report)" rows for
-    # test jobs whose artifacts never arrived (e.g. runner died mid-job).
-    # Must stay in sync with the `needs:` list below.
-    EXPECTED_TEST_JOBS: "test:os:ubuntu test:os:debian test:os:windows11 test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev"
   needs:
     - job: check_version
       optional: true
@@ -607,6 +602,15 @@ publish_reports:
         mkdir -p public
         exit 0
       fi
+      # Build the expected-test-job list per ARCH for publish_reports.sh's
+      # missing-artifact synthesis. Jobs that legitimately never exist for an
+      # arch MUST NOT be included (e.g. test:os:windows11 is ruled out for
+      # arm64/riscv64; adding it would falsely mark the report failed).
+      EXPECTED_TEST_JOBS="test:os:ubuntu test:os:debian test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev"
+      if [ "$ARCH" = "amd64" ]; then
+        EXPECTED_TEST_JOBS="$EXPECTED_TEST_JOBS test:os:windows11"
+      fi
+      export EXPECTED_TEST_JOBS
       chmod +x jobs/publish_reports.sh
       jobs/publish_reports.sh
   artifacts:
