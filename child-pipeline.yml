@@ -55,12 +55,16 @@ variables:
   RUNNER_TAG: "clonezilla"
   # TEST_TIMEOUT_SECONDS bounds a single test job's runtime at script level.
   # Without it, a hung QEMU guest (e.g. an interactive upstream prompt that
-  # ignores batch mode) is only stopped by the CI job timeout (2h), which
-  # kills the job before logs/ and results/ artifacts can be uploaded —
-  # leaving no evidence for debugging and skipping report publishing.
-  # Default 6000s (100m) stays well below the 2h job timeout and above the
-  # slowest healthy test (~60m incl. lite modes with their own 3600s limit).
-  TEST_TIMEOUT_SECONDS: "6000"
+  # ignores batch mode) is only stopped by the CI job timeout, which kills
+  # the job before logs/ and results/ artifacts can be uploaded — leaving
+  # no evidence for debugging and skipping report publishing.
+  # Sizing: no KVM is available on F1 Slurm nodes or the VM runner, so all
+  # guests run under TCG software emulation. A healthy TCG fs test takes
+  # ~12-28 min, but measured 2026-10-23 under pipeline-storm node
+  # contention the same test took >90 min for a single step (7x slowdown).
+  # 10800s (3h) covers the contended worst case while staying 1h below the
+  # 4h job timeout so before_script/after_script/artifact upload still fit.
+  TEST_TIMEOUT_SECONDS: "10800"
 
 # --- Version check (scheduled runs only) -----------------------------------
 # Compares NCHC mirror vs reports.json on the test-reports branch.
@@ -428,7 +432,9 @@ update_sif:
       - results/
       - "version-*"
     expire_in: 5 days
-  timeout: 2h
+  # 4h = TEST_TIMEOUT_SECONDS (3h) + ~1h headroom for before_script
+  # (zip download/extract, image prep) and artifact upload on failing jobs.
+  timeout: 4h
 
 # --- OS Tests ---
 
