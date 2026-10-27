@@ -158,6 +158,33 @@ Scheduled pipelines avoid re-testing the same Clonezilla version over and over:
 Manual (non-scheduled) triggers always run the full suite and never touch the
 claim state.
 
+## GitLab CI: Telegram Notifications
+
+The pipeline notifies a Telegram group through `scripts/notify-telegram.sh`,
+filtered so only meaningful events produce messages:
+
+- **Scheduled run, new Clonezilla version** (`VERSION_STATUS=new_version`):
+  `check_version` posts a "new version detected" notice immediately, and the
+  `notify:telegram` job posts a pass/fail summary when the suite finishes —
+  on success *and* on failure.
+- **Scheduled run, no new version** (`no_change` / `in_progress` /
+  `mirror_empty`): nothing is sent.
+- **Manual pipelines** (push / web / api / trigger): `notify:telegram` always
+  posts the end-of-run summary.
+
+Setup (one time, manual):
+
+1. Create a bot with `@BotFather`, add it to the target group, and obtain the
+   group chat id.
+2. Add two **masked** CI/CD variables (Project → Settings → CI/CD →
+   Variables): `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Leaving them
+   unset does not break pipelines — the notify jobs just log a warning.
+   Note: marking them *protected* limits notifications to pipelines running on
+   protected branches.
+
+See the [Usage Guide](usage.md) for the message format and local `--dry-run`
+testing.
+
 ## Troubleshooting
 
 ### "Project exceeded the allowed number of jobs in active pipelines"

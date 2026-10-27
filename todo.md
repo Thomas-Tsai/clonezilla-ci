@@ -52,6 +52,15 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] .gitlab-ci.yml 13 個手動 trigger jobs 限定只在 push/web/api/trigger 來源出現：schedule pipeline 從此只含 trigger:scheduled，狀態即時收斂為 success/failed，不再累積「永遠 manual」的殭屍 pipeline（手動測試請用 Run pipeline 或 push pipeline 頁面按鈕）。(待驗證)
 - [x] 移除 `trigger-*-new-vm` 6 個手動 trigger jobs 與 `.trigger_template_new_vm`（runner 驗證完畢）；之後要指定 runner 請在 Run pipeline 時設定 `RUNNER_TAG` 變數。(待驗證)
 
+### Telegram 通知 (scripts/notify-telegram.sh + child-pipeline.yml)
+- [x] 新增 `scripts/notify-telegram.sh`：`started`（新版本偵測）與 `finished`（測試完成摘要）兩種模式，使用 Telegram Bot API (`sendMessage`, HTML parse mode)；腳本永不讓 job 失敗（缺 token 或 API 失敗只記 warning 並 exit 0），支援 `--dry-run` 本地驗證。(已於本地 dry-run 驗證)
+- [x] 通知過濾：排程 + `VERSION_STATUS=no_change/in_progress/mirror_empty` → 不送；排程 + `new_version` → `check_version` 階段先送「偵測到新版本」、`notify:telegram` 結束再送結果；手動 pipeline（push/web/api/trigger）→ 完成後一律送。(已於本地 dry-run 矩陣驗證 6 種 gate 組合)
+- [x] `finished` 摘要從 `results/*.yml` 彙總，缺的 expected jobs results 比照 `publish_reports.sh` 視為失敗（EXPECTED_TEST_JOBS arch-aware）；完全不見 results 時顯示「無測試結果」。
+- [x] child-pipeline.yml 新增 `notify:telegram` job（deploy stage, `when: always`, needs 比照 publish_reports），並在 `check_version` script 末端 source `version_check.env` 後呼叫 `started` 模式。
+- [x] 在 GitLab project 設定 masked CI/CD variables：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`（bot 需加入目標 group）。(已設定；masked、非 protected，feature branch 亦可用)
+- [x] 腳本實際發送驗證：以 SELFTEST 資料發送 started/finished 兩則訊息，Telegram group 已確認收到（2026-10-27）。
+- [ ] 真實 pipeline 觸發驗證 `notify:telegram` job 行為（手動觸發一次完整測試）。(待驗證)
+
 ### generate_report.sh
 - [x] reports.json,  generate_report.sh  須增加顯示 CI_PIPELINE_ID 方便與 pipeline 網頁對應
 - [x] reports_repo/index.html Pipeline 顯示 ${CI_PIPELINE_IID}(${CI_PIPELINE_ID})

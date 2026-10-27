@@ -86,11 +86,15 @@ check_version:
       when: on_success
     - when: never
   before_script:
-    - chmod +x scripts/check-version-update.sh download-clonezilla.sh
+    - chmod +x scripts/check-version-update.sh download-clonezilla.sh scripts/notify-telegram.sh
   script:
     - ./scripts/check-version-update.sh --arch "$ARCH" --type "$TYPE" | tee version_check.env
     - echo "--- version_check.env ---"
     - cat version_check.env
+    # Immediately notify the Telegram group when a new version was detected.
+    # The script itself gates on VERSION_STATUS=new_version and never fails.
+    - set -a; source version_check.env; set +a
+    - ./scripts/notify-telegram.sh started
   artifacts:
     name: "version-check-${ARCH}-${TYPE}"
     reports:
@@ -550,6 +554,54 @@ test:dev_to_dev:
   variables:
     TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_dev_to_dev.sh"
+
+# Sends the end-of-run Telegram notification.
+#
+# Filter (enforced inside scripts/notify-telegram.sh, not via rules, so the
+# job itself never blocks or fails the pipeline):
+#   - scheduled + VERSION_STATUS=new_version  -> send summary (success or failure)
+#   - scheduled + no_change / in_progress / mirror_empty -> skip
+#   - manual (push / web / api / trigger)     -> always send summary
+#
+# needs mirrors publish_reports so this job (a) runs after every test job,
+# (b) receives the results/*.yml artifacts for the summary, and (c) receives
+# the check_version / download_zip dotenvs (VERSION_STATUS, ZIP_FILE_FROM_BUILD).
+# Requires the masked CI/CD variables TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID;
+# without them the job logs a warning and exits 0. The job itself never fails.
+notify:telegram:
+  stage: deploy
+  tags:
+    - "$RUNNER_TAG"
+  rules:
+    - when: always
+  needs:
+    - job: check_version
+      optional: true
+      artifacts: true
+    - job: download_zip
+      artifacts: true
+    - test:os:ubuntu
+    - test:os:debian
+    - job: test:os:windows11
+      optional: true
+    - test:fs:exfat
+    - test:fs:ntfs
+    - test:fs:vfat
+    - test:fs:ext4
+    - test:fs:xfs
+    - test:fs:btrfs
+    - job: test:slurm:sample
+      optional: true
+    - test:lite_bt_from_device
+    - test:lite_bt_from_image
+    - test:lite_multicast_from_image
+    - test:lite_multicast_from_device
+    - test:lite_raw_data
+    - test:disk_512en_4kn_ext4_data
+    - test:dev_to_dev
+  script:
+    - chmod +x scripts/notify-telegram.sh
+    - ./scripts/notify-telegram.sh finished
 
 # Publishes test reports to the 'test-reports' branch.
 #

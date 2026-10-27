@@ -545,6 +545,39 @@ This script starts a QEMU VM to install Debian from a netinst ISO onto a QCOW2 d
 # Display help
 ./debian-install.sh --help
 ```
+
+### `scripts/notify-telegram.sh`
+
+Sends Clonezilla CI notifications to a Telegram group via the Bot API. It is called automatically by the child pipeline (`check_version` job and the `notify:telegram` job) and is designed to **never fail the pipeline**: without `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` it only logs a warning and exits 0.
+
+**Notification filter** (the group stays quiet on no-op scheduled runs):
+
+| Pipeline source | Condition | Message |
+|---|---|---|
+| Scheduled | `VERSION_STATUS=new_version` | "New version detected" at the start + summary at the end |
+| Scheduled | `no_change` / `in_progress` / `mirror_empty` | none |
+| Manual (push / web / api / trigger) | tests finished | summary (success or failure) |
+
+**Modes:**
+- `started` — new-version notice; used by the `check_version` job.
+- `finished` — aggregates `results/*.yml` into a pass/fail summary (missing artifacts of expected jobs count as failures, mirroring `publish_reports.sh`) and appends Pipeline / report links; used by the `notify:telegram` job.
+
+**Required CI/CD variables** (Project → Settings → CI/CD → Variables, masked):
+- `TELEGRAM_BOT_TOKEN` — bot token from `@BotFather`; the bot must be a member of the target group.
+- `TELEGRAM_CHAT_ID` — group chat id (usually a negative number).
+
+**Usage:**
+```bash
+# Print the "finished" message without sending (no tokens needed)
+./scripts/notify-telegram.sh finished --dry-run
+
+# Send the "new version detected" notice (requires tokens in the environment)
+VERSION_STATUS=new_version ./scripts/notify-telegram.sh started
+```
+
+**Optional environment:**
+- `PAGES_BASE_URL` — overrides the report site base URL (default `https://clonezilla-ci-036aa1.gitlab.io`).
+
 ## Troubleshooting
 
 ### `virt-make-fs` Fails on `clonezilla-zip2qcow.sh`

@@ -228,6 +228,7 @@ The repository does **not** contain a `.cursor/` directory or a `.github/copilot
 | `data-clone-restore.sh` | Similar to above but focuses on filesystem data integrity. |
 | `validate.sh` | Verifies that a restored disk boots and runs cloud‑init. |
 | `download-clonezilla.sh` | Downloads the latest Clonezilla Live ZIP if not present. |
+| `scripts/notify-telegram.sh` | Sends filtered pipeline notifications to a Telegram group (`started` / `finished` modes; never fails the job). |
 
 Agents may call these utilities directly; they already respect the strict Bash conventions described earlier.
 
