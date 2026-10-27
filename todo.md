@@ -59,7 +59,7 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] child-pipeline.yml 新增 `notify:telegram` job（deploy stage, `when: always`, needs 比照 publish_reports），並在 `check_version` script 末端 source `version_check.env` 後呼叫 `started` 模式。
 - [x] 在 GitLab project 設定 masked CI/CD variables：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`（bot 需加入目標 group）。(已設定；masked、非 protected，feature branch 亦可用)
 - [x] 腳本實際發送驗證：以 SELFTEST 資料發送 started/finished 兩則訊息，Telegram group 已確認收到（2026-10-27）。
-- [ ] 真實 pipeline 觸發驗證 `notify:telegram` job 行為（手動觸發一次完整測試）。(待驗證)
+- [ ] 真實 pipeline 觸發驗證 `notify:telegram` job 行為（手動觸發一次完整測試）。已於 2026-10-27 觸發 child pipeline [#19019](https://gitlab.com/freelabstw/clonezilla-ci/-/pipelines/2993361835)（commit 484a1483，amd64/testing manual run；check_version 正確缺席、notify:telegram 待命），待 suite 完成後確認 Telegram group 收到 finished 摘要訊息。(驗證中)
 
 ### generate_report.sh
 - [x] reports.json,  generate_report.sh  須增加顯示 CI_PIPELINE_ID 方便與 pipeline 網頁對應
