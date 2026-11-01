@@ -32,9 +32,11 @@ default:
   # - check_version, download_zip, .test_template: use $RUNNER_TAG
   #   (default "clonezilla", override per-run when starting a manual pipeline)
   # - build_singularity: tag "build"
-  # - update_sif: tag "build_sif"
   # - test:os:windows11: tags "clonezilla, windows" (always uses clonezilla,
   #   not affected by RUNNER_TAG, since it needs the physical asus pn42)
+  # Note: update_sif was moved to .gitlab-ci.yml (own daily schedule with an
+  # F1 connectivity probe) so an offline F1 node can no longer jam these
+  # test pipelines.
 
 variables:
   # ARCH and TYPE are provided by the parent pipeline.
@@ -50,8 +52,8 @@ variables:
   # - Default: "clonezilla" (matches all self-hosted clonezilla runners)
   # - Override when starting a manual pipeline (Run pipeline → variables) to
   #   route all test jobs to a different runner, e.g. for testing new runners.
-  # Note: update_sif (tag: build_sif) and test:os:windows11 (tag: windows)
-  # are NOT affected by this variable — they keep their dedicated tags.
+  # Note: test:os:windows11 (tag: windows) is NOT affected by this variable
+  # — it keeps its dedicated tags.
   RUNNER_TAG: "clonezilla"
   # TEST_TIMEOUT_SECONDS bounds a single test job's runtime at script level.
   # Without it, a hung QEMU guest (e.g. an interactive upstream prompt that
@@ -195,46 +197,6 @@ build_singularity:
       echo "Pushing image to GitLab Container Registry..."
       docker push "${CI_REGISTRY_IMAGE}:latest"
       echo "Docker image pushed to ${CI_REGISTRY_IMAGE}:latest"
-
-# 專門在具備 Singularity 的 Login Node 更新 SIF 檔案
-update_sif:
-  stage: download
-  tags:
-    - build_sif  # 指定專屬 Tag，確保在正確的 Login Node 執行
-  # SIF 更新依賴唯一的 self-hosted runner (NCHC F1 X86-64)，
-  # 離線時不應阻斷整個 pipeline。SIF 不影響測試結果，僅供 Slurm 環境使用。
-  allow_failure: true
-  needs:
-    - build_singularity
-    - job: check_version
-      optional: true
-      artifacts: true
-  script:
-    - |
-      # Version gate: skip SIF rebuild on scheduled no-change / in-progress runs.
-      if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ] || [ "${VERSION_STATUS}" = "mirror_empty" ]; then
-        echo "VERSION_STATUS=${VERSION_STATUS}: skipping SIF update."
-        exit 0
-      fi
-      echo "Starting SIF build from Docker Registry..."
-      export SINGULARITY_DOCKER_USERNAME="${CI_REGISTRY_USER}"
-      export SINGULARITY_DOCKER_PASSWORD="${CI_REGISTRY_PASSWORD}"
-      
-      # 定義 SIF 存放路徑
-      DEST_DIR="/home/u1597171/clonezilla-ci/slurm"
-      if [ ! -d "$DEST_DIR" ]; then
-        echo "Warning: Global directory $DEST_DIR not found, using local project directory."
-        DEST_DIR="$(pwd)/slurm"
-        mkdir -p "$DEST_DIR"
-      fi
-      
-      SIF_PATH="${DEST_DIR}/clonezilla-ci.sif"
-      echo "Target SIF: ${SIF_PATH}"
-      
-      # 使用 -F 強制覆蓋舊檔，確保後續 Slurm 測試使用最新環境
-      singularity build -F "${SIF_PATH}" docker://${CI_REGISTRY_IMAGE}:latest
-      
-      echo "Success: Updated SIF at ${SIF_PATH}"
 
 .test_template:
   stage: test

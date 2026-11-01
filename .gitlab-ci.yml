@@ -9,10 +9,12 @@ stages:
 
 # This job runs automatically for scheduled pipelines.
 # It uses the variables (ARCH, TYPE) defined in the schedule UI.
+# Excluded for the dedicated "update-sif" schedule (SIF_UPDATE_ONLY=true),
+# which should only run f1_probe + update_sif below.
 trigger:scheduled:
   stage: trigger
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SIF_UPDATE_ONLY != "true"'
   variables:
     # Forward the schedule source to the child pipeline, since child pipelines
     # report CI_PIPELINE_SOURCE=parent_pipeline (not "schedule").
@@ -93,3 +95,61 @@ trigger:riscv64:
 # Note: to route a manual run to a specific runner, press "Run pipeline"
 # (web) and set the RUNNER_TAG variable (see child-pipeline.yml) instead of
 # defining dedicated trigger jobs here.
+
+# --- Dedicated SIF update schedule ------------------------------------------
+# The SIF file for the F1 Slurm environment is refreshed by its own daily
+# schedule ("update-sif", variable SIF_UPDATE_ONLY=true), fully decoupled
+# from the test pipelines above. update_sif can only run on the F1 login
+# node (tag: build_sif); when F1 is offline that job would stay pending
+# forever and block the pipeline. f1_probe runs on a healthy runner first:
+# if F1 is unreachable it fails fast, so GitLab skips update_sif (needs
+# unsatisfied) instead of leaving it pending.
+f1_probe:
+  stage: trigger
+  tags:
+    - clonezilla
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SIF_UPDATE_ONLY == "true"'
+  script:
+    - |
+      if timeout 5 bash -c '</dev/tcp/f1-ilgn01.nchc.org.tw/22' 2>/dev/null; then
+        echo "F1 login node (f1-ilgn01) is reachable."
+      else
+        echo "F1 login node (f1-ilgn01) is unreachable. Skipping SIF update."
+        exit 1
+      fi
+
+update_sif:
+  stage: trigger
+  tags:
+    - build_sif  # 指定專屬 Tag，確保在正確的 Login Node 執行
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SIF_UPDATE_ONLY == "true"'
+  needs:
+    - f1_probe
+  # SIF 更新依賴唯一的 self-hosted runner (NCHC F1 X86-64)，
+  # 失敗時只影響這條獨立排程 pipeline，不影響主測試 pipelines。
+  allow_failure: true
+  timeout: 60m
+  script:
+    - |
+      echo "Starting SIF build from Docker Registry..."
+      export SINGULARITY_DOCKER_USERNAME="${CI_REGISTRY_USER}"
+      export SINGULARITY_DOCKER_PASSWORD="${CI_REGISTRY_PASSWORD}"
+
+      # 定義 SIF 存放路徑
+      DEST_DIR="/home/u1597171/clonezilla-ci/slurm"
+      if [ ! -d "$DEST_DIR" ]; then
+        echo "Warning: Global directory $DEST_DIR not found, using local project directory."
+        DEST_DIR="$(pwd)/slurm"
+        mkdir -p "$DEST_DIR"
+      fi
+
+      SIF_PATH="${DEST_DIR}/clonezilla-ci.sif"
+      echo "Target SIF: ${SIF_PATH}"
+
+      # 使用 -F 強制覆蓋舊檔，確保後續 Slurm 測試使用最新環境
+      singularity build -F "${SIF_PATH}" docker://${CI_REGISTRY_IMAGE}:latest
+
+      echo "Success: Updated SIF at ${SIF_PATH}"
+
