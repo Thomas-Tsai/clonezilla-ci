@@ -51,7 +51,7 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] child-pipeline.yml 所有 version gate（同樣 6 處）加入 `mirror_empty` 一併跳過；cron-report.sh 的 skip 統計亦納入 `in_progress`/`mirror_empty`。
 - [x] .gitlab-ci.yml 13 個手動 trigger jobs 限定只在 push/web/api/trigger 來源出現：schedule pipeline 從此只含 trigger:scheduled，狀態即時收斂為 success/failed，不再累積「永遠 manual」的殭屍 pipeline（手動測試請用 Run pipeline 或 push pipeline 頁面按鈕）。(待驗證)
 - [x] 移除 `trigger-*-new-vm` 6 個手動 trigger jobs 與 `.trigger_template_new_vm`（runner 驗證完畢）；之後要指定 runner 請在 Run pipeline 時設定 `RUNNER_TAG` 變數。(待驗證)
-- [x] update_sif 移出 child-pipeline（2026-11-01：F1 login node 離線時 update_sif 卡 pending 塞爆全部 schedule pipelines，單日 14 條；改為 .gitlab-ci.yml 獨立 daily schedule "update-sif"（SIF_UPDATE_ONLY=true），前置 `f1_probe` job 偵測 f1-ilgn01:22 連線，失敗即 exit 1 → update_sif 因 needs 未滿足被 skip 而非 pending，主測試 flow 從此不碰 build_sif/F1）。(待驗證)
+- [x] update_sif 移出 child-pipeline（2026-11-01：F1 login node 離線時 update_sif 卡 pending 塞爆全部 schedule pipelines，單日 14 條；改為 .gitlab-ci.yml 獨立 daily schedule "update-sif"（SIF_UPDATE_ONLY=true），前置 `f1_probe` job 偵測 f1-ilgn01:22 連線，失敗即 exit 1 → update_sif 因 needs 未滿足被 skip 而非 pending，主測試 flow 從此不碰 build_sif/F1）。(已驗證：2026-11-02 F1 恢復後手動 play schedule id 4526314 → pipeline 3016019719 success，f1_probe 3s、update_sif 76s，SIF 399M 已更新)
 
 ### Telegram 通知 (scripts/notify-telegram.sh + child-pipeline.yml)
 - [x] 新增 `scripts/notify-telegram.sh`：`started`（新版本偵測）與 `finished`（測試完成摘要）兩種模式，使用 Telegram Bot API (`sendMessage`, HTML parse mode)；腳本永不讓 job 失敗（缺 token 或 API 失敗只記 warning 並 exit 0），支援 `--dry-run` 本地驗證。(已於本地 dry-run 驗證)
