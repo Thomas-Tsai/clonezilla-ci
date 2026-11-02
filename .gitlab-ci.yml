@@ -76,6 +76,17 @@ trigger:amd64-alternative-testing:
     ARCH: 'amd64'
     TYPE: 'alternative-testing'
 
+# Codename-scoped alternative-testing track (Ubuntu-based builds). The plain
+# alternative-testing track only picks the highest-sorting codename directory
+# on the mirror (e.g. tenacious > stonking), silently skipping same-date
+# builds of other codenames. Run a dedicated track per codename you care
+# about; the type format is alternative-testing-<codename>.
+trigger:amd64-alternative-testing-stonking:
+  <<: *trigger_template
+  variables:
+    ARCH: 'amd64'
+    TYPE: 'alternative-testing-stonking'
+
 # --- ARM64 Triggers ---
 
 trigger:arm64:

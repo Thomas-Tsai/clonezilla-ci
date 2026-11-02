@@ -35,7 +35,9 @@ print_usage() {
     echo "" >&2
     echo "Options:" >&2
     echo "  --arch <ARCH>      Architecture: amd64, arm64, riscv64." >&2
-    echo "  --type <TYPE>      For amd64: stable, testing, unstable, alternative-stable, alternative-testing (default: stable)." >&2
+    echo "  --type <TYPE>      For amd64: stable, testing, unstable, alternative-stable," >&2
+    echo "                     alternative-testing, or alternative-testing-<codename>" >&2
+    echo "                     (e.g. alternative-testing-stonking; default: stable)." >&2
     echo "  --all              Download all known stable/testing versions for all architectures. Ignores --arch and --type." >&2
     echo "  -o, --output <DIR> Directory to save the downloaded files (default: .)." >&2
     echo "  --dry-run          Print the final URLs and exit without downloading." >&2
@@ -101,6 +103,7 @@ download_single_zip() {
     local base_url=""
     local zip_name=""
     local download_url=""
+    local ALT_CODENAME=""
 
     echo "Starting search for arch='$arch', type='$type'..." >&2
 
@@ -112,12 +115,24 @@ download_single_zip() {
                 "unstable") base_url="https://free.nchc.org.tw/clonezilla-live/unstable/" ;;
                 "alternative-stable") base_url="https://free.nchc.org.tw/clonezilla-live/alternative/stable/" ;;
                 "alternative-testing") base_url="https://free.nchc.org.tw/clonezilla-live/alternative/testing/" ;;
+                alternative-testing-*)
+                    # Codename-scoped alternative-testing track, e.g.
+                    # alternative-testing-stonking. The NCHC mirror publishes
+                    # multiple Ubuntu-based codenames side by side under
+                    # alternative/testing/<date>-<codename>/, and the plain
+                    # "alternative-testing" type only picks the single
+                    # highest-sorting directory, silently skipping same-date
+                    # builds of the other codenames. A codename track lists
+                    # only its own directories.
+                    base_url="https://free.nchc.org.tw/clonezilla-live/alternative/testing/"
+                    ALT_CODENAME="${type#alternative-testing-}"
+                    ;;
                 *)
                     echo "Error: Invalid type '$type' for arch 'amd64'." >&2
                     return 1
                     ;;
             esac
-            
+
             if [[ "$type" == "testing" || "$type" == "unstable" ]]; then
                 # Directories are version numbers, e.g., 3.3.1-15/
                 local latest_dir
@@ -135,6 +150,21 @@ download_single_zip() {
                     echo "No matching version: no alternative-testing directories found in $base_url (mirror tree currently empty)" >&2
                     return 3
                 fi
+                base_url="${base_url}${latest_dir}"
+            elif [[ -n "${ALT_CODENAME:-}" ]]; then
+                # Codename-scoped track: directories are like 20260101-<codename>/.
+                # List only this codename's directories and take the newest
+                # date. An empty result is mirror_empty (exit 3): upstream may
+                # stop building this codename, which is a normal end-of-life
+                # state, not an error.
+                local codename_dirs
+                codename_dirs=$(find_links "$base_url" "href=\"[0-9]+-${ALT_CODENAME}/\"")
+                if [ -z "$codename_dirs" ]; then
+                    echo "No matching version: no ${type} directories found in $base_url (codename '${ALT_CODENAME}' has no builds or does not exist)" >&2
+                    return 3
+                fi
+                local latest_dir
+                latest_dir=$(echo "$codename_dirs" | sort -V | tail -n1)
                 base_url="${base_url}${latest_dir}"
             fi
             
@@ -221,6 +251,7 @@ if [ "$ALL_MODE" = true ]; then
         "amd64 unstable"
         "amd64 alternative-stable"
         "amd64 alternative-testing"
+        "amd64 alternative-testing-stonking"
         "arm64 stable"
         "riscv64 stable"
     )

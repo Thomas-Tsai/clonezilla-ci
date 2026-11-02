@@ -171,7 +171,7 @@ A powerful, standalone script to automatically find and download the latest Clon
 
 **Features:**
 -   Supports `amd64`, `arm64`, and `riscv64` architectures.
--   For `amd64`, supports different release types: `stable`, `testing`, `unstable`, `alternative-stable`, `alternative-testing`.
+-   For `amd64`, supports different release types: `stable`, `testing`, `unstable`, `alternative-stable`, `alternative-testing`, and codename-scoped `alternative-testing-<codename>` (e.g. `alternative-testing-stonking`, for Ubuntu-based builds published side by side per codename).
 -   For `arm64` and `riscv64`, automatically finds the latest experimental version.
 -   `--dry-run` option to see the final URL without downloading.
 
@@ -191,7 +191,8 @@ Automatically finds and downloads the latest Clonezilla Live zip file.
 Options:
   --arch <ARCH>      Architecture: amd64, arm64, riscv64 (required).
   --type <TYPE>      For amd64 architecture: stable, testing, unstable,
-                     alternative-stable, alternative-testing (default: stable).
+                     alternative-stable, alternative-testing, or
+                     alternative-testing-<codename> (default: stable).
   -o, --output <DIR> Directory to save the downloaded file (default: .).
   --dry-run          Print the final URL and exit without downloading.
   -h, --help         Display this help message and exit.
