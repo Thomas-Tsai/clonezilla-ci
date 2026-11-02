@@ -34,7 +34,9 @@ trigger:scheduled:
 .trigger_template: &trigger_template
   stage: trigger
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger"'
+    # SIF_UPDATE_ONLY pipelines (fired by build_singularity after an image
+    # rebuild) must not grow these manual trigger jobs as zombies.
+    - if: '($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger") && $SIF_UPDATE_ONLY != "true"'
       when: manual
   trigger:
     include: 'child-pipeline.yml'
@@ -96,20 +98,24 @@ trigger:riscv64:
 # (web) and set the RUNNER_TAG variable (see child-pipeline.yml) instead of
 # defining dedicated trigger jobs here.
 
-# --- Dedicated SIF update schedule ------------------------------------------
-# The SIF file for the F1 Slurm environment is refreshed by its own daily
-# schedule ("update-sif", variable SIF_UPDATE_ONLY=true), fully decoupled
-# from the test pipelines above. update_sif can only run on the F1 login
-# node (tag: build_sif); when F1 is offline that job would stay pending
-# forever and block the pipeline. f1_probe runs on a healthy runner first:
-# if F1 is unreachable it fails fast, so GitLab skips update_sif (needs
-# unsatisfied) instead of leaving it pending.
+# --- Dedicated SIF update pipelines -----------------------------------------
+# The SIF file for the F1 Slurm environment is refreshed by SIF_UPDATE_ONLY
+# pipelines, fully decoupled from the test pipelines above:
+#   1. daily "update-sif" schedule (skip-if-unchanged: no-op when the SIF
+#      exists and the image was not just rebuilt),
+#   2. event-driven trigger fired by build_singularity right after a Docker
+#      image rebuild (IMAGE_JUST_BUILT=true forces the SIF rebuild).
+# update_sif can only run on the F1 login node (tag: build_sif); when F1 is
+# offline that job would stay pending forever and block the pipeline.
+# f1_probe runs on a healthy runner first: if F1 is unreachable it fails
+# fast, so GitLab skips update_sif (needs unsatisfied) instead of leaving
+# it pending.
 f1_probe:
   stage: trigger
   tags:
     - clonezilla
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SIF_UPDATE_ONLY == "true"'
+    - if: '$SIF_UPDATE_ONLY == "true" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "trigger" || $CI_PIPELINE_SOURCE == "api")'
   script:
     - |
       if timeout 5 bash -c '</dev/tcp/f1-ilgn01.nchc.org.tw/22' 2>/dev/null; then
@@ -124,7 +130,7 @@ update_sif:
   tags:
     - build_sif  # 指定專屬 Tag，確保在正確的 Login Node 執行
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SIF_UPDATE_ONLY == "true"'
+    - if: '$SIF_UPDATE_ONLY == "true" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "trigger" || $CI_PIPELINE_SOURCE == "api")'
   needs:
     - f1_probe
   # SIF 更新依賴唯一的 self-hosted runner (NCHC F1 X86-64)，
@@ -147,6 +153,16 @@ update_sif:
 
       SIF_PATH="${DEST_DIR}/clonezilla-ci.sif"
       echo "Target SIF: ${SIF_PATH}"
+
+      # Skip-if-unchanged: the Docker image only changes when build_singularity
+      # rebuilds it (which triggers this pipeline with IMAGE_JUST_BUILT=true).
+      # Daily schedule runs without that flag are no-ops once the SIF exists,
+      # avoiding needlessly rewriting a 399MB file every day.
+      # Set FORCE_SIF_REBUILD=true to override (e.g. manual recovery).
+      if [ -f "${SIF_PATH}" ] && [ "${IMAGE_JUST_BUILT:-}" != "true" ] && [ -z "${FORCE_SIF_REBUILD:-}" ]; then
+        echo "SIF already exists and image unchanged (IMAGE_JUST_BUILT!=true). Skipping. Use FORCE_SIF_REBUILD=true to force."
+        exit 0
+      fi
 
       # 使用 -F 強制覆蓋舊檔，確保後續 Slurm 測試使用最新環境
       singularity build -F "${SIF_PATH}" docker://${CI_REGISTRY_IMAGE}:latest

@@ -198,6 +198,24 @@ build_singularity:
       docker push "${CI_REGISTRY_IMAGE}:latest"
       echo "Docker image pushed to ${CI_REGISTRY_IMAGE}:latest"
 
+      # Event-driven SIF refresh: this is the only place the Docker image is
+      # rebuilt, so it fires the dedicated SIF pipeline (f1_probe -> update_sif
+      # on F1) with IMAGE_JUST_BUILT=true to force the rebuild. Fire-and-forget:
+      # a failure here must not fail this job; the daily "update-sif" schedule
+      # remains the fallback. CI_JOB_TOKEN is accepted by the trigger endpoint
+      # for the job's own project, same as in publish_reports.sh.
+      echo "Triggering SIF update pipeline on main..."
+      if curl -fsSL -X POST \
+          --form "token=${CI_JOB_TOKEN}" \
+          --form "ref=main" \
+          --form "variables[SIF_UPDATE_ONLY]=true" \
+          --form "variables[IMAGE_JUST_BUILT]=true" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline" > /dev/null; then
+        echo "SIF update pipeline triggered successfully."
+      else
+        echo "WARN: Failed to trigger SIF update pipeline. The daily 'update-sif' schedule will refresh it instead." >&2
+      fi
+
 .test_template:
   stage: test
   tags:
