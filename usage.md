@@ -579,6 +579,84 @@ VERSION_STATUS=new_version ./scripts/notify-telegram.sh started
 **Optional environment:**
 - `PAGES_BASE_URL` — overrides the report site base URL (default `https://clonezilla-ci-036aa1.gitlab.io`).
 
+### `jobs/test_dev_to_dev_lvm_thin.sh`
+
+Automates end-to-end testing for **local disk LVM to LVM cloning** (`ocs-onthefly`) where **thin provisioning** is included in the source device.
+
+**Test Workflow:**
+1. **Source Disk Preparation (`/dev/vda`)**:
+   - Creates a standard partition (`vda1`, ext4) and an LVM PV partition (`vda2`).
+   - Creates Volume Group (`vg_ci`) on `vda2`.
+   - Creates a regular linear Logical Volume (`reg_vol`, ext4) with test data and MD5 checksums.
+   - Creates an LVM Thin Pool (`thin_pool`, 8GB) within `vg_ci`.
+   - Creates multiple Thin Logical Volumes (`thin_vol1`, `thin_vol2`, 2GB virtual sizes, ext4) within `thin_pool`, populates test data, and calculates MD5 checksums.
+   - Deactivates LVM cleanly.
+2. **Target Disk Preparation (`/dev/vdb`)**:
+   - Prepares a fresh blank target disk.
+3. **Local Disk-to-Disk Cloning (`ocs-onthefly`)**:
+   - Executes `/usr/sbin/ocs-onthefly -b -g auto -e1 auto -e2 -j2 -r -sfsck -k0 -p true -f vda -d vdb`.
+4. **Target Isolation & Verification**:
+   - Zeroes the front of source disk `/dev/vda` (50MB) to ensure target disk independence and prevent duplicate VG/UUID conflicts.
+   - Probes `/dev/vdb`, checks the boot partition checksum.
+   - Rescans and activates LVM on `/dev/vdb`.
+   - Validates that the Thin Pool (`thin_pool`, segtype `thin-pool`), Thin Volumes (`thin_vol1`, `thin_vol2`, segtype `thin`), and Regular Volume (`reg_vol`, segtype `linear`) are correctly reconstructed.
+   - Mounts each volume and verifies file data integrity against pre-computed MD5 checksums.
+
+**Usage:**
+```bash
+# Run locally from jobs/ directory
+cd jobs && ./test_dev_to_dev_lvm_thin.sh --zip /path/to/clonezilla.zip --arch amd64
+
+# Run with Docker
+docker run --rm -it \
+  --device /dev/kvm \
+  -w /app/jobs \
+  -v $(pwd)/zip:/app/zip \
+  -v $(pwd)/logs:/app/logs \
+  clonezilla-ci ./test_dev_to_dev_lvm_thin.sh --zip /app/zip/clonezilla-live-3.3.2-18-amd64.zip
+```
+
+### `jobs/test_lvm_thin_save_restore.sh`
+
+Automates end-to-end testing for **saving an LVM disk (including thin provisioning) as an image**, **cleaning the destination disk**, and **restoring the image back to the destination disk**.
+
+**Test Workflow:**
+1. **Source Disk Preparation (`/dev/vda`)**:
+   - Creates a boot partition (`vda1`, ext4) and LVM PV partition (`vda2`).
+   - Creates Volume Group (`vg_ci`) on `vda2`.
+   - Creates regular linear Logical Volume (`reg_vol`, ext4) with test files and MD5 checksums.
+   - Creates LVM Thin Pool (`thin_pool`, 8GB) and Thin Logical Volumes (`thin_vol1`, `thin_vol2`, 2GB virtual sizes, ext4) with test files and MD5 checksums.
+   - Stores expected MD5 checksums into `/home/partimag` shared repository.
+   - Deactivates LVM cleanly.
+2. **Image Backup (`savedisk`)**:
+   - Executes `/usr/sbin/ocs-sr -b -senc -sfsck -j2 -q2 -z1 -p true savedisk lvm-thin-backup vda` to create the image in `/home/partimag/lvm-thin-backup`.
+3. **Destination Disk Cleaning**:
+   - Deactivates any active Volume Groups.
+   - Completely wipes partition tables, filesystem, and LVM signatures using `wipefs -a -f` and `sgdisk -Z`.
+   - Overwrites the first 100MB of the disk with zeros (`dd if=/dev/zero ...`).
+   - Verifies that no volume groups or partitions remain on the destination disk.
+4. **Image Restoration (`restoredisk`)**:
+   - Executes `/usr/sbin/ocs-sr -b -k0 -j2 -sfsck -p true restoredisk lvm-thin-backup vda` to reconstruct the partition table, LVM structures, and thin pool/LVs.
+5. **Verification**:
+   - Activates LVM on the restored disk.
+   - Verifies that `thin_pool` has segtype `thin-pool`, `thin_vol1` / `thin_vol2` have segtype `thin` and pool `thin_pool`, and `reg_vol` has segtype `linear`.
+   - Mounts each restored filesystem (`/dev/vda1`, `/dev/vg_ci/reg_vol`, `/dev/vg_ci/thin_vol1`, `/dev/vg_ci/thin_vol2`) and verifies MD5 checksums against the original data.
+
+**Usage:**
+```bash
+# Run locally from jobs/ directory
+cd jobs && ./test_lvm_thin_save_restore.sh --zip /path/to/clonezilla.zip --arch amd64
+
+# Run with Docker
+docker run --rm -it \
+  --device /dev/kvm \
+  -w /app/jobs \
+  -v $(pwd)/zip:/app/zip \
+  -v $(pwd)/partimag:/app/partimag \
+  -v $(pwd)/logs:/app/logs \
+  clonezilla-ci ./test_lvm_thin_save_restore.sh --zip /app/zip/clonezilla-live-3.3.2-18-amd64.zip
+```
+
 ## Troubleshooting
 
 ### `virt-make-fs` Fails on `clonezilla-zip2qcow.sh`

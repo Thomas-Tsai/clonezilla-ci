@@ -535,6 +535,18 @@ test:dev_to_dev:
     TEST_ENV: "slurm"
     TEST_SCRIPT: "jobs/test_dev_to_dev.sh"
 
+test:dev_to_dev_lvm_thin:
+  extends: .test_template
+  variables:
+    TEST_ENV: "slurm"
+    TEST_SCRIPT: "jobs/test_dev_to_dev_lvm_thin.sh"
+
+test:lvm_thin_save_restore:
+  extends: .test_template
+  variables:
+    TEST_ENV: "slurm"
+    TEST_SCRIPT: "jobs/test_lvm_thin_save_restore.sh"
+
 # Sends the end-of-run Telegram notification.
 #
 # Filter (enforced inside scripts/notify-telegram.sh, not via rules, so the
@@ -579,6 +591,8 @@ notify:telegram:
     - test:lite_raw_data
     - test:disk_512en_4kn_ext4_data
     - test:dev_to_dev
+    - test:dev_to_dev_lvm_thin
+    - test:lvm_thin_save_restore
   script:
     - chmod +x scripts/notify-telegram.sh
     - ./scripts/notify-telegram.sh finished
@@ -623,6 +637,8 @@ publish_reports:
     - test:lite_raw_data
     - test:disk_512en_4kn_ext4_data
     - test:dev_to_dev
+    - test:dev_to_dev_lvm_thin
+    - test:lvm_thin_save_restore
   script:
     - |
       # Version gate: skip report publishing on scheduled no-change / in-progress runs.
@@ -638,7 +654,7 @@ publish_reports:
       # missing-artifact synthesis. Jobs that legitimately never exist for an
       # arch MUST NOT be included (e.g. test:os:windows11 is ruled out for
       # arm64/riscv64; adding it would falsely mark the report failed).
-      EXPECTED_TEST_JOBS="test:os:ubuntu test:os:debian test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev"
+      EXPECTED_TEST_JOBS="test:os:ubuntu test:os:debian test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev test:dev_to_dev_lvm_thin test:lvm_thin_save_restore"
       if [ "$ARCH" = "amd64" ]; then
         EXPECTED_TEST_JOBS="$EXPECTED_TEST_JOBS test:os:windows11"
       fi

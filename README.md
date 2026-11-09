@@ -11,6 +11,7 @@ The primary goal is to enable fully automated, non-interactive validation of Clo
 - **Automated Test Suite**: `start.sh` runs a comprehensive suite of tests using `shunit2`.
 - **OS Testing**: Automatically tests cloning and restoring full Linux distributions (e.g., Debian, Ubuntu) using `os-clone-restore.sh`.
 - **Filesystem Testing**: Automatically tests cloning and restoring various filesystems (e.g., ext4, xfs, btrfs, ntfs) with data integrity checks using `data-clone-restore.sh`.
+- **LVM & Thin Provisioning Testing**: Automatically tests local disk-to-disk (`ocs-onthefly`) cloning as well as image backup and restore (`savedisk` / `restoredisk`) with complex LVM layouts, including LVM Thin Pools and Thin Volumes, validating data integrity and volume structure.
 - **Flexible QEMU Runner**: `qemu-clonezilla-ci-run.sh` provides a powerful interface to run ad-hoc Clonezilla commands in a QEMU VM, with features like automatic ZIP extraction, script execution, and customizable kernel parameters.
 - **Dependency Automation**: Scripts can automatically download necessary ISOs (Debian, Clonezilla) if they are not found locally.
 

@@ -100,6 +100,8 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] 更新 `jobs/**` 下所有測試腳本的參數解析，使其支援傳遞 `--type` 參數。
 - [x] 在 `jobs/common.sh` 中新增檢查，強制所有測試腳本必須從 `jobs/` 目錄內執行，否則將顯示錯誤並退出。
 - [ ] 修復 `jobs/test_sample.sh` 已解析 `--no-ssh-forward` 卻未傳入 qemu-clonezilla-ci-run.sh，導致平行 CI jobs 時 port 2222 衝突。(待驗證)
+- [ ] 新增 `jobs/test_dev_to_dev_lvm_thin.sh` 實作本地磁碟 LVM to LVM 對拷測試場景，包含 thin provisioning (thin pool / thin LVs) 建立、ocs-onthefly 複製、來源盤隔離與目標盤完整性驗證。(待驗證)
+- [ ] 新增 `jobs/test_lvm_thin_save_restore.sh` 實作 LVM (含 thin provisioning) 儲存映像檔 (savedisk)、清除目標磁碟、並將映像檔還原至目標磁碟 (restoredisk) 的完整測試場景。(待驗證)
 
 ## liteserver.sh 改進事項：
 開發一個 liteserver.sh 腳本，這個腳本主要用來啟動一個簡易的 clonezilla lite server 來提供 clonezilla server 服務的場景
