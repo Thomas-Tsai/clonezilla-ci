@@ -55,6 +55,13 @@ variables:
   # Note: test:os:windows11 (tag: windows) is NOT affected by this variable
   # — it keeps its dedicated tags.
   RUNNER_TAG: "clonezilla"
+  # TEST_FILTER (optional, empty = run everything): a grep -E regex matched
+  # against each test job's name, e.g. "lvm_thin", "fs:(ext4|xfs)" or
+  # "test:dev_to_dev". Non-matching test jobs exit 0 within seconds (kept
+  # in the pipeline so the needs/report chain stays intact) and
+  # publish_reports only expects the selected jobs. Useful for validating a
+  # few jobs without burning hours of runner time.
+  TEST_FILTER: ""
   # TEST_TIMEOUT_SECONDS bounds a single test job's runtime at script level.
   # Without it, a hung QEMU guest (e.g. an interactive upstream prompt that
   # ignores batch mode) is only stopped by the CI job timeout, which kills
@@ -240,6 +247,14 @@ build_singularity:
       artifacts: false
   before_script:
     - |
+      # Selective run: TEST_FILTER is a grep -E regex matched against the
+      # job name. Non-matching jobs exit 0 immediately; they stay in the
+      # pipeline as successful no-ops so downstream needs/report jobs keep
+      # working unchanged.
+      if [ -n "${TEST_FILTER}" ] && ! echo "${CI_JOB_NAME}" | grep -Eq "${TEST_FILTER}"; then
+        echo "TEST_FILTER='${TEST_FILTER}': skipping ${CI_JOB_NAME} (selective run)."
+        exit 0
+      fi
       # Version gate: skip tests on scheduled no-change / in-progress runs.
       if [ "${VERSION_STATUS}" = "no_change" ] || [ "${VERSION_STATUS}" = "in_progress" ] || [ "${VERSION_STATUS}" = "mirror_empty" ]; then
         echo "VERSION_STATUS=${VERSION_STATUS}: skipping test (no new Clonezilla version to test)."
@@ -657,6 +672,17 @@ publish_reports:
       EXPECTED_TEST_JOBS="test:os:ubuntu test:os:debian test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev test:dev_to_dev_lvm_thin test:lvm_thin_save_restore"
       if [ "$ARCH" = "amd64" ]; then
         EXPECTED_TEST_JOBS="$EXPECTED_TEST_JOBS test:os:windows11"
+      fi
+      # Selective run: only expect the TEST_FILTER-matched jobs; jobs skipped
+      # by the filter would otherwise be wrongly synthesized as missing.
+      if [ -n "${TEST_FILTER}" ]; then
+        FILTERED_JOBS=""
+        for j in ${EXPECTED_TEST_JOBS}; do
+          if echo "$j" | grep -Eq "${TEST_FILTER}"; then
+            FILTERED_JOBS="${FILTERED_JOBS} $j"
+          fi
+        done
+        EXPECTED_TEST_JOBS=$(echo "${FILTERED_JOBS}" | xargs)
       fi
       export EXPECTED_TEST_JOBS
       chmod +x jobs/publish_reports.sh

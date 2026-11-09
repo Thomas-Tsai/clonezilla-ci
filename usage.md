@@ -92,6 +92,23 @@ docker run --rm -it \
 
 
 
+### CI Pipeline Selective Runs (`TEST_FILTER`)
+
+Manual pipelines support an optional `TEST_FILTER` variable to run only a subset of
+test jobs while keeping the needs/report chain intact. It is a `grep -E` regex
+matched against each test job's name; non-matching jobs exit 0 within seconds, and
+`publish_reports` only expects the selected jobs.
+
+**Usage:** Web UI → *Run pipeline* → 選擇 ref（如 `main`）→ Variables 加入
+`TEST_FILTER=<regex>` → Run，再手動播放目標 trigger job（如 `trigger:amd64-testing`）。
+例如：
+
+| `TEST_FILTER` | 效果 |
+|---|---|
+| `lvm_thin` | 只跑 `test:dev_to_dev_lvm_thin`、`test:lvm_thin_save_restore`（及其相依的 download/build jobs）|
+| `fs:(ext4|xfs)` | 只跑兩個檔案系統測試 |
+| (留空) | 完整套件（預設行為不變）|
+
 ### CI Runner Sudo Configuration
 
 For running scripts like `validate-fs.sh` directly on a CI runner (i.e., not inside the provided Docker container), passwordless `sudo` access is required for specific commands. This allows the scripts to perform system-level operations like loading kernel modules and managing block devices without manual intervention.
