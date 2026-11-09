@@ -472,11 +472,12 @@ EOF
     fi
 
     local boot_res struct_res reg_res thin1_res thin2_res
-    boot_res=$(grep -E "^check_boot:" "$log_path" | tail -n 1 | awk '{print $2}')
-    struct_res=$(grep -E "^check_lvs_structure:" "$log_path" | tail -n 1 | awk '{print $2}')
-    reg_res=$(grep -E "^check_reg_lv:" "$log_path" | tail -n 1 | awk '{print $2}')
-    thin1_res=$(grep -E "^check_thin_lv1:" "$log_path" | tail -n 1 | awk '{print $2}')
-    thin2_res=$(grep -E "^check_thin_lv2:" "$log_path" | tail -n 1 | awk '{print $2}')
+    # 客體序列埠日誌為 CRLF 結尾；awk 取出值後需去除 \r 才能精確比對
+    boot_res=$(grep -E "^check_boot:" "$log_path" | tail -n 1 | awk '{print $2}' | tr -d '\r')
+    struct_res=$(grep -E "^check_lvs_structure:" "$log_path" | tail -n 1 | awk '{print $2}' | tr -d '\r')
+    reg_res=$(grep -E "^check_reg_lv:" "$log_path" | tail -n 1 | awk '{print $2}' | tr -d '\r')
+    thin1_res=$(grep -E "^check_thin_lv1:" "$log_path" | tail -n 1 | awk '{print $2}' | tr -d '\r')
+    thin2_res=$(grep -E "^check_thin_lv2:" "$log_path" | tail -n 1 | awk '{print $2}' | tr -d '\r')
 
     if [[ "$boot_res" != "SUCCESS" || "$struct_res" != "SUCCESS" || "$reg_res" != "SUCCESS" || "$thin1_res" != "SUCCESS" || "$thin2_res" != "SUCCESS" ]]; then
         echo "=== Failure detected! Showing last 60 lines of $log_path ==="
