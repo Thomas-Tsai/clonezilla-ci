@@ -583,6 +583,13 @@ VERSION_STATUS=new_version ./scripts/notify-telegram.sh started
 
 Automates end-to-end testing for **local disk LVM to LVM cloning** (`ocs-onthefly`) where **thin provisioning** is included in the source device.
 
+> **Minimum Clonezilla Live version: `3.3.4-23` (stable/testing) or `20261108-*` (alternative-testing).**
+> LVM thin pool support was added in those releases. With an older zip the test
+> is **SKIPPED** — it logs `--- Test Job SKIPPED: LVM thin dev-to-dev clone test ... ---`
+> and exits 0 (implemented by `skip_unless_clonezilla_version_or_newer` in
+> `jobs/common.sh`). Unrecognized zip name formats fall back to running the test
+> with a `[WARN]`.
+
 **Test Workflow:**
 1. **Source Disk Preparation (`/dev/vda`)**:
    - Creates a standard partition (`vda1`, ext4) and an LVM PV partition (`vda2`).
@@ -613,12 +620,19 @@ docker run --rm -it \
   -w /app/jobs \
   -v $(pwd)/zip:/app/zip \
   -v $(pwd)/logs:/app/logs \
-  clonezilla-ci ./test_dev_to_dev_lvm_thin.sh --zip /app/zip/clonezilla-live-3.3.2-18-amd64.zip
+  clonezilla-ci ./test_dev_to_dev_lvm_thin.sh --zip /app/zip/clonezilla-live-3.3.4-23-amd64.zip
 ```
 
 ### `jobs/test_lvm_thin_save_restore.sh`
 
 Automates end-to-end testing for **saving an LVM disk (including thin provisioning) as an image**, **cleaning the destination disk**, and **restoring the image back to the destination disk**.
+
+> **Minimum Clonezilla Live version: `3.3.4-23` (stable/testing) or `20261108-*` (alternative-testing).**
+> LVM thin pool support was added in those releases. With an older zip the test
+> is **SKIPPED** — it logs `--- Test Job SKIPPED: LVM thin save/restore test ... ---`
+> and exits 0 (implemented by `skip_unless_clonezilla_version_or_newer` in
+> `jobs/common.sh`). Unrecognized zip name formats fall back to running the test
+> with a `[WARN]`.
 
 **Test Workflow:**
 1. **Source Disk Preparation (`/dev/vda`)**:
@@ -654,7 +668,7 @@ docker run --rm -it \
   -v $(pwd)/zip:/app/zip \
   -v $(pwd)/partimag:/app/partimag \
   -v $(pwd)/logs:/app/logs \
-  clonezilla-ci ./test_lvm_thin_save_restore.sh --zip /app/zip/clonezilla-live-3.3.2-18-amd64.zip
+  clonezilla-ci ./test_lvm_thin_save_restore.sh --zip /app/zip/clonezilla-live-3.3.4-23-amd64.zip
 ```
 
 ## Troubleshooting

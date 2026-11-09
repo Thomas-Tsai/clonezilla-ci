@@ -16,6 +16,10 @@
 #
 # Dependencies: qemu-system-x86_64, shunit2
 #
+# Minimum Clonezilla Live version: 3.3.4-23 / 20261108-* (LVM thin provisioning
+# support); with an older zip the test exits 0 as SKIPPED via
+# skip_unless_clonezilla_version_or_newer in jobs/common.sh.
+#
 # Author: Thomas (maintainer)
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
@@ -452,6 +456,9 @@ if [[ -z "$CLONEZILLA_ZIP" ]]; then
     echo "Error: Missing required argument --zip" >&2
     exit 1
 fi
+
+# LVM thin provisioning support requires Clonezilla Live >= 3.3.4-23 / 20261108-*
+skip_unless_clonezilla_version_or_newer "LVM thin save/restore test" "3.3.4-23" "20261108"
 
 # Load shunit2
 # shellcheck source=/dev/null

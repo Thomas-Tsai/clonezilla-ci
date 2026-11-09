@@ -102,6 +102,7 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [ ] 修復 `jobs/test_sample.sh` 已解析 `--no-ssh-forward` 卻未傳入 qemu-clonezilla-ci-run.sh，導致平行 CI jobs 時 port 2222 衝突。(待驗證)
 - [ ] 新增 `jobs/test_dev_to_dev_lvm_thin.sh` 實作本地磁碟 LVM to LVM 對拷測試場景，包含 thin provisioning (thin pool / thin LVs) 建立、ocs-onthefly 複製、來源盤隔離與目標盤完整性驗證。(待驗證)
 - [ ] 新增 `jobs/test_lvm_thin_save_restore.sh` 實作 LVM (含 thin provisioning) 儲存映像檔 (savedisk)、清除目標磁碟、並將映像檔還原至目標磁碟 (restoredisk) 的完整測試場景。(待驗證)
+- [ ] LVM thin 測試版本門檻：`jobs/common.sh` 新增 `skip_unless_clonezilla_version_or_newer`，兩個 LVM thin 測試要求 Clonezilla Live >= 3.3.4-23 / 20261108-*，低於門檻時 exit 0 視為 SKIPPED（fail-safe，不拖垮 pipeline）；無法解析的 zip 檔名 warn 後放行。(已實作，待 pipeline 驗證 skip 行為)
 
 ## liteserver.sh 改進事項：
 開發一個 liteserver.sh 腳本，這個腳本主要用來啟動一個簡易的 clonezilla lite server 來提供 clonezilla server 服務的場景

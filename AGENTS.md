@@ -186,6 +186,7 @@ Agents should run the relevant linter **before** committing.  If a linter report
 - Each test function must start with `test_` and contain **exactly one** logical assertion (e.g., `assertEquals`, `assertTrue`).
 - Tests should be **idempotent** – they may be run repeatedly without side effects.
 - When a test creates temporary files, always clean them up in a `tearDown` function.
+- **Minimum-version gate** – If a test depends on a Clonezilla Live feature available only in newer releases, call `skip_unless_clonezilla_version_or_newer "<label>" [min_semver] [min_date]` (defined in `jobs/common.sh`) right before `. shunit2`. Older zips must exit 0 (SKIPPED, not FAILED) so they never break the pipeline or the local `start.sh` summary; unrecognized zip names warn and run anyway (fail-open). Document the minimum version in the script header and in `usage.md`.
 
 ### Documentation Headers
 Every script should start with a standardized header block:

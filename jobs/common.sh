@@ -374,6 +374,73 @@ run_lite_multicast_from_device_test() {
     assertEquals "Lite Multicast From Device test failed. Check log: $LOG_FILE" 0 "$RESULT"
 }
 
+# Extract the version token from a Clonezilla Live zip filename.
+# Supported formats:
+#   clonezilla-live-3.3.4-23-amd64.zip           -> 3.3.4-23   (stable/testing, semver-like)
+#   clonezilla-live-20261108-resolute-amd64.zip  -> 20261108   (alternative-testing, date-based)
+# Prints the token on stdout; prints nothing when the format is unrecognized.
+clonezilla_zip_version_token() {
+    local zip_path="$1"
+    local base
+    base=$(basename "$zip_path" .zip)
+    base="${base#clonezilla-live-}"
+    local token=""
+    # Date-based: 8 digits (YYYYMMDD) followed by -<codename>-<arch>
+    if [[ "$base" =~ ^(20[0-9]{6})- ]]; then
+        token="${BASH_REMATCH[1]}"
+    # Semver-like: X.Y.Z-N (optionally more components) followed by -<arch>
+    elif [[ "$base" =~ ^([0-9]+\.[0-9]+\.[0-9]+-[0-9]+)- ]]; then
+        token="${BASH_REMATCH[1]}"
+    fi
+    echo "$token"
+}
+
+# Skip (exit 0) when the Clonezilla zip in $CLONEZILLA_ZIP is older than the
+# feature's minimum required version. Either threshold may be omitted ("");
+# the comparison used depends on the actual zip filename format:
+#   semver-named zip -> compared against min_semver (via sort -V)
+#   date-named zip   -> compared against min_date (integer YYYYMMDD)
+# When the zip format cannot be recognized, or its format has no matching
+# threshold, a [WARN] is logged and the test runs anyway (fail-open).
+# Usage:
+#   skip_unless_clonezilla_version_or_newer "<feature label>" [min_semver] [min_date]
+skip_unless_clonezilla_version_or_newer() {
+    local label="$1"
+    local min_semver="${2:-}"
+    local min_date="${3:-}"
+    local zip_name token
+    zip_name=$(basename "${CLONEZILLA_ZIP:-unknown.zip}")
+    token=$(clonezilla_zip_version_token "${CLONEZILLA_ZIP:-}")
+
+    if [[ -z "$token" ]]; then
+        warn "Cannot parse Clonezilla version from '$zip_name'; running $label without version guard."
+        return 0
+    fi
+
+    local too_old=0
+    if [[ "$token" =~ ^20[0-9]{6}$ ]]; then
+        if [[ -n "$min_date" && "$token" -lt "$min_date" ]]; then
+            too_old=1
+        elif [[ -z "$min_date" ]]; then
+            warn "Zip '$zip_name' is date-versioned ($token) but no min_date threshold given; running $label without version guard."
+            return 0
+        fi
+    else
+        if [[ -n "$min_semver" && "$(printf '%s\n%s\n' "$min_semver" "$token" | sort -V | head -n1)" != "$min_semver" ]]; then
+            too_old=1
+        elif [[ -z "$min_semver" ]]; then
+            warn "Zip '$zip_name' is semver-versioned ($token) but no min_semver threshold given; running $label without version guard."
+            return 0
+        fi
+    fi
+
+    if [[ "$too_old" -eq 1 ]]; then
+        echo "--- Test Job SKIPPED: $label requires Clonezilla >= ${min_semver:-N/A} / ${min_date:-N/A}; '$zip_name' is $token ---"
+        exit 0
+    fi
+    return 0
+}
+
 # Main initialization function
 initialize_test_environment() {
     # Setup Logging
