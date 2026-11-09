@@ -103,6 +103,9 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [ ] 新增 `jobs/test_dev_to_dev_lvm_thin.sh` 實作本地磁碟 LVM to LVM 對拷測試場景，包含 thin provisioning (thin pool / thin LVs) 建立、ocs-onthefly 複製、來源盤隔離與目標盤完整性驗證。(待驗證)
 - [ ] 新增 `jobs/test_lvm_thin_save_restore.sh` 實作 LVM (含 thin provisioning) 儲存映像檔 (savedisk)、清除目標磁碟、並將映像檔還原至目標磁碟 (restoredisk) 的完整測試場景。(待驗證)
 - [ ] LVM thin 測試版本門檻：`jobs/common.sh` 新增 `skip_unless_clonezilla_version_or_newer`，兩個 LVM thin 測試要求 Clonezilla Live >= 3.3.4-23 / 20261108-*，低於門檻時 exit 0 視為 SKIPPED（fail-safe，不拖垮 pipeline）；無法解析的 zip 檔名 warn 後放行。(已實作，待 pipeline 驗證 skip 行為)
+- [x] 修復兩個 LVM thin 測試 check_boot 失敗（pipeline 3043241917 根因：mkfs 後立即 mount 競態失敗，資料靜默寫入 RAM rootfs）：**採用 Steven Shiau 的 MR !5**（mkfs 後 sync+settle、`mount_with_retry -t ext4`、setup fail-fast、dmesg 診斷、per-check shunit2 assert）。我方在 bugfix/lvm-thin-mount-race 的重複修正已撤回，僅保留版本門檻。(已合併 main，待 pipeline 驗證)
+- [ ] CI 報表發布問題：GitLab Pages 上檔名含 `:` 的 per-job log（如 `test:dev_to_dev_lvm_thin.log`）404；results yml 的 `job_duration` 顯示為時鐘時間而非 duration。
+- [ ] `clonezilla-zip2qcow.sh` 平行不安全性：兩個 CI job 同時解同一 zip 時，共用 output dir 且 `virt-make-fs` 寫入相同路徑，會造成 libguestfs 崩潰或產出毀損的 live media（guest 開機報 "Unable to find a medium containing a live file system"）。需加 lock 機制或 per-job 隔離目錄。（本地驗證時實際觀測到）
 
 ## liteserver.sh 改進事項：
 開發一個 liteserver.sh 腳本，這個腳本主要用來啟動一個簡易的 clonezilla lite server 來提供 clonezilla server 服務的場景
