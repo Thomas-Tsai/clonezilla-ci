@@ -81,6 +81,41 @@ test_lvm_thin_save_restore() {
 # 4. Restoring the saved image back to the destination disk /dev/vda
 # 5. Verifying LVM structure, thin pool reconstruction, and data integrity
 
+# Trap on failure to dump kernel dmesg for diagnostic visibility
+cleanup_on_exit() {
+    local rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "=== Guest script failed with exit code $rc ==="
+        echo "=== Kernel dmesg (last 50 lines) ==="
+        dmesg | tail -n 50
+    fi
+}
+trap cleanup_on_exit EXIT
+
+# Helper function to mount filesystems with retries, explicit type, and dmesg on error
+mount_with_retry() {
+    local dev="$1"
+    local mnt="$2"
+    local fs_type="${3:-ext4}"
+    local retries=5
+    local delay=2
+    local i=1
+    mkdir -p "$mnt"
+    while [ "$i" -le "$retries" ]; do
+        if mount -t "$fs_type" "$dev" "$mnt"; then
+            return 0
+        fi
+        echo "mount -t $fs_type $dev -> $mnt failed (attempt $i/$retries), settling udev and waiting ${delay}s..."
+        udevadm settle 2>/dev/null || true
+        sleep "$delay"
+        i=$((i + 1))
+    done
+    echo "ERROR: Failed to mount $dev on $mnt after $retries attempts!"
+    echo "=== Kernel dmesg (last 30 lines) ==="
+    dmesg | tail -n 30
+    return 1
+}
+
 echo "=== [1/5] Setting up LVM with Thin Provisioning on source disk (/dev/vda) ==="
 # Load device-mapper kernel modules if not already loaded
 modprobe dm-mod 2>/dev/null || true
@@ -106,11 +141,14 @@ sleep 2
 
 # Format and prepare boot partition (vda1)
 mkfs.ext4 -F /dev/vda1
-mkdir -p /mnt/a_boot
-mount /dev/vda1 /mnt/a_boot
+sync
+udevadm settle
+mount_with_retry /dev/vda1 /mnt/a_boot || exit 1
 echo "Clonezilla CI Boot File $(date)" > /mnt/a_boot/boot_info.txt
 (cd /mnt/a_boot && md5sum boot_info.txt) > /home/partimag/expected_boot.md5
 umount /mnt/a_boot
+sync
+udevadm settle
 
 # Initialize LVM Physical Volume and Volume Group
 pvcreate -ff -y /dev/vda2
@@ -119,14 +157,17 @@ vgcreate -y vg_ci /dev/vda2
 # Create regular Linear Logical Volume (1G)
 lvcreate -y -L 1G -n reg_vol vg_ci
 mkfs.ext4 -F /dev/vg_ci/reg_vol
-mkdir -p /mnt/a_reg
-mount /dev/vg_ci/reg_vol /mnt/a_reg
+sync
+udevadm settle
+mount_with_retry /dev/vg_ci/reg_vol /mnt/a_reg || exit 1
 mkdir -p /mnt/a_reg/data
 for i in $(seq 1 5); do
     dd if=/dev/urandom of=/mnt/a_reg/data/file_"$i".bin bs=1M count=2 status=none
 done
 (cd /mnt/a_reg/data && md5sum ./*.bin) > /home/partimag/expected_reg.md5
 umount /mnt/a_reg
+sync
+udevadm settle
 
 # Create LVM Thin Pool (8G pool in vg_ci)
 lvcreate -y -L 8G -T vg_ci/thin_pool
@@ -134,26 +175,32 @@ lvcreate -y -L 8G -T vg_ci/thin_pool
 # Create Thin Logical Volume 1 (2G virtual size)
 lvcreate -y -V 2G -T vg_ci/thin_pool -n thin_vol1
 mkfs.ext4 -F /dev/vg_ci/thin_vol1
-mkdir -p /mnt/a_thin1
-mount /dev/vg_ci/thin_vol1 /mnt/a_thin1
+sync
+udevadm settle
+mount_with_retry /dev/vg_ci/thin_vol1 /mnt/a_thin1 || exit 1
 mkdir -p /mnt/a_thin1/data
 for i in $(seq 1 5); do
     dd if=/dev/urandom of=/mnt/a_thin1/data/file_"$i".bin bs=1M count=2 status=none
 done
 (cd /mnt/a_thin1/data && md5sum ./*.bin) > /home/partimag/expected_thin1.md5
 umount /mnt/a_thin1
+sync
+udevadm settle
 
 # Create Thin Logical Volume 2 (2G virtual size)
 lvcreate -y -V 2G -T vg_ci/thin_pool -n thin_vol2
 mkfs.ext4 -F /dev/vg_ci/thin_vol2
-mkdir -p /mnt/a_thin2
-mount /dev/vg_ci/thin_vol2 /mnt/a_thin2
+sync
+udevadm settle
+mount_with_retry /dev/vg_ci/thin_vol2 /mnt/a_thin2 || exit 1
 mkdir -p /mnt/a_thin2/data
 for i in $(seq 1 5); do
     dd if=/dev/urandom of=/mnt/a_thin2/data/file_"$i".bin bs=1M count=2 status=none
 done
 (cd /mnt/a_thin2/data && md5sum ./*.bin) > /home/partimag/expected_thin2.md5
 umount /mnt/a_thin2
+sync
+udevadm settle
 
 # Display initial LVM layout
 echo "Source LVM layout before save:"
@@ -240,14 +287,16 @@ sleep 2
 
 # 1. Verify boot partition /dev/vda1
 echo "Verifying restored boot partition /dev/vda1..."
-mkdir -p /mnt/restored_boot
-mount /dev/vda1 /mnt/restored_boot
-if (cd /mnt/restored_boot && md5sum -c /home/partimag/expected_boot.md5 > /dev/null 2>&1); then
-    echo "check_boot: SUCCESS" > /tmp/check_boot.txt
+if mount_with_retry /dev/vda1 /mnt/restored_boot ext4; then
+    if (cd /mnt/restored_boot && md5sum -c /home/partimag/expected_boot.md5 > /dev/null 2>&1); then
+        echo "check_boot: SUCCESS" > /tmp/check_boot.txt
+    else
+        echo "check_boot: FAILED" > /tmp/check_boot.txt
+    fi
+    umount /mnt/restored_boot
 else
     echo "check_boot: FAILED" > /tmp/check_boot.txt
 fi
-umount /mnt/restored_boot
 
 # 2. Rescan and activate LVM
 echo "Activating LVM on restored disk..."
@@ -301,40 +350,46 @@ fi
 echo "Verifying regular volume /dev/vg_ci/reg_vol..."
 dev_reg="/dev/vg_ci/reg_vol"
 [ -b "$dev_reg" ] || dev_reg="/dev/mapper/vg_ci-reg_vol"
-mkdir -p /mnt/restored_reg
-mount "$dev_reg" /mnt/restored_reg
-if (cd /mnt/restored_reg/data && md5sum -c /home/partimag/expected_reg.md5 > /dev/null 2>&1); then
-    echo "check_reg_lv: SUCCESS" > /tmp/check_reg.txt
+if mount_with_retry "$dev_reg" /mnt/restored_reg ext4; then
+    if (cd /mnt/restored_reg/data && md5sum -c /home/partimag/expected_reg.md5 > /dev/null 2>&1); then
+        echo "check_reg_lv: SUCCESS" > /tmp/check_reg.txt
+    else
+        echo "check_reg_lv: FAILED" > /tmp/check_reg.txt
+    fi
+    umount /mnt/restored_reg
 else
     echo "check_reg_lv: FAILED" > /tmp/check_reg.txt
 fi
-umount /mnt/restored_reg
 
 # 5. Verify data integrity on thin LV 1
 echo "Verifying thin volume 1 /dev/vg_ci/thin_vol1..."
 dev_thin1="/dev/vg_ci/thin_vol1"
 [ -b "$dev_thin1" ] || dev_thin1="/dev/mapper/vg_ci-thin_vol1"
-mkdir -p /mnt/restored_thin1
-mount "$dev_thin1" /mnt/restored_thin1
-if (cd /mnt/restored_thin1/data && md5sum -c /home/partimag/expected_thin1.md5 > /dev/null 2>&1); then
-    echo "check_thin_lv1: SUCCESS" > /tmp/check_thin1.txt
+if mount_with_retry "$dev_thin1" /mnt/restored_thin1 ext4; then
+    if (cd /mnt/restored_thin1/data && md5sum -c /home/partimag/expected_thin1.md5 > /dev/null 2>&1); then
+        echo "check_thin_lv1: SUCCESS" > /tmp/check_thin1.txt
+    else
+        echo "check_thin_lv1: FAILED" > /tmp/check_thin1.txt
+    fi
+    umount /mnt/restored_thin1
 else
     echo "check_thin_lv1: FAILED" > /tmp/check_thin1.txt
 fi
-umount /mnt/restored_thin1
 
 # 6. Verify data integrity on thin LV 2
 echo "Verifying thin volume 2 /dev/vg_ci/thin_vol2..."
 dev_thin2="/dev/vg_ci/thin_vol2"
 [ -b "$dev_thin2" ] || dev_thin2="/dev/mapper/vg_ci-thin_vol2"
-mkdir -p /mnt/restored_thin2
-mount "$dev_thin2" /mnt/restored_thin2
-if (cd /mnt/restored_thin2/data && md5sum -c /home/partimag/expected_thin2.md5 > /dev/null 2>&1); then
-    echo "check_thin_lv2: SUCCESS" > /tmp/check_thin2.txt
+if mount_with_retry "$dev_thin2" /mnt/restored_thin2 ext4; then
+    if (cd /mnt/restored_thin2/data && md5sum -c /home/partimag/expected_thin2.md5 > /dev/null 2>&1); then
+        echo "check_thin_lv2: SUCCESS" > /tmp/check_thin2.txt
+    else
+        echo "check_thin_lv2: FAILED" > /tmp/check_thin2.txt
+    fi
+    umount /mnt/restored_thin2
 else
     echo "check_thin_lv2: FAILED" > /tmp/check_thin2.txt
 fi
-umount /mnt/restored_thin2
 
 # Deactivate Volume Group
 vgchange -an vg_ci 2>/dev/null || true
@@ -411,38 +466,28 @@ EOF
     echo "Checking for completion marker in $log_path..."
     if ! grep -q "finish_lvm_thin_save_restore_test" "$log_path"; then
         echo "Test failed or 'finish_lvm_thin_save_restore_test' not found."
+        echo "=== Showing last 60 lines of $log_path for diagnostics ==="
+        tail -n 60 "$log_path"
         return 1
     fi
 
-    local test_failed=0
+    local boot_res struct_res reg_res thin1_res thin2_res
+    boot_res=$(grep -E "^check_boot:" "$log_path" | tail -n 1 | awk '{print $2}')
+    struct_res=$(grep -E "^check_lvs_structure:" "$log_path" | tail -n 1 | awk '{print $2}')
+    reg_res=$(grep -E "^check_reg_lv:" "$log_path" | tail -n 1 | awk '{print $2}')
+    thin1_res=$(grep -E "^check_thin_lv1:" "$log_path" | tail -n 1 | awk '{print $2}')
+    thin2_res=$(grep -E "^check_thin_lv2:" "$log_path" | tail -n 1 | awk '{print $2}')
 
-    if ! grep -q "check_boot: SUCCESS" "$log_path"; then
-        echo "Error: Boot partition check failed"
-        test_failed=1
+    if [[ "$boot_res" != "SUCCESS" || "$struct_res" != "SUCCESS" || "$reg_res" != "SUCCESS" || "$thin1_res" != "SUCCESS" || "$thin2_res" != "SUCCESS" ]]; then
+        echo "=== Failure detected! Showing last 60 lines of $log_path ==="
+        tail -n 60 "$log_path"
     fi
 
-    if ! grep -q "check_lvs_structure: SUCCESS" "$log_path"; then
-        echo "Error: LVS structure check failed"
-        test_failed=1
-    fi
-
-    if ! grep -q "check_reg_lv: SUCCESS" "$log_path"; then
-        echo "Error: Regular LV check failed"
-        test_failed=1
-    fi
-
-    if ! grep -q "check_thin_lv1: SUCCESS" "$log_path"; then
-        echo "Error: Thin LV 1 check failed"
-        test_failed=1
-    fi
-
-    if ! grep -q "check_thin_lv2: SUCCESS" "$log_path"; then
-        echo "Error: Thin LV 2 check failed"
-        test_failed=1
-    fi
-
-    assertEquals "LVM Thin save and restore verification failed. Check log: $log_path" 0 "$test_failed"
-    return "$test_failed"
+    assertEquals "Boot partition verification mismatch" "SUCCESS" "${boot_res:-NONE}"
+    assertEquals "LVS structure verification mismatch" "SUCCESS" "${struct_res:-NONE}"
+    assertEquals "Regular LV verification mismatch" "SUCCESS" "${reg_res:-NONE}"
+    assertEquals "Thin LV 1 verification mismatch" "SUCCESS" "${thin1_res:-NONE}"
+    assertEquals "Thin LV 2 verification mismatch" "SUCCESS" "${thin2_res:-NONE}"
 }
 
 # --- Main execution ---
