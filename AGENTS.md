@@ -228,6 +228,7 @@ The repository does **not** contain a `.cursor/` directory or a `.github/copilot
 | `os-clone-restore.sh` | Orchestrates a full OS backup → restore → boot validation cycle. |
 | `data-clone-restore.sh` | Similar to above but focuses on filesystem data integrity. |
 | `validate.sh` | Verifies that a restored disk boots and runs cloud‑init. |
+| `build-ubuntu-zfs-image.sh` | Builds Ubuntu 24.04 ZFS‑on‑root golden images (UEFI/BIOS) via unattended subiquity autoinstall; consumed by `jobs/test_os_ubuntu_zfs.sh` (requires Clonezilla Live ≥ `3.3.4-20` / `20261030-*`). |
 | `download-clonezilla.sh` | Downloads the latest Clonezilla Live ZIP if not present. |
 | `scripts/notify-telegram.sh` | Sends filtered pipeline notifications to a Telegram group (`started` / `finished` modes; never fails the job). |
 

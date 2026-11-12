@@ -155,7 +155,7 @@ Before using these scripts, ensure the following dependencies are installed on y
 
 ```bash
 sudo apt update
-sudo apt install qemu-utils qemu-system-riscv64 qemu-system-arm64 qemu-system-x86 qemu-system-arm qemu-efi-aarch64 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount  e2fsprogs btrfs-progs xfsprogs ntfs-3g dosfstools exfatprogs bc shunit2 jq u-boot-qemu
+sudo apt install qemu-utils qemu-system-riscv64 qemu-system-arm64 qemu-system-x86 qemu-system-arm qemu-efi-aarch64 ovmf guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount  e2fsprogs btrfs-progs xfsprogs ntfs-3g dosfstools exfatprogs bc shunit2 jq u-boot-qemu
 ```
 
 Here's a breakdown of what each package provides:
@@ -167,6 +167,7 @@ Here's a breakdown of what each package provides:
 - **`wget`**: For retrieving files from the web.
 - **`uuid-runtime`**: Provides `uuidgen` for generating unique identifiers.
 - **`genisoimage`**: For creating ISO-9660 filesystem images.
+- **`ovmf`**: Provides AMD64 UEFI firmware (`/usr/share/OVMF/OVMF_*_4M.fd`) for `--efi` runs and UEFI image builds.
 
 ## Directory Structure
 
@@ -564,6 +565,41 @@ This script starts a QEMU VM to install Debian from a netinst ISO onto a QCOW2 d
 ./debian-install.sh --help
 ```
 
+### `build-ubuntu-zfs-image.sh`
+
+Builds an **Ubuntu 24.04 golden image with root on ZFS** (no official cloud image exists) fully unattended. It downloads the Ubuntu live-server ISO, renders a NoCloud seed from the subiquity autoinstall templates in `dev/cloudinit/autoinstall-zfs/`, boots the installer kernel directly in QEMU (`autoinstall ---`), and waits for the install to power off. There is no interactive input.
+
+**Layout** (official Ubuntu ZFS layout, matching desktop/server installs):
+- UEFI variant: `p1` ESP 600M (fat32, `/boot/efi`) → `p2` **bpool** 2G (GRUB-compatible feature flags, `bpool/BOOT/ubuntu` → `/boot` on ZFS) → `p3` swap 2G → `p4` **rpool** (lz4, autoexpand; `rpool/ROOT/ubuntu` → `/`, `rpool/var/log`).
+- BIOS variant: same, with a 1M `bios_grub` partition instead of the ESP (grub-pc reads `/boot` from bpool directly).
+- This deliberately exercises the harder case: GRUB boots straight from ZFS, two `zfs_member` partitions (bpool with GRUB-compatible flags vs rpool with full features) plus a real swap partition.
+- Hard-codes the cloud-init workarounds the [cmtops.dev guide](https://cmtops.dev/posts/ubuntu-cloud-template-zfs/) recommends: disabled upstream `growpart`/`resize_rootfs` + per-boot ZFS growth fix for every pool (works together with `restoredisk -k1` growing the disk to 80G in tests), `cachefile=none` + per-instance pool-cache restore, serial console on `ttyS0`.
+
+**Output naming contract**: `qemu/cloudimages/ubuntu-zfs-<release>-<firmware>-<arch>.qcow2`, matching the `ubuntu-zfs` stanzas in `qemu/cloudimages/cloud_images.conf` used by `jobs/test_os_ubuntu_zfs.sh`. Default login after boot is `ubuntu / ubuntu` (test-only image).
+
+**Usage:**
+```bash
+# Build both variants (UEFI + BIOS), amd64 (ISO auto-downloads to isos/)
+./build-ubuntu-zfs-image.sh
+
+# Build only the UEFI variant
+./build-ubuntu-zfs-image.sh --firmware uefi
+
+# Use an existing ISO, custom output dir, keep temp files for debugging
+./build-ubuntu-zfs-image.sh --firmware bios --iso isos/ubuntu-24.04.5-live-server-amd64.iso \
+    --output qemu/cloudimages --keep-workdir
+
+# Rebuild from scratch
+./build-ubuntu-zfs-image.sh --force
+```
+
+**Options:** `--firmware <uefi|bios|both>` (default: both), `--arch` (amd64 only), `--release` (24.04 only), `--iso <path>`, `--output <dir>`, `--name <name>` (single firmware only), `--disk-size <size>` (default `10G`), `-m/--mem`, `--smp`, `--timeout-min` (default 90; raise under TCG), `--skip-smoke-test`, `--keep-workdir`, `--force`, `-h/--help`.
+
+**Notes:**
+- Requires KVM for reasonable runtime (`--timeout-min 180+` suggested under TCG).
+- The UEFI variant needs the `ovmf` package (already in the Dockerfile).
+- Each built image is boot-validated with `validate.sh` (`--efi` for UEFI) unless `--skip-smoke-test` is given.
+
 ### `scripts/notify-telegram.sh`
 
 Sends Clonezilla CI notifications to a Telegram group via the Bot API. It is called automatically by the child pipeline (`check_version` job and the `notify:telegram` job) and is designed to **never fail the pipeline**: without `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` it only logs a warning and exits 0.
@@ -687,6 +723,26 @@ docker run --rm -it \
   -v $(pwd)/logs:/app/logs \
   clonezilla-ci ./test_lvm_thin_save_restore.sh --zip /app/zip/clonezilla-live-3.3.4-23-amd64.zip
 ```
+
+### `jobs/test_os_ubuntu_zfs.sh`
+
+End-to-end **Ubuntu ZFS-on-root** clone/restore test exercising `partclone.zfs`. Discovers `ubuntu-zfs` images from `qemu/cloudimages/cloud_images.conf` (e.g. `ubuntu-zfs-24.04-uefi-amd64.qcow2`, `ubuntu-zfs-24.04-bios-amd64.qcow2`), then runs the standard `os-clone-restore.sh` cycle: savedisk → restoredisk to an 80G disk (`-k1`, partition growth) → cloud-init boot validation. UEFI-named images boot with `--efi` automatically.
+
+> **Minimum Clonezilla Live version: `3.3.4-20` (stable/testing) or `20261030-*` (daily).**
+> ZFS support (`partclone.zfs`) first shipped with those releases. With an older zip the
+> test exits 0 as SKIPPED (`skip_unless_clonezilla_version_or_newer`), so pipelines and
+> local `start.sh` runs never fail on unsupported versions.
+
+**Usage:**
+```bash
+# Build the golden images first (once)
+./build-ubuntu-zfs-image.sh
+
+# Run the test (from jobs/)
+cd jobs && ./test_os_ubuntu_zfs.sh --zip /path/to/clonezilla-live-3.3.4-20-amd64.zip --arch amd64
+```
+
+Missing images are skipped with a hint to run the build script — they never fail the job.
 
 ## Troubleshooting
 

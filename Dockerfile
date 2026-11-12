@@ -30,6 +30,8 @@ RUN apt-get update && \
     qemu-system-arm \
     qemu-system-riscv \
     qemu-efi-aarch64 \
+    # AMD64 UEFI firmware (OVMF) for ZFS-on-root image builds and --efi tests
+    ovmf \
     u-boot-qemu && \
     # Ensure xfsprogs is included in the libguestfs appliance
     find /usr/lib -name supermin.d -type d -exec sh -c 'echo xfsprogs >> {}/packages' \; && \

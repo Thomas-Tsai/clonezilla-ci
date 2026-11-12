@@ -12,6 +12,7 @@ The primary goal is to enable fully automated, non-interactive validation of Clo
 - **OS Testing**: Automatically tests cloning and restoring full Linux distributions (e.g., Debian, Ubuntu) using `os-clone-restore.sh`.
 - **Filesystem Testing**: Automatically tests cloning and restoring various filesystems (e.g., ext4, xfs, btrfs, ntfs) with data integrity checks using `data-clone-restore.sh`.
 - **LVM & Thin Provisioning Testing**: Automatically tests local disk-to-disk (`ocs-onthefly`) cloning as well as image backup and restore (`savedisk` / `restoredisk`) with complex LVM layouts, including LVM Thin Pools and Thin Volumes, validating data integrity and volume structure. Requires Clonezilla Live >= `3.3.4-23` or `20261108-*`; older zips are gracefully skipped (`jobs/common.sh`, `skip_unless_clonezilla_version_or_newer`).
+- **ZFS-on-Root Testing**: `build-ubuntu-zfs-image.sh` fully automates building Ubuntu 24.04 golden images with root on ZFS (UEFI and BIOS variants, subiquity autoinstall), and `jobs/test_os_ubuntu_zfs.sh` exercises `partclone.zfs` via a savedisk/restoredisk cycle. Requires Clonezilla Live >= `3.3.4-20` or `20261030-*`; older zips are gracefully skipped.
 - **Flexible QEMU Runner**: `qemu-clonezilla-ci-run.sh` provides a powerful interface to run ad-hoc Clonezilla commands in a QEMU VM, with features like automatic ZIP extraction, script execution, and customizable kernel parameters.
 - **Dependency Automation**: Scripts can automatically download necessary ISOs (Debian, Clonezilla) if they are not found locally.
 
@@ -23,7 +24,7 @@ Ensure the following dependencies are installed. On a Debian-based system, you c
 
 ```bash
 sudo apt update
-sudo apt install qemu-utils qemu-system-riscv64 qemu-system-arm64 qemu-system-x86 qemu-system-arm qemu-efi-aarch64 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount
+sudo apt install qemu-utils qemu-system-riscv64 qemu-system-arm64 qemu-system-x86 qemu-system-arm qemu-efi-aarch64 ovmf guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount
 ```
 It is also recommended that your user be part of the `kvm` group for hardware-accelerated virtualization:
 ```bash
@@ -128,6 +129,7 @@ Test results are shown in the console, and detailed logs for each major operatio
 - **`qemu-clonezilla-ci-run.sh`**: The core component for executing commands within a Clonezilla QEMU VM. It handles the complexities of setting up the VM, storage, networking, and boot parameters.
 - **`clonezilla-zip2qcow.sh`**: A utility to convert a Clonezilla Live ZIP archive into the QCOW2, kernel, and initrd files required for booting in QEMU.
 - **`validate.sh`**: A helper script to verify that a restored OS disk image can boot successfully, using cloud-init for automation.
+- **`build-ubuntu-zfs-image.sh`**: Builds Ubuntu 24.04 ZFS-on-root golden images (UEFI/BIOS) fully unattended via subiquity autoinstall; output lands in `qemu/cloudimages/` for `jobs/test_os_ubuntu_zfs.sh`.
 
 For detailed command-line options for each script, see the **[Usage Guide](usage.md)**.
 

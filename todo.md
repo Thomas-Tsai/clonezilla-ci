@@ -302,3 +302,20 @@ cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/c
 - [x] `validate.sh` 增加 `--efi` 選項，啟用 AMD64 EFI 開機支援。
 - [x] `validate.sh` 增加 `--temp-dir` 選項，用於指定臨時檔案存放目錄，支援 UEFI VARS 檔案清理。
 - [x] `validate.sh` 將 UEFI 相關的 `-pflash` 參數改為明確的 `-drive if=pflash,format=raw...` 語法。
+---
+
+## Ubuntu ZFS-on-root 測試（partclone.zfs）
+
+- [x] `build-ubuntu-zfs-image.sh`：全自動建置 Ubuntu 24.04 ZFS-on-root golden image（subiquity autoinstall，免互動；kernel 直開 + NoCloud seed）。
+- [x] autoinstall 模板 `dev/cloudinit/autoinstall-zfs/`（UEFI：EFI+/boot ext4+zpool；BIOS：bios_grub+/boot ext4+zpool；含 growpart 替代 fix、zpool cache 清理、serial console）。
+- [x] `jobs/test_os_ubuntu_zfs.sh`：使用 `ubuntu-zfs` conf token 發現 image，版本 gate `3.3.4-20` / `20261030`（partclone.zfs 首次進 Live 的版本）。
+- [x] `qemu/cloudimages/cloud_images.conf` 補兩行 PLACEHOLDER（uefi / bios），不影響現有 `ubuntu` 測試。
+- [x] Dockerfile 補 `ovmf`（amd64 UEFI 建置/驗證需要）。
+- [x] BIOS 變體額外開機驗證（curtin `bios_grub` flag 配置正確性；BIOS 還原開機測試通過）。
+- [x] 確認 ocs-sr 對 `zfs_member` 分割區自動走 partclone.zfs（Live 20261111-tenacious：vda3 save/restore 皆 `partclone.zfs -a3`，非 dd fallback）。
+- [x] 全流程驗證：`test_os_ubuntu_zfs.sh` + clonezilla-live-20261111-tenacious（UEFI+BIOS 兩 image savedisk→restoredisk(80G,-k1)→開機 OK）；舊 zip（3.3.2-16 / 20260403）正確 SKIP。
+- [x] 已知陷阱修正：subiquity initramfs 無 IDE/ATA driver（ISO/seed 改掛 virtio-blk）；`updates: "none"` 遭 subiquity 拒絕（改 `security`）；libguestfs list-filesystems 不含 zfs_member（verify 改 `blkid` 逐分割區查 TYPE/LABEL）；smoke test 改 COW overlay 避免弄髒母碟（cloud-init instance-id 固定於 cidata）；`feature@large_dnodes` 遭 installer 環境拒絕（改回 ubiquity 官方 10-feature 清單，無 large_dnodes）。
+- [x] 佈局改版：由 cmtops 文章自訂佈局（ext4 /boot + 單 pool）改為 **Ubuntu 官方 ZFS 佈局**（ESP + bpool 2G + swap 2G + rpool；bpool/BOOT/ubuntu、rpool/ROOT/ubuntu 沒有 zsys），涵蓋 GRUB-from-ZFS、雙 zfs_member、swap 還原。UEFI+BIOS 雙變體全流程通過（20261111-tenacious，vda2/vda4 皆 partclone.zfs）。
+- [ ] 未來評估：arm64 變體（`qemu-system-aarch64` + QEMU_EFI.fd；TCG 建置慢，腳本保留 `--arch` 擴充點）。
+- [ ] 未來評估：`jobs/test_fs_zfs.sh`（data fs 層級 ZFS 測試，需在 guest 內建 zpool，仿 LVM-thin 前例）。
+- [ ] 未來評估：於 child-pipeline.yml 註冊 `test:os:ubuntu-zfs` job + publish needs + EXPECTED_TEST_JOBS（等 image 上線 `/data/cloudimages` 後）。
