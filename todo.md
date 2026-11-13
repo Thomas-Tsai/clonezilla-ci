@@ -339,8 +339,10 @@ PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.24
 - [x] 140.110.240.58 就位：`cicd` 帳號、ssh port 3322、影像目錄 `/home/cicd/clonezilla-cicd-cloudimages`。
 - [x] runner 判別：PN42／類似機器 job 以 `gitlab-runner` 執行（`ps`+`builds/` 擁有者驗證）；F1 以 `u1597171` 執行。
 - [x] ssh key 部署：三台（PN42、F1、vm-runner）皆有 `clonezilla-imgrepo` ssh config 別名，`ssh clonezilla-imgrepo` 可登入。
-- [ ] 待做：在 PN42 上跑首次 `sync_images.sh --pull --yes`（或 `--push`）實測，確認遠端目錄存在且可寫。
+- [x] PN42 首次實測通過（2026-11-13）：`/data/cloudimages` chown 給 gitlab-runner + setgid；`--migrate` 改 bios 名；小 push（debian-13-amd64）→ 全量 push（14 張 ~20G，115MB/s）→ remote manifest 重建 → `--pull` 全部 up to date；zfs×2 與 windows-11-uefi 僅存於 debian-lab，如預期顯示 `not on repo yet; skipping`。
+- [ ] 待做：任一台 test runner（F1 或 vm-runner）跑 `sync_images.sh --pull --yes` 驗證多機取像。
 - [ ] （之後）nginx 唯讀 http :80 作為備援取用管道。
+- [ ] repo 缺口補齊：`ubuntu-zfs-24.04-{uefi,bios}-amd64.qcow2` 與 `windows-11-uefi-amd64.qcow2` 目前在 debian-lab——補傳（debian-lab 加 ssh key 後 push）或由 PN42 重建（Phase 2/3）。
 - [ ] （延後）ssh 強化：test runner key 加 `command="rrsync -ro /home/cicd/clonezilla-cicd-cloudimages"` 唯讀限制（本輪先不鎖）；前置：先將 `--push` 的 manifest 重建從裸 `ssh "cd ... && sha256sum ..."` 改為 **producer 本機產生後隨檔推送**（純 rsync 檔案寫入），之後 PN42 key 也能鎖，server 零 shell。
 
 ### Phase 2：CI 接線（等 Phase 0 ssh key 部署）
