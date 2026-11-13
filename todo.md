@@ -348,7 +348,11 @@ PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.24
 
 ### Phase 2：CI 接線（done, 2026-11-13；排程建立與驗證待做）
 - [x] `.gitlab-ci.yml` 新增 `images:sync`（PN42，tags `clonezilla, windows`）：`--check` → `download_cloud_images.sh`（支援 `IMAGE_SYNC_FORCE=true` 全量重抓）→ `sync_images.sh --push --yes`；schedule `IMAGE_SYNC=true` 時自動跑，web/api 可手動觸發。（待建 GitLab Schedules：daily `IMAGE_SYNC=true`、weekly 加 `IMAGE_SYNC_FORCE=true`）（待驗證）
-- [x] 新增 `images:build:zfs`（manual、`allow_failure: true`）：`build-ubuntu-zfs-image.sh --firmware both --output /data/cloudimages` → push。驗證穩定後再考慮週期化。（待驗證）
+- [x] 新增 `images:build:zfs`（manual、`allow_failure: true`）：`build-ubuntu-zfs-image.sh --firmware both --output /data/cloudimages` → push。（2026-11-13 手動 pipeline 3063635580 驗證：1276s 成功，PN42 KVM 建置 uefi+bios → push → manifest 重建；retry job 17998450553；mid-run 誤觸取消後 retry API 復原正常）
+- [x] `images:sync` 手動驗證（2026-11-13，job 17997620584，566s 成功）：全部 up to date、增量 525B、remote manifest 重建 OK。
+- [x] child 自動補像 gate 驗證（2026-11-13，child 3063638035 / test:fs:ext4 @F1 15min 成功）：before_script 正確走 F1 fallback 目錄、`MISSING=0` → `no pull needed.`；telegram branch gate 於 notify:telegram 實戰顯示 `branch 'feature/ubuntu-zfs-on-root' is not 'main'; notification skipped.`，群組靜音 ✓
+- [ ] 後續改善：`build-ubuntu-zfs-image.sh` CI 內 ISO 下載進度洗爆 4MB job log 上限（wget dots；改導向 log 檔或 quiet）。
+- [ ] 後續改善：`sync_images.sh --push` 無上傳時跳過遠端 manifest 重建（no-op 目前仍遠端重 hash 20G ≈8min）。
 - [x] `child-pipeline.yml` before_script 自動 `--pull`：共享影像目錄可寫（`/data/cloudimages` 或 F1 fallback）且 `MISSING>0` 才拉（1200s timeout），stale 碟不在 job 內更新（避免 I/O 風暴），失敗退回警告；`IMAGE_PULL=false` 停用。（待驗證）
 - [ ] windows 手動匯入流程 runbook（usage.md 補章節；含 checksum 登錄）。
 
