@@ -166,16 +166,18 @@ claim state.
 ## GitLab CI: Telegram Notifications
 
 The pipeline notifies a Telegram group through `scripts/notify-telegram.sh`,
-filtered so only meaningful events produce messages:
+filtered so only meaningful events on the default branch produce messages:
 
+- **Any run on a non-default branch** (e.g. `feature/*`): nothing is sent —
+  the group reflects official runs only (`main` / `test-reports` allowed).
 - **Scheduled run, new Clonezilla version** (`VERSION_STATUS=new_version`):
   `check_version` posts a "new version detected" notice immediately, and the
   `notify:telegram` job posts a pass/fail summary when the suite finishes —
   on success *and* on failure.
 - **Scheduled run, no new version** (`no_change` / `in_progress` /
   `mirror_empty`): nothing is sent.
-- **Manual pipelines** (push / web / api / trigger): `notify:telegram` always
-  posts the end-of-run summary.
+- **Manual pipelines** (push / web / api / trigger) on the default branch:
+  `notify:telegram` always posts the end-of-run summary.
 
 Setup (one time, manual):
 

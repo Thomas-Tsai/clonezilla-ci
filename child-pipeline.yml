@@ -605,9 +605,10 @@ test:lvm_thin_save_restore:
 #
 # Filter (enforced inside scripts/notify-telegram.sh, not via rules, so the
 # job itself never blocks or fails the pipeline):
+#   - non-default branch (e.g. feature/*)     -> always skip (official runs only)
 #   - scheduled + VERSION_STATUS=new_version  -> send summary (success or failure)
 #   - scheduled + no_change / in_progress / mirror_empty -> skip
-#   - manual (push / web / api / trigger)     -> always send summary
+#   - manual (push / web / api / trigger) on main -> always send summary
 #
 # needs mirrors publish_reports so this job (a) runs after every test job,
 # (b) receives the results/*.yml artifacts for the summary, and (c) receives

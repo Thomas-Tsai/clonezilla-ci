@@ -661,13 +661,14 @@ Builds an **Ubuntu 24.04 golden image with root on ZFS** (no official cloud imag
 
 Sends Clonezilla CI notifications to a Telegram group via the Bot API. It is called automatically by the child pipeline (`check_version` job and the `notify:telegram` job) and is designed to **never fail the pipeline**: without `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` it only logs a warning and exits 0.
 
-**Notification filter** (the group stays quiet on no-op scheduled runs):
+**Notification filter** (the group only reflects official runs on the default branch or `test-reports`):
 
-| Pipeline source | Condition | Message |
-|---|---|---|
-| Scheduled | `VERSION_STATUS=new_version` | "New version detected" at the start + summary at the end |
-| Scheduled | `no_change` / `in_progress` / `mirror_empty` | none |
-| Manual (push / web / api / trigger) | tests finished | summary (success or failure) |
+| Pipeline source | Branch | Condition | Message |
+|---|---|---|---|
+| any | non-default (e.g. `feature/*`) | — | **none** (branch gate) |
+| Scheduled | default | `VERSION_STATUS=new_version` | "New version detected" at the start + summary at the end |
+| Scheduled | default | `no_change` / `in_progress` / `mirror_empty` | none |
+| Manual (push / web / api / trigger) | default | tests finished | summary (success or failure) |
 
 **Modes:**
 - `started` — new-version notice; used by the `check_version` job.
