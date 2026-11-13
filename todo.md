@@ -345,10 +345,10 @@ PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.24
 - [ ] repo 缺口補齊：`ubuntu-zfs-24.04-{uefi,bios}-amd64.qcow2` 與 `windows-11-uefi-amd64.qcow2` 目前在 debian-lab——補傳（debian-lab 加 ssh key 後 push）或由 PN42 重建（Phase 2/3）。
 - [ ] （延後）ssh 強化：test runner key 加 `command="rrsync -ro /home/cicd/clonezilla-cicd-cloudimages"` 唯讀限制（本輪先不鎖）；前置：先將 `--push` 的 manifest 重建從裸 `ssh "cd ... && sha256sum ..."` 改為 **producer 本機產生後隨檔推送**（純 rsync 檔案寫入），之後 PN42 key 也能鎖，server 零 shell。
 
-### Phase 2：CI 接線（等 Phase 0 ssh key 部署）
-- [ ] `.gitlab-ci.yml` 新增 `images:sync`（daily 排程、tag `windows` 暫；長遠 PN42 加掛 `image_creator` tag）：`download_cloud_images.sh` → `sync_images.sh --push --yes`。
-- [ ] 新增 `images:build:zfs`（manual/weekly）：`build-ubuntu-zfs-image.sh` → smoke test → `--push`。
-- [ ] `child-pipeline.yml` before_script：保留 `/data/cloudimages` 快速路徑；缺 image 時 `sync_images.sh --pull --yes`；repo 不可達退回現行警告行為。
+### Phase 2：CI 接線（done, 2026-11-13；排程建立與驗證待做）
+- [x] `.gitlab-ci.yml` 新增 `images:sync`（PN42，tags `clonezilla, windows`）：`--check` → `download_cloud_images.sh`（支援 `IMAGE_SYNC_FORCE=true` 全量重抓）→ `sync_images.sh --push --yes`；schedule `IMAGE_SYNC=true` 時自動跑，web/api 可手動觸發。（待建 GitLab Schedules：daily `IMAGE_SYNC=true`、weekly 加 `IMAGE_SYNC_FORCE=true`）（待驗證）
+- [x] 新增 `images:build:zfs`（manual、`allow_failure: true`）：`build-ubuntu-zfs-image.sh --firmware both --output /data/cloudimages` → push。驗證穩定後再考慮週期化。（待驗證）
+- [x] `child-pipeline.yml` before_script 自動 `--pull`：共享影像目錄可寫（`/data/cloudimages` 或 F1 fallback）且 `MISSING>0` 才拉（1200s timeout），stale 碟不在 job 內更新（避免 I/O 風暴），失敗退回警告；`IMAGE_PULL=false` 停用。（待驗證）
 - [ ] windows 手動匯入流程 runbook（usage.md 補章節；含 checksum 登錄）。
 
 ### Phase 3：zfs 測試上線（等 image 上 repo）

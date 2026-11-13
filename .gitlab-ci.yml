@@ -180,3 +180,65 @@ update_sif:
 
       echo "Success: Updated SIF at ${SIF_PATH}"
 
+# --- Central cloud image repo jobs ------------------------------------------
+# The canonical cloud image store lives on the image repo server
+# (cicd@140.110.240.58:3322:/home/cicd/clonezilla-cicd-cloudimages; see
+# usage.md "qemu/cloudimages/ – 雲端映像庫與中央 repo"). The ASUS PN42 runner
+# (tags: clonezilla, windows) is the producer: it downloads/builds images and
+# pushes them with qemu/cloudimages/sync_images.sh. Test runners pull missing
+# images in their before_script (child-pipeline.yml, gate: IMAGE_PULL).
+
+# images:sync downloads missing config-referenced cloud images onto PN42's
+# /data/cloudimages and pushes them to the repo (rsync is incremental; the
+# remote MANIFEST.sha256 is rebuilt afterwards).
+# Schedules (create in GitLab > CI/CD > Schedules):
+#   - daily  "image-sync":        IMAGE_SYNC=true  (fetch newly added config images)
+#   - weekly "image-sync-force":  IMAGE_SYNC=true + IMAGE_SYNC_FORCE=true
+#     (re-download the moving-target daily images to refresh stale copies)
+images:sync:
+  stage: trigger
+  tags:
+    - clonezilla
+    - windows # ASUS PN42: the image producer (owns /data/cloudimages)
+  rules:
+    - if: '$IMAGE_SYNC == "true"'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger"'
+      when: manual
+    - when: never
+  timeout: 180m
+  script:
+    - cd qemu/cloudimages
+    - export CLOUD_IMAGES_DIR=/data/cloudimages
+    - ./download_cloud_images.sh --check
+    - |
+      # PLACEHOLDER/MANUAL entries are skipped by the script. Download
+      # failures only warn: the push below still uploads whatever exists.
+      if [ "$IMAGE_SYNC_FORCE" = "true" ]; then
+        echo "IMAGE_SYNC_FORCE=true: re-downloading all downloadable images."
+        ./download_cloud_images.sh --force || echo "WARNING: some downloads failed (see above)."
+      else
+        ./download_cloud_images.sh || echo "WARNING: some downloads failed (see above)."
+      fi
+    - ./sync_images.sh --push --yes
+
+# images:build:zfs rebuilds the Ubuntu ZFS-on-root golden images (UEFI+BIOS)
+# into /data/cloudimages and pushes them. Manual only for now (long build);
+# validate the flow, then consider a weekly schedule.
+# allow_failure: while this flow matures it must not poison pipeline status.
+images:build:zfs:
+  stage: trigger
+  tags:
+    - clonezilla
+    - windows # ASUS PN42
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger"'
+      when: manual
+    - when: never
+  allow_failure: true
+  timeout: 180m
+  script:
+    - ./build-ubuntu-zfs-image.sh --firmware both --output /data/cloudimages
+    - cd qemu/cloudimages
+    - CLOUD_IMAGES_DIR=/data/cloudimages ./sync_images.sh --push --yes
+

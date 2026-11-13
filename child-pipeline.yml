@@ -55,6 +55,11 @@ variables:
   # Note: test:os:windows11 (tag: windows) is NOT affected by this variable
   # — it keeps its dedicated tags.
   RUNNER_TAG: "clonezilla"
+  # IMAGE_PULL controls the central image repo pull in the test before_script:
+  # missing config-referenced images are fetched from the repo into a writable
+  # shared image dir (/data/cloudimages or the F1 fallback) before symlinking.
+  # Set to "false" to disable (e.g. repo maintenance / offline work).
+  IMAGE_PULL: "true"
   # TEST_FILTER (optional, empty = run everything): a grep -E regex matched
   # against each test job's name, e.g. "lvm_thin", "fs:(ext4|xfs)" or
   # "test:dev_to_dev". Non-matching test jobs exit 0 within seconds (kept
@@ -331,6 +336,40 @@ build_singularity:
         fi
         echo "Using ZIP file from build job: ${ZIP_FILE_FROM_BUILD}"
         export ZIP_FILE="${ZIP_FILE_FROM_BUILD}"
+      fi
+
+      # Sync missing cloud images from the central image repo (rsync/ssh).
+      # Only fires when a shared image dir is writable AND the config lists
+      # images that are missing locally (a cheap existence check; stale daily
+      # builds are NOT auto-refreshed here to avoid per-job sha256 I/O storms).
+      # IMAGE_PULL=false disables. Missing/stale images are pulled with a
+      # hard timeout; failure logs a warning and the job continues with
+      # whatever images exist locally.
+      echo "Checking cloud images against central repo..."
+      IMAGE_DIR=""
+      if [ -d "/data/cloudimages" ] && [ -w "/data/cloudimages" ]; then
+        IMAGE_DIR="/data/cloudimages"
+      elif [ -d "/home/u1597171/clonezilla-ci/qemu/cloudimages" ] && [ -w "/home/u1597171/clonezilla-ci/qemu/cloudimages" ]; then
+        IMAGE_DIR="/home/u1597171/clonezilla-ci/qemu/cloudimages"
+      fi
+      if [ "$IMAGE_PULL" = "false" ]; then
+        echo "IMAGE_PULL=false: skipping pull from image repo."
+      elif [ -z "$IMAGE_DIR" ]; then
+        echo "No writable shared cloud image dir found; skipping pull (tests may skip missing images)."
+      elif [ ! -x qemu/cloudimages/sync_images.sh ]; then
+        echo "qemu/cloudimages/sync_images.sh not found/executable; skipping pull."
+      else
+        MISSING_COUNT=$(CLOUD_IMAGES_DIR="$IMAGE_DIR" qemu/cloudimages/download_cloud_images.sh --check | grep -c '^MISSING' || true)
+        if [ "$MISSING_COUNT" -gt 0 ]; then
+          echo "$MISSING_COUNT image(s) missing in $IMAGE_DIR; pulling from central repo (timeout 1200s)..."
+          if CLOUD_IMAGES_DIR="$IMAGE_DIR" timeout 1200 qemu/cloudimages/sync_images.sh --pull --yes; then
+            echo "Cloud images synced from central repo."
+          else
+            echo "WARNING: image pull failed (repo unreachable / key missing); continuing with existing images."
+          fi
+        else
+          echo "All config-referenced images present in $IMAGE_DIR; no pull needed."
+        fi
       fi
 
       echo "Setting up qemu cloud images in the project root..."
