@@ -13,7 +13,8 @@
 #            are staged as .part files and verified against the manifest.
 #   --push   Upload local config-referenced images to the repo, then rebuild the
 #            remote MANIFEST.sha256 / manifest.tsv. Run this on the producer
-#            machine (ASUS PN42) only.
+#            machine (ASUS PN42) only. Symlinked images are uploaded as file
+#            content (--copy-links).
 #   --prune  Delete local *.qcow2 not referenced by the config (same as
 #            download_cloud_images.sh --prune).
 #
@@ -23,6 +24,9 @@
 #   IMAGE_REPO_USER     SSH user (default: cicd).
 #   IMAGE_REPO_DIR      Remote image directory (default: /home/cicd/clonezilla-cicd-cloudimages).
 #   IMAGE_REPO_SSH_PORT SSH port (default: 3322).
+#   CLOUD_IMAGES_DIR    Local image directory (default: this script's directory;
+#                       override e.g. to better suit PN42 layouts where images
+#                       live in /data/cloudimages instead of the checkout).
 #
 # Exit codes:
 #   0 success / nothing to do
@@ -63,6 +67,7 @@ Environment:
   IMAGE_REPO_USER     SSH user (current: ${IMAGE_REPO_USER})
   IMAGE_REPO_DIR      Remote directory (current: ${IMAGE_REPO_DIR})
   IMAGE_REPO_SSH_PORT SSH port (current: ${IMAGE_REPO_SSH_PORT})
+  CLOUD_IMAGES_DIR    Local image directory (current: ${CLOUD_IMAGES_DIR})
 EOF
 }
 
@@ -232,7 +237,7 @@ do_push() {
     fi
 
     printf '%s\n' "${PUSH_LIST[@]}" >"$list_tmp"
-    if ! rsync -avz --partial --timeout=600 -e "$RSYNC_SSH" --files-from="$list_tmp" "${CLOUD_IMAGES_DIR}/" "${REMOTE}/"; then
+    if ! rsync -avz --copy-links --partial --timeout=600 -e "$RSYNC_SSH" --files-from="$list_tmp" "${CLOUD_IMAGES_DIR}/" "${REMOTE}/"; then
         echo "[ERROR] rsync push to ${REMOTE} failed" >&2
         exit 2
     fi
