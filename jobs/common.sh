@@ -7,6 +7,11 @@
 # This assumes common.sh is always in the 'jobs' subdirectory of the project root.
 readonly PROJECT_ROOT="$(realpath "$(dirname "$0")/..")"
 
+# Shared cloud-image config parsing (schema: OS RELEASE ARCH [FIRMWARE] URL [SHA256];
+# filename contract: <OS>-<RELEASE>[-<FIRMWARE>]-<ARCH>.qcow2).
+# Provides image_name_from_conf_line <raw conf line>.
+. "$PROJECT_ROOT/qemu/cloudimages/image_common.sh"
+
 # Enforce execution from the 'jobs/' directory
 if [[ "$(basename "$PWD")" != "jobs" ]]; then
     echo "ERROR: This script must be run from within the 'jobs/' directory." >&2
@@ -41,9 +46,8 @@ get_debian_disk_path() {
         config_line=$(grep -E "^\s*${os}\s+.*\s+${arch}\s+" "$config_file" | head -n 1)
 
         if [ -n "$config_line" ]; then
-            local release
-            release=$(echo "$config_line" | awk '{print $2}')
-            local image_name="${os}-${release}-${arch}.qcow2"
+            local image_name
+            image_name=$(image_name_from_conf_line "$config_line")
             test_disk_path="$PROJECT_ROOT/qemu/cloudimages/${image_name}"
         fi
     fi

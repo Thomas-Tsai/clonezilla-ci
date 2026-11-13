@@ -225,6 +225,60 @@ Options:
 ./download-clonezilla.sh --arch arm64 --dry-run
 ```
 
+### `qemu/cloudimages/` – 雲端映像庫與中央 repo
+
+`qemu/cloudimages/` 是所有 OS/FS 測試所用 qcow2 的目錄。Git 只追蹤 `cloud_images.conf`、`download_cloud_images.sh`、`sync_images.sh`、`image_common.sh` 與 `note`；`*.qcow2` 一律 gitignore。
+
+**Config schema（`cloud_images.conf`）**：每行 `OS RELEASE ARCH [FIRMWARE] URL [SHA256]`
+- 檔名契約：`<OS>-<RELEASE>[-<FIRMWARE>]-<ARCH>.qcow2`。
+- `FIRMWARE`（`bios`/`uefi`）僅在影像為韌體專屬時填寫（`ubuntu-zfs`、`windows`）；BIOS/UEFI 通吃的通用 cloud image 不填（沿用舊檔名）。
+- `URL`：直接下載的 `https://` 位址；非 http(s) 的值（如 `PLACEHOLDER_*`、`MANUAL_*`）代表需本機建置／手動準備，下載流程會略過並提示。
+- `SHA256`：選填；填寫後下載與既有檔案皆會校驗。
+
+#### `download_cloud_images.sh`
+```bash
+./download_cloud_images.sh              # 下載 conf 中缺少的 image（.part 暫存 + mv，原子）
+./download_cloud_images.sh --force      # 全部重新下載
+./download_cloud_images.sh --check      # 只回報狀態（OK/MISSING/SHA-MISMATCH/MANUAL）
+./download_cloud_images.sh --prune      # 刪除不在 conf 內的 qcow2（互動確認；--yes 跳過）
+./download_cloud_images.sh --migrate    # 舊檔名 → 契約檔名（例如 win11-uefi.qcow2）
+```
+
+#### 中央 image repo 架構（同步方式）
+```
+PN42（producer, tag: windows）  --rsync/ssh push-->  140.110.240.58  <--rsync/ssh pull--  test runners
+                                                    cicd@140.110.240.58:3322
+                                                    /home/cicd/clonezilla-cicd-cloudimages
+                                                    + MANIFEST.sha256 / manifest.tsv
+```
+- runner 不再各自上網抓 image；由 PN42 統一下載／建置（含未來 ZFS golden image 與 Windows 匯入）後推送。
+- repo 上的 `MANIFEST.sha256` 是完整性錨點：pull 端以 sha256 判斷「缺漏／過期」，`.part` 暫存驗證後才換名。
+- 各 runner 的 ssh key 已部署：PN42 等以 `gitlab-runner` 使用者跑 job（私鑰在 `/home/gitlab-runner/.ssh/`），F1 以 `u1597171` 跑 job（key 在該帳號 `~/.ssh/`）；三台皆有 `clonezilla-imgrepo` ssh config 別名可用。
+
+#### `sync_images.sh`
+```bash
+# runner 端：依 conf 需求，向 repo 補齊缺漏或 sha256 不符的 image
+./sync_images.sh --pull [--yes]
+
+# producer 端（PN42）：上傳 conf 引用的本機 image 並重建遠端 manifest
+./sync_images.sh --push [--yes]
+
+./sync_images.sh --prune [--yes]     # 清理本機 orphan（同 download_cloud_images.sh --prune）
+```
+- 環境變數：`IMAGE_REPO_HOST`（預設 `140.110.240.58`，runner 上也可用 `clonezilla-imgrepo` 別名）、`IMAGE_REPO_USER`（預設 `cicd`）、`IMAGE_REPO_DIR`（預設 `/home/cicd/clonezilla-cicd-cloudimages`）、`IMAGE_REPO_SSH_PORT`（預設 `3322`）。
+- exit code：`2`＝repo 不可達（CI 應退回舊行為）；`3`＝校驗失敗。
+- 取用協定採 rsync/ssh。http（唯讀 nginx）之後再加。
+
+#### runner 上影像的取用（CI 現況與目標）
+- 現況（`child-pipeline.yml` before_script）：優先將 `/data/cloudimages/*.qcow2` 以符號連結掛進 job workspace 的 `qemu/cloudimages/`；Slurm 模式則 bind mount `/data/cloudimages`。本地缺 image 的測試依 conf 跳過或失敗。
+- 目標（Phase 2）：before_script 在發現缺漏時先 `sync_images.sh --pull --yes` 補齊，再走既有 symlink 流程。
+- 本地手動取用範例：測試腳本（`jobs/test_os_*.sh`）依 `cloud_images.conf` 的 `OS`+`ARCH` 找到對應檔名（`jobs/common.sh` 的 `image_name_from_conf_line`），存在才跑。
+
+#### Windows image
+- conf 登錄 `windows 11 amd64 bios` 與 `windows 11 amd64 uefi` 兩行（`MANUAL_*`，不下載）。
+- 取得方式：cloudbase.it 提供 Windows cloud images（見 `qemu/cloudimages/note`），需手動轉 qcow2、以 cloud-init（`isos/win11_cidata.iso`）完成首次開機設定後複製為模板，檔名依契約置於 `qemu/cloudimages/`。
+- `windows-11-uefi-amd64.qcow2` 檔名含 `uefi`，`os-clone-restore.sh` 會自動帶 `--efi`。
+
 ### `start.sh`
 
 The main test runner script for the Clonezilla CI test suite. It orchestrates the execution of various OS and filesystem clone/restore tests using `shunit2`.
@@ -353,7 +407,7 @@ This is an orchestration script that automates the full backup, restore, and val
 # Run a full cycle with a custom image name and an UEFI template (will auto-detect EFI)
 ./os-clone-restore.sh \
   --zip ./isos/clonezilla-live-20251124-resolute-amd64.zip \
-  --tmpl ./qemu/win11-uefi.qcow2 \
+  --tmpl ./qemu/cloudimages/windows-11-uefi-amd64.qcow2 \
   --image-name "my-windows-efi-image"
 
 # Display help

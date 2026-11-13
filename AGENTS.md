@@ -230,6 +230,8 @@ The repository does **not** contain a `.cursor/` directory or a `.github/copilot
 | `validate.sh` | Verifies that a restored disk boots and runs cloud‑init. |
 | `build-ubuntu-zfs-image.sh` | Builds Ubuntu 24.04 ZFS‑on‑root golden images (UEFI/BIOS) via unattended subiquity autoinstall; consumed by `jobs/test_os_ubuntu_zfs.sh` (requires Clonezilla Live ≥ `3.3.4-20` / `20261030-*`). |
 | `download-clonezilla.sh` | Downloads the latest Clonezilla Live ZIP if not present. |
+| `qemu/cloudimages/download_cloud_images.sh` | Downloads cloud images per `cloud_images.conf` (schema: `OS RELEASE ARCH [FIRMWARE] URL [SHA256]`); modes `--check` / `--prune` / `--migrate`. |
+| `qemu/cloudimages/sync_images.sh` | Syncs `qemu/cloudimages/` with the central image repo over rsync/ssh (`--push` on the PN42 producer, `--pull` on runners; sha256-manifest based). |
 | `scripts/notify-telegram.sh` | Sends filtered pipeline notifications to a Telegram group (`started` / `finished` modes; never fails the job). |
 
 Agents may call these utilities directly; they already respect the strict Bash conventions described earlier.

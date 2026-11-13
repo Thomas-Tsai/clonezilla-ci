@@ -319,3 +319,35 @@ cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/c
 - [ ] 未來評估：arm64 變體（`qemu-system-aarch64` + QEMU_EFI.fd；TCG 建置慢，腳本保留 `--arch` 擴充點）。
 - [ ] 未來評估：`jobs/test_fs_zfs.sh`（data fs 層級 ZFS 測試，需在 guest 內建 zpool，仿 LVM-thin 前例）。
 - [ ] 未來評估：於 child-pipeline.yml 註冊 `test:os:ubuntu-zfs` job + publish needs + EXPECTED_TEST_JOBS（等 image 上線 `/data/cloudimages` 後）。
+
+---
+
+## Cloud image 集中化（image repo 架構）
+
+PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.240.58:3322:/home/cicd/clonezilla-cicd-cloudimages`）→ 各 test runner rsync/ssh pull。架構文件見 usage.md「qemu/cloudimages/ – 雲端映像庫與中央 repo」。
+
+### Phase 1：conf schema v2 + 工具腳本（done, 2026-11-13）
+- [x] `cloud_images.conf` schema v2：`OS RELEASE ARCH [FIRMWARE] URL [SHA256]`；檔名契約 `<OS>-<RELEASE>[-<FIRMWARE>]-<ARCH>.qcow2`（通用 image 不加 firmware；zfs/windows 加標）。
+- [x] `qemu/cloudimages/image_common.sh`：conf 解析／契約檔名推導（`image_name_from_conf_line`）／prune 共用函式，jobs/common.sh 亦改 source 此檔。
+- [x] `download_cloud_images.sh` 重寫：原子下載（`.part`→`mv`）、curl retry/resume、SHA256 驗證、`--check` / `--prune` / `--migrate` / `--yes`、`--force`。
+- [x] `sync_images.sh` 新增：`--pull`（runner：對照 MANIFEST.sha256 抓缺漏/過期，`.part`+驗 sha）、`--push`（PN42：rsync 上傳＋遠端重建 MANIFEST.sha256/manifest.tsv）、`--prune`；env：`IMAGE_REPO_HOST`（預設 140.110.240.58）/`IMAGE_REPO_USER`（預設 cicd）/`IMAGE_REPO_DIR`（預設 /home/cicd/clonezilla-cicd-cloudimages）/`IMAGE_REPO_SSH_PORT`（預設 3322）。stub 端到端驗證（push/pull/up-to-date/missing/stale/prune）通過。
+- [x] windows image 納入 conf（bios/uefi 兩行 MANUAL 條目）；guestfish 判定 `windows-11-amd64.qcow2`=BIOS、`win11-uefi.qcow2`=UEFI；本機已 `--migrate` 改名為 `windows-11-{bios,uefi}-amd64.qcow2`。
+- [x] `test_os_windows.sh` 改為 conf 驅動（bios+uefi 皆測，uefi 檔名自動帶 `--efi`）；`test_os_{debian,ubuntu,fedora,ubuntu_zfs}.sh` 改用契約推導。
+- [x] TODO: 注意 windows CI job 現在會連跑 bios+uefi 兩張碟，runner 時間約 2 倍（PN42 有 KVM 應可承受；超時再評估拆分 jobs）。
+
+### Phase 0：repo server 部署（done, 2026-11-13）
+- [x] 140.110.240.58 就位：`cicd` 帳號、ssh port 3322、影像目錄 `/home/cicd/clonezilla-cicd-cloudimages`。
+- [x] runner 判別：PN42／類似機器 job 以 `gitlab-runner` 執行（`ps`+`builds/` 擁有者驗證）；F1 以 `u1597171` 執行。
+- [x] ssh key 部署：三台（PN42、F1、vm-runner）皆有 `clonezilla-imgrepo` ssh config 別名，`ssh clonezilla-imgrepo` 可登入。
+- [ ] 待做：在 PN42 上跑首次 `sync_images.sh --pull --yes`（或 `--push`）實測，確認遠端目錄存在且可寫。
+- [ ] （之後）nginx 唯讀 http :80 作為備援取用管道。
+- [ ] （延後）ssh 強化：test runner key 加 `command="rrsync -ro /home/cicd/clonezilla-cicd-cloudimages"` 唯讀限制（本輪先不鎖）；前置：先將 `--push` 的 manifest 重建從裸 `ssh "cd ... && sha256sum ..."` 改為 **producer 本機產生後隨檔推送**（純 rsync 檔案寫入），之後 PN42 key 也能鎖，server 零 shell。
+
+### Phase 2：CI 接線（等 Phase 0 ssh key 部署）
+- [ ] `.gitlab-ci.yml` 新增 `images:sync`（daily 排程、tag `windows` 暫；長遠 PN42 加掛 `image_creator` tag）：`download_cloud_images.sh` → `sync_images.sh --push --yes`。
+- [ ] 新增 `images:build:zfs`（manual/weekly）：`build-ubuntu-zfs-image.sh` → smoke test → `--push`。
+- [ ] `child-pipeline.yml` before_script：保留 `/data/cloudimages` 快速路徑；缺 image 時 `sync_images.sh --pull --yes`；repo 不可達退回現行警告行為。
+- [ ] windows 手動匯入流程 runbook（usage.md 補章節；含 checksum 登錄）。
+
+### Phase 3：zfs 測試上線（等 image 上 repo）
+- [ ] 解除原 todo: 於 child-pipeline.yml 註冊 `test:os:ubuntu-zfs` job + publish needs + EXPECTED_TEST_JOBS。

@@ -130,6 +130,8 @@ Test results are shown in the console, and detailed logs for each major operatio
 - **`clonezilla-zip2qcow.sh`**: A utility to convert a Clonezilla Live ZIP archive into the QCOW2, kernel, and initrd files required for booting in QEMU.
 - **`validate.sh`**: A helper script to verify that a restored OS disk image can boot successfully, using cloud-init for automation.
 - **`build-ubuntu-zfs-image.sh`**: Builds Ubuntu 24.04 ZFS-on-root golden images (UEFI/BIOS) fully unattended via subiquity autoinstall; output lands in `qemu/cloudimages/` for `jobs/test_os_ubuntu_zfs.sh`.
+- **`qemu/cloudimages/download_cloud_images.sh`**: Downloads cloud images per `cloud_images.conf` (`OS RELEASE ARCH [FIRMWARE] URL [SHA256]`; atomic download, optional checksums; `--check`/`--prune`/`--migrate` modes).
+- **`qemu/cloudimages/sync_images.sh`**: Syncs local `qemu/cloudimages/` with the central image repo (PN42 pushes, test runners pull over rsync/ssh, sha256-manifest based). See usage.md for the repo layout.
 
 For detailed command-line options for each script, see the **[Usage Guide](usage.md)**.
 
