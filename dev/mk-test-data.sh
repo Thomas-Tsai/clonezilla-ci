@@ -307,7 +307,7 @@ fi
 echo "[INFO] Building SHA256SUMS manifest..."
 (
     cd "$OUT_DIR"
-    find . -type f ! -name 'SHA256SUMS.txt' -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS.txt
+    find . -type f ! -name 'SHA256SUMS.txt' -print0 | LC_ALL=C sort -z | xargs -0 sha256sum >SHA256SUMS.txt
 )
 
 FILES_N=$(find "$OUT_DIR" -type f | wc -l)
