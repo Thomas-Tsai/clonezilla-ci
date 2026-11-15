@@ -343,7 +343,7 @@ PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.24
 - [x] PN42 首次實測通過（2026-11-13）：`/data/cloudimages` chown 給 gitlab-runner + setgid；`--migrate` 改 bios 名；小 push（debian-13-amd64）→ 全量 push（14 張 ~20G，115MB/s）→ remote manifest 重建 → `--pull` 全部 up to date；zfs×2 與 windows-11-uefi 僅存於 debian-lab，如預期顯示 `not on repo yet; skipping`。
 - [x] F1 多機取像驗證通過（2026-11-13）：`--migrate` 改 bios 名；`--pull` 偵測 10 張 daily 碟為 stale（兩機群版本漂移，sha256 錨點運作）並重抓、4 張 up to date、3 張 MANUAL skip；`--check` 全綠。
 - [ ] （之後）nginx 唯讀 http :80 作為備援取用管道。
-- [ ] repo 缺口補齊：`ubuntu-zfs-24.04-{uefi,bios}-amd64.qcow2` 與 `windows-11-uefi-amd64.qcow2` 目前在 debian-lab——補傳（debian-lab 加 ssh key 後 push）或由 PN42 重建（Phase 2/3）。
+- [ ] repo 缺口補齊：`ubuntu-zfs-24.04-{uefi,bios}-amd64.qcow2` 已由 `images:build:zfs`（job 17998450553）push 上 repo（F1 pull 可見 downloading，待人機端下完即全綠）；`windows-11-uefi-amd64.qcow2` 仍僅在 debian-lab——補傳（debian-lab 加 ssh key 後 push）或由 PN42 windows 匯入流程補。
 - [ ] （延後）ssh 強化：test runner key 加 `command="rrsync -ro /home/cicd/clonezilla-cicd-cloudimages"` 唯讀限制（本輪先不鎖）；前置：先將 `--push` 的 manifest 重建從裸 `ssh "cd ... && sha256sum ..."` 改為 **producer 本機產生後隨檔推送**（純 rsync 檔案寫入），之後 PN42 key 也能鎖，server 零 shell。
 
 ### Phase 2：CI 接線（done, 2026-11-13；排程建立與驗證待做）
