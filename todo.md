@@ -351,6 +351,9 @@ PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.24
 - [x] 新增 `images:build:zfs`（manual、`allow_failure: true`）：`build-ubuntu-zfs-image.sh --firmware both --output /data/cloudimages` → push。（2026-11-13 手動 pipeline 3063635580 驗證：1276s 成功，PN42 KVM 建置 uefi+bios → push → manifest 重建；retry job 17998450553；mid-run 誤觸取消後 retry API 復原正常）
 - [x] `images:sync` 手動驗證（2026-11-13，job 17997620584，566s 成功）：全部 up to date、增量 525B、remote manifest 重建 OK。
 - [x] child 自動補像 gate 驗證（2026-11-13，child 3063638035 / test:fs:ext4 @F1 15min 成功）：before_script 正確走 F1 fallback 目錄、`MISSING=0` → `no pull needed.`；telegram branch gate 於 notify:telegram 實戰顯示 `branch 'feature/ubuntu-zfs-on-root' is not 'main'; notification skipped.`，群組靜音 ✓
+- [x] 新 runner cicdrunner 上線檢查（2026-11-15 遠端體檢）：Ubuntu 24.04/8C/16G/KVM（實即 ubuntu-2404-vm-runner，runner id 55772072、tag clonezilla、concurrent=1）；套件全齊（含 zfsutils-linux）；ssh alias + `/data/cloudimages`(gitlab-runner, setgid) 已設；bootstrap pull 進行中。
+- [ ] cicdrunner 磁碟限制對策：113G 僅 35G 可用 < 全套 45G → `SYNC_SKIP_OS=windows`（image_common.sh 於 each_conf_entry 過濾；prune 自動豁免）；需於該機 `config.toml` `environment=["SYNC_SKIP_OS=windows"]` 常設 + 先手動 bootstrap linux 影像。（待驗證）
+- [ ] cicdrunner 補強：`sudo usermod -aG kvm gitlab-runner`（KVM group 未含）+ reload/restart runner；`/data/dataSets` 待同步（fs data 測試需；評估是否也納入 repo 同步或獨立 rsync）。
 - [ ] 後續改善：`build-ubuntu-zfs-image.sh` CI 內 ISO 下載進度洗爆 4MB job log 上限（wget dots；改導向 log 檔或 quiet）。
 - [ ] 後續改善：`sync_images.sh --push` 無上傳時跳過遠端 manifest 重建（no-op 目前仍遠端重 hash 20G ≈8min）。
 - [x] `child-pipeline.yml` before_script 自動 `--pull`：共享影像目錄可寫（`/data/cloudimages` 或 F1 fallback）且 `MISSING>0` 才拉（1200s timeout），stale 碟不在 job 內更新（避免 I/O 風暴），失敗退回警告；`IMAGE_PULL=false` 停用。（待驗證）

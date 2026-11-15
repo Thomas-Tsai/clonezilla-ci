@@ -345,6 +345,9 @@ build_singularity:
       # IMAGE_PULL=false disables. Missing/stale images are pulled with a
       # hard timeout; failure logs a warning and the job continues with
       # whatever images exist locally.
+      # SYNC_SKIP_OS (set via the runner's config.toml `environment` list,
+      # e.g. environment = ["SYNC_SKIP_OS=windows"]) makes --check/pull/push
+      # ignore those OS entries on runners without room for big images.
       echo "Checking cloud images against central repo..."
       IMAGE_DIR=""
       if [ -d "/data/cloudimages" ] && [ -w "/data/cloudimages" ]; then

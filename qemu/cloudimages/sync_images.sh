@@ -27,6 +27,11 @@
 #   CLOUD_IMAGES_DIR    Local image directory (default: this script's directory;
 #                       override e.g. to better suit PN42 layouts where images
 #                       live in /data/cloudimages instead of the checkout).
+#   SYNC_SKIP_OS        Space/comma-separated OS names to ignore, e.g.
+#                       SYNC_SKIP_OS=windows on runners without room for the
+#                       big windows images. Skipped entries never pull/push and
+#                       are prune-exempt. Set it persistently via the runner's
+#                       config.toml environment list.
 #
 # Exit codes:
 #   0 success / nothing to do
@@ -68,6 +73,7 @@ Environment:
   IMAGE_REPO_DIR      Remote directory (current: ${IMAGE_REPO_DIR})
   IMAGE_REPO_SSH_PORT SSH port (current: ${IMAGE_REPO_SSH_PORT})
   CLOUD_IMAGES_DIR    Local image directory (current: ${CLOUD_IMAGES_DIR})
+  SYNC_SKIP_OS        OS names to skip (current: ${SYNC_SKIP_OS:-<none>})
 EOF
 }
 

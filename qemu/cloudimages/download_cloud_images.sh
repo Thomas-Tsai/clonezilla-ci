@@ -18,6 +18,11 @@
 #   --force       Re-download and overwrite existing images.
 #   --yes         Skip interactive confirmations (for --prune/--migrate).
 #
+# Environment:
+#   SYNC_SKIP_OS      Space/comma-separated OS names to ignore (runners without
+#                     room for big images, e.g. SYNC_SKIP_OS=windows). Skipped
+#                     entries never download/pull/push and are prune-exempt.
+#
 # Exit codes:
 #   0 success (or nothing to do)
 #   1 usage/config error or aborted action

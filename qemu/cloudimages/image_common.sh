@@ -73,6 +73,19 @@ conf_url_is_downloadable() {
     [[ "$1" =~ ^https?:// ]]
 }
 
+# SYNC_SKIP_OS: space/comma-separated OS names filtered out of every config
+# entry (e.g. SYNC_SKIP_OS=windows on runners without room for the ~30G
+# windows images). Applies to --check/--pull/--push alike; prune_orphans
+# automatically exempts skipped entries instead of deleting them.
+# Empty/unset = no skipping.
+sync_skip_os_hit() {
+    local list="${SYNC_SKIP_OS//,/ }" skip
+    for skip in $list; do
+        [[ "$CI_OS" == "$skip" ]] && return 0
+    done
+    return 1
+}
+
 # each_conf_entry <config_file> <callback>
 # Runs <callback> for every non-comment config line, with CI_* globals set.
 each_conf_entry() {
@@ -84,6 +97,9 @@ each_conf_entry() {
         parse_conf_entry "$line"
         if [[ -z "$CI_OS" || -z "$CI_RELEASE" || -z "$CI_ARCH" || -z "$CI_URL" ]]; then
             echo "[WARN] Skipping invalid config line: $line" >&2
+            continue
+        fi
+        if sync_skip_os_hit; then
             continue
         fi
         "$callback"
@@ -113,18 +129,44 @@ confirm_or_skip() {
     [[ "$answer" == [yY]* ]]
 }
 
+# _in_list <needle> <item>...
+_in_list() {
+    local needle="$1"
+    shift
+    local item
+    for item in "$@"; do
+        [[ "$needle" == "$item" ]] && return 0
+    done
+    return 1
+}
+
 # prune_orphans <config_file>
 # Deletes local *.qcow2 files in CLOUD_IMAGES_DIR not referenced by the config.
+# Entries skipped via SYNC_SKIP_OS are exempt (never deleted).
 prune_orphans() {
     local config_file="$1"
     local -a contract=()
-    local name orphan
+    local -a exempt=()
     local -a orphans=()
-    mapfile -t contract < <(list_conf_filenames "$config_file")
+    local name orphan line
+
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*# || "$line" =~ ^[[:space:]]*$ ]] && continue
+        parse_conf_entry "$line"
+        [[ -z "$CI_OS" || -z "$CI_RELEASE" || -z "$CI_ARCH" || -z "$CI_URL" ]] && continue
+        if sync_skip_os_hit; then
+            exempt+=("$(image_filename)")
+        else
+            contract+=("$(image_filename)")
+        fi
+    done <"$config_file"
 
     while IFS= read -r -d '' path; do
         name="$(basename "$path")"
-        if ! printf '%s\n' "${contract[@]:-}" | grep -qxF "$name"; then
+        if _in_list "$name" "${exempt[@]:-}"; then
+            continue
+        fi
+        if ! _in_list "$name" "${contract[@]:-}"; then
             orphans+=("$name")
         fi
     done < <(find "$CLOUD_IMAGES_DIR" -maxdepth 1 -name '*.qcow2' -print0)

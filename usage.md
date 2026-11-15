@@ -265,8 +265,9 @@ PN42（producer, tag: windows）  --rsync/ssh push-->  140.110.240.58  <--rsync/
 
 ./sync_images.sh --prune [--yes]     # 清理本機 orphan（同 download_cloud_images.sh --prune）
 ```
-- 環境變數：`IMAGE_REPO_HOST`（預設 `140.110.240.58`，runner 上也可用 `clonezilla-imgrepo` 別名）、`IMAGE_REPO_USER`（預設 `cicd`）、`IMAGE_REPO_DIR`（預設 `/home/cicd/clonezilla-cicd-cloudimages`）、`IMAGE_REPO_SSH_PORT`（預設 `3322`）、`CLOUD_IMAGES_DIR`（本機影像目錄；預設腳本所在目錄，PN42 上可指到 `/data/cloudimages`）。
+- 環境變數：`IMAGE_REPO_HOST`（預設 `140.110.240.58`，runner 上也可用 `clonezilla-imgrepo` 別名）、`IMAGE_REPO_USER`（預設 `cicd`）、`IMAGE_REPO_DIR`（預設 `/home/cicd/clonezilla-cicd-cloudimages`）、`IMAGE_REPO_SSH_PORT`（預設 `3322`）、`CLOUD_IMAGES_DIR`（本機影像目錄；預設腳本所在目錄，PN42 上可指到 `/data/cloudimages`）、`SYNC_SKIP_OS`（空白/逗號分隔的 OS 排除清單，如 `windows`；被排除條目不 check/pull/push 且 prune 豁免）。
 - `--push` 對符號連結會傳**實際內容**（`rsync --copy-links`），本機是 symlink 農場也沒問題。
+- **容量受限 runner** 建議在該 runner 的 `/etc/gitlab-runner/config.toml` `[[runners]]` 下加 `environment = ["SYNC_SKIP_OS=windows"]`，CI 每個 job 即自動忽略大碟；再先手動 `--pull` bootstrap 其餘影像到共享目錄。
 - exit code：`2`＝repo 不可達（CI 應退回舊行為）；`3`＝校驗失敗。
 - 取用協定採 rsync/ssh。http（唯讀 nginx）之後再加。
 
