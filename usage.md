@@ -278,6 +278,26 @@ PN42（producer, tag: windows）  --rsync/ssh push-->  140.110.240.58  <--rsync/
   - `images:build:zfs`（manual，`allow_failure: true`）：`build-ubuntu-zfs-image.sh --firmware both --output /data/cloudimages` → push。驗證穩定後再考慮週期化。
 - 本地手動取用範例：測試腳本（`jobs/test_os_*.sh`）依 `cloud_images.conf` 的 `OS`+`ARCH` 找到對應檔名（`jobs/common.sh` 的 `image_name_from_conf_line`），存在才跑。
 
+#### `dev/mk-test-data.sh`（決定性測試資料集）
+
+data clone/restore 測試（`jobs/test_fs_*.sh` → `data-clone-restore.sh --data`）的 payload 目錄產生器。**每個檔案的內容是 (seed, 相對路徑) 的純函數**（AES-128-CTR 流餵 zeros = 不可壓縮檔；zeros/重複 lorem = 可壓縮檔），同一個 seed 在任何機器產生 bit-identical 的目錄樹，免除各 runner 間資料集不一致與同步問題。
+
+```bash
+# 本機快速驗證
+./dev/mk-test-data.sh --profile small --out /tmp/td --force
+
+# runner 標準佈署（CI before_script 缺 dataSets 時也會自動產生）
+./dev/mk-test-data.sh --out /data/dataSets --seed 42
+
+# 完整性複核（對 SHA256SUMS.txt）
+./dev/mk-test-data.sh --out /data/dataSets --verify
+```
+
+- profile：`small` ~100M / `std` ~1G（預設） / `large` ~10G；seed 預設 42。
+- 內容矩陣：many-small（inode 壓力）、mid、big（不可壓縮）、text（高壓縮）、sparse、empty/1-byte、特殊檔名（空格/unicode/長名）、深巢狀目錄、dotfiles；**預設 0 symlinks**（vfat/exfat/ntfs 相容；`--links` 產生 posix-only 連結陣列）。
+- CI 行為：before_script 依序找 `/data/dataSets` → `/home/u1597171/dataSets` → `$HOME/dataSets`；都沒有且可寫就自動生成（約 10 秒，僅首次），失敗才退回 repo 內建小樣品（`dev/testData`）。
+- dependencies：openssl、dd、truncate、find/sort/xargs/sha256sum（runner 基本內建）。
+
 #### Windows image
 - conf 登錄 `windows 11 amd64 bios` 與 `windows 11 amd64 uefi` 兩行（`MANUAL_*`，不下載）。
 - 取得方式：cloudbase.it 提供 Windows cloud images（見 `qemu/cloudimages/note`），需手動轉 qcow2、以 cloud-init（`isos/win11_cidata.iso`）完成首次開機設定後複製為模板，檔名依契約置於 `qemu/cloudimages/`。

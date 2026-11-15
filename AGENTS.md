@@ -232,6 +232,7 @@ The repository does **not** contain a `.cursor/` directory or a `.github/copilot
 | `download-clonezilla.sh` | Downloads the latest Clonezilla Live ZIP if not present. |
 | `qemu/cloudimages/download_cloud_images.sh` | Downloads cloud images per `cloud_images.conf` (schema: `OS RELEASE ARCH [FIRMWARE] URL [SHA256]`); modes `--check` / `--prune` / `--migrate`. |
 | `qemu/cloudimages/sync_images.sh` | Syncs `qemu/cloudimages/` with the central image repo over rsync/ssh (`--push` on the PN42 producer, `--pull` on runners; sha256-manifest based). |
+| `dev/mk-test-data.sh` | Generates the deterministic test payload for data clone/restore tests (seed+path-keyed content, `SHA256SUMS.txt` manifest; profiles small/std/large, `--force`/`--links`/`--verify`). CI auto-generates into `/data/dataSets` (or fallback dirs) when missing. |
 | `scripts/notify-telegram.sh` | Sends filtered pipeline notifications to a Telegram group (`started` / `finished` modes; never fails the job). |
 
 Agents may call these utilities directly; they already respect the strict Bash conventions described earlier.

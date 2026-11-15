@@ -400,13 +400,35 @@ build_singularity:
       mkdir -p $LOG_DIR
 
       echo "Setting up test data directory..."
-      if [ -d "/data/dataSets" ]; then
+      # Deterministic data set (dev/mk-test-data.sh, seed=42): the same bits
+      # on every runner — replaces per-runner hand-picked payloads. Search
+      # order matches the image repo pattern: shared dir first, then runner
+      # home. Missing and writable => generate locally (~10s, once ever).
+      DATASETS_DIR=""
+      for _d in "/data/dataSets" "/home/u1597171/dataSets" "$HOME/dataSets"; do
+        if [ -d "$_d" ]; then
+          DATASETS_DIR="$_d"
+          break
+        fi
+      done
+      if [ -z "$DATASETS_DIR" ]; then
+        for _d in "/data" "$HOME"; do
+          if [ -w "$_d" ] && [ -x dev/mk-test-data.sh ] && command -v openssl > /dev/null 2>&1; then
+            echo "Generating deterministic data set in ${_d}/dataSets (seed=42)..."
+            if mkdir -p "${_d}/dataSets" && dev/mk-test-data.sh --out "${_d}/dataSets" --seed 42 --force; then
+              DATASETS_DIR="${_d}/dataSets"
+            fi
+            break
+          fi
+        done
+      fi
+      if [ -n "$DATASETS_DIR" ]; then
         mkdir -p dev
         rm -rf dev/testData
-        ln -s /data/dataSets dev/testData
-        echo "Linked /data/dataSets to dev/testData."
+        ln -sfn "$DATASETS_DIR" dev/testData
+        echo "Linked ${DATASETS_DIR} to dev/testData."
       else
-        echo "Warning: /data/dataSets not found on runner. Data clone/restore tests might fail."
+        echo "Warning: no local dataSets available. Data clone/restore tests fall back to the repo sample payload."
       fi
   script:
     - |

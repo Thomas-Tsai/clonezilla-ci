@@ -355,7 +355,10 @@ PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.24
 - [x] cicdrunner 磁碟救援 + 200G 碟上線（2026-11-15）：root 滿載 ENOSPC 導致 systemd/dbus 半癱；於 IIC（GOV109213/ai-cloud）建 `cicdrunner-data` 200G SSD（f42bf728）+ attach → vdc mkfs ext4(label cicd-data) 掛 `/data`（fstab nofail UUID）；舊內容 rsync 搬移後 root 92%→66%；`/data/dataSets` 建立（gitlab-runner, setgid）；force reboot 後 systemd/journal 復原、runner active。
 - [x] cicdrunner kvm group：`usermod -aG kvm gitlab-runner`（重開機後生效，qemu --enable-kvm 可用）。
 - [x] cicdrunner bootstrap 完成：全套 17 image（44G 含 windows-11-uefi）`--pull` 到 `/data/cloudimages`，`--check` 全 OK；因 200G 碟容量足夠，**未使用** `SYNC_SKIP_OS`（功能保留給小容量 runner；cicdrunner 有 200G 就不必）。
-- [ ] cicdrunner 剩餘：`/data/dataSets` 內容待同步（fs data 測試需要）；vdb `cicd-volume`(50G) 之 vdb1 14G jfs `PARTLABEL=data-clone-source` 用途待確認（可留可切）；`ubuntu-2404-vm-runner`→`cicdrunner` 主機名對映集中管理之後再整理。
+- [x] dataSets 統一（2026-11-15）：PN42 舊 dataSets 實為工作目錄快照（941M、含 .git/zip、三機不一致、F1 無）→ 改採 **`dev/mk-test-data.sh` 決定性產生器**（seed+path 純函數、AES-CTR 不可壓縮檔/zeros-lorem 可壓縮檔/sparse/深巢狀/特殊檔名/dotfiles/many-small/big；`SHA256SUMS.txt` 可 --verify；profile small/std/large；預設 0 symlinks）。三機同 seed=42 即產生 bit-identical payload，免傳輸。
+- [x] `child-pipeline.yml` 自動生成：before_script 缺 dataSets 時於 `/data` → `$HOME` 可寫處生成（~10s，僅首次），搜尋序 `/data/dataSets` → `/home/u1597171/dataSets` → `$HOME/dataSets`。
+- [ ] 部署驗證：cicdrunner `/data/dataSets` 已生成待驗 checksum 跨機一致（同 seed）；F1 由 u1597171 生成 `/home/u1597171/dataSets`；PN42 舊快照暫留（驗證穩定後再切換）。（待驗證）
+- [ ] cicdrunner 剩餘：vdb `cicd-volume`(50G) 之 vdb1 14G jfs `PARTLABEL=data-clone-source` 用途待確認（可留可切）；`ubuntu-2404-vm-runner`→`cicdrunner` 主機名對映集中管理之後再整理。
 - [ ] 後續改善：`build-ubuntu-zfs-image.sh` CI 內 ISO 下載進度洗爆 4MB job log 上限（wget dots；改導向 log 檔或 quiet）。
 - [ ] 後續改善：`sync_images.sh --push` 無上傳時跳過遠端 manifest 重建（no-op 目前仍遠端重 hash 20G ≈8min）。
 - [x] `child-pipeline.yml` before_script 自動 `--pull`：共享影像目錄可寫（`/data/cloudimages` 或 F1 fallback）且 `MISSING>0` 才拉（1200s timeout），stale 碟不在 job 內更新（避免 I/O 風暴），失敗退回警告；`IMAGE_PULL=false` 停用。（待驗證）
