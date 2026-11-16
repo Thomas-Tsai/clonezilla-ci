@@ -275,7 +275,7 @@ PN42（producer, tag: windows）  --rsync/ssh push-->  140.110.240.58  <--rsync/
 - `child-pipeline.yml` before_script：先檢查共享影像目錄（`/data/cloudimages` → `/work1/u1597171/cloudimages`（F1 GPFS）→ `/home/u1597171/clonezilla-ci/qemu/cloudimages`（F1 舊 fallback））是否可寫且 conf 有缺像（`--check` 的 `MISSING` 計數）；缺像才 `sync_images.sh --pull --yes`（1200s timeout，失敗只警告），然後才做 symlink 掛載。**stale（舊版 daily）影像不會在每個 job 重抓**（避免 sha256 I/O 風暴），更新由 PN42 的 `images:sync --force` 排程負責。設 `IMAGE_PULL=false` 可整體停用。
 - **symlink 寫穿**：download/pull 的 `.part` staging 走 `readlink -f`——本機檔若是 symlink（有時是 symlink 農場指到別的分區），實際內容寫到真身目標位置，鏈結本身保留。F1 把 image 放 GPFS `/work1/.../cloudimages`，CI 鏈條直接從那裡 link。
 - `.gitlab-ci.yml` 影像 jobs（皆跑在 PN42，tags `clonezilla, windows`）：
-  - `images:sync`：`download_cloud_images.sh`（補新條目）→ `sync_images.sh --push --yes`。GitLab schedule 建議：daily `IMAGE_SYNC=true`；weekly 另建 `IMAGE_SYNC=true IMAGE_SYNC_FORCE=true`（重抓 daily 移動目標）。
+  - `images:sync`：`download_cloud_images.sh`（補新條目）→ `sync_images.sh --push --yes`。GitLab schedule **daily `IMAGE_SYNC=true`（id 4556619，03:00 Asia/Taipei）**；job 於**週日自動切 `--force` 全量重抓**（或手動 pipeline 帶 `IMAGE_SYNC_FORCE=true`）——因 GitLab.com Free 排程上限 10 條，單一排程涵蓋兩模式。
   - `images:build:zfs`（manual，`allow_failure: true`）：`build-ubuntu-zfs-image.sh --firmware both --output /data/cloudimages` → push。驗證穩定後再考慮週期化。
 - 本地手動取用範例：測試腳本（`jobs/test_os_*.sh`）依 `cloud_images.conf` 的 `OS`+`ARCH` 找到對應檔名（`jobs/common.sh` 的 `image_name_from_conf_line`），存在才跑。
 
