@@ -352,6 +352,9 @@ build_singularity:
       IMAGE_DIR=""
       if [ -d "/data/cloudimages" ] && [ -w "/data/cloudimages" ]; then
         IMAGE_DIR="/data/cloudimages"
+      elif [ -d "/work1/u1597171/cloudimages" ] && [ -w "/work1/u1597171/cloudimages" ]; then
+        # F1 GPFS work1 layout: images live outside the symlink-farm fallback dir.
+        IMAGE_DIR="/work1/u1597171/cloudimages"
       elif [ -d "/home/u1597171/clonezilla-ci/qemu/cloudimages" ] && [ -w "/home/u1597171/clonezilla-ci/qemu/cloudimages" ]; then
         IMAGE_DIR="/home/u1597171/clonezilla-ci/qemu/cloudimages"
       fi
@@ -382,6 +385,12 @@ build_singularity:
         mkdir -p qemu/cloudimages
         ln -s /data/cloudimages/*.qcow2 qemu/cloudimages/
         echo "Linked cloud images from /data/cloudimages."
+      elif [ -d "/work1/u1597171/cloudimages" ]; then
+        echo "Available qcow imags in /work1/u1597171/cloudimages/:"
+        find /work1/u1597171/cloudimages/ -name "*.qcow2"
+        mkdir -p qemu/cloudimages
+        ln -s /work1/u1597171/cloudimages/*.qcow2 qemu/cloudimages/
+        echo "Linked cloud images from /work1/u1597171/cloudimages."
       elif [ -d "/home/u1597171/clonezilla-ci/qemu/cloudimages" ]; then
         echo "Available qcow imags in /home/u1597171/clonezilla-ci/qemu/cloudimages/:"
         find /home/u1597171/clonezilla-ci/qemu/cloudimages/ -name "*.qcow2"
@@ -524,6 +533,17 @@ test:os:windows11:
     TEST_ENV: "local"
     FORCE_LOCAL: "true"
     TEST_SCRIPT: "jobs/test_os_windows.sh"
+
+# ZFS images are amd64-only for now; the gate in test_os_ubuntu_zfs.sh skips
+# cleanly on older Clonezilla zips (< 3.3.4-20 / 20261030).
+test:os:ubuntu_zfs:
+  extends: .test_template
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_SCRIPT: "jobs/test_os_ubuntu_zfs.sh"
 
 #--- Filesystem Tests ---
 
@@ -736,7 +756,7 @@ publish_reports:
       # arm64/riscv64; adding it would falsely mark the report failed).
       EXPECTED_TEST_JOBS="test:os:ubuntu test:os:debian test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev test:dev_to_dev_lvm_thin test:lvm_thin_save_restore"
       if [ "$ARCH" = "amd64" ]; then
-        EXPECTED_TEST_JOBS="$EXPECTED_TEST_JOBS test:os:windows11"
+        EXPECTED_TEST_JOBS="$EXPECTED_TEST_JOBS test:os:windows11 test:os:ubuntu_zfs"
       fi
       # Selective run: only expect the TEST_FILTER-matched jobs; jobs skipped
       # by the filter would otherwise be wrongly synthesized as missing.

@@ -272,7 +272,8 @@ PN42（producer, tag: windows）  --rsync/ssh push-->  140.110.240.58  <--rsync/
 - 取用協定採 rsync/ssh。http（唯讀 nginx）之後再加。
 
 #### runner 上影像的取用（CI）
-- `child-pipeline.yml` before_script：先檢查共享影像目錄（`/data/cloudimages`，F1 退回 `/home/u1597171/clonezilla-ci/qemu/cloudimages`）是否可寫且 conf 有缺像（`--check` 的 `MISSING` 計數）；缺像才 `sync_images.sh --pull --yes`（1200s timeout，失敗只警告），然後才做既有的 symlink 掛載。**stale（舊版 daily）影像不會在每個 job 重抓**（避免 sha256 I/O 風暴），更新由 PN42 的 `images:sync --force` 排程負責。設 `IMAGE_PULL=false` 可整體停用。
+- `child-pipeline.yml` before_script：先檢查共享影像目錄（`/data/cloudimages` → `/work1/u1597171/cloudimages`（F1 GPFS）→ `/home/u1597171/clonezilla-ci/qemu/cloudimages`（F1 舊 fallback））是否可寫且 conf 有缺像（`--check` 的 `MISSING` 計數）；缺像才 `sync_images.sh --pull --yes`（1200s timeout，失敗只警告），然後才做 symlink 掛載。**stale（舊版 daily）影像不會在每個 job 重抓**（避免 sha256 I/O 風暴），更新由 PN42 的 `images:sync --force` 排程負責。設 `IMAGE_PULL=false` 可整體停用。
+- **symlink 寫穿**：download/pull 的 `.part` staging 走 `readlink -f`——本機檔若是 symlink（有時是 symlink 農場指到別的分區），實際內容寫到真身目標位置，鏈結本身保留。F1 把 image 放 GPFS `/work1/.../cloudimages`，CI 鏈條直接從那裡 link。
 - `.gitlab-ci.yml` 影像 jobs（皆跑在 PN42，tags `clonezilla, windows`）：
   - `images:sync`：`download_cloud_images.sh`（補新條目）→ `sync_images.sh --push --yes`。GitLab schedule 建議：daily `IMAGE_SYNC=true`；weekly 另建 `IMAGE_SYNC=true IMAGE_SYNC_FORCE=true`（重抓 daily 移動目標）。
   - `images:build:zfs`（manual，`allow_failure: true`）：`build-ubuntu-zfs-image.sh --firmware both --output /data/cloudimages` → push。驗證穩定後再考慮週期化。

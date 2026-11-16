@@ -139,7 +139,10 @@ download_entry() {
     local filename
     filename="$(image_filename)"
     local path="${CLOUD_IMAGES_DIR}/${filename}"
-    local part="${path}.part"
+    # Write through symlinks so fallback symlink farms (e.g. F1 -> /work1) survive.
+    local wpath
+    wpath="$(resolve_write_target "$path")"
+    local part="${wpath}.part"
 
     if ! conf_url_is_downloadable "$CI_URL"; then
         echo "  ${filename}: not downloadable (hint: ${CI_URL}); skipping."
@@ -180,7 +183,7 @@ download_entry() {
         fi
     fi
 
-    mv "$part" "$path"
+    mv "$part" "$wpath"
     echo "  ${filename}: downloaded."
 }
 
