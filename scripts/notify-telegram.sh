@@ -161,6 +161,9 @@ EOF
 
 # jobs that publish_reports.sh also treats as expected; kept in sync so the
 # Telegram summary matches the published report (missing artifact = failed).
+# NOTE: adding a new test job requires FOUR synced edits (see the comment at
+# EXPECTED_TEST_JOBS in child-pipeline.yml); a missing entry here or in the
+# notify:telegram/publish_reports needs: lists falsely reports the job failed.
 expected_test_jobs() {
     local jobs="test:os:ubuntu test:os:debian test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev"
     if [[ "${ARCH:-}" == "amd64" ]]; then
