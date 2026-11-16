@@ -321,6 +321,7 @@ cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/c
 - [ ] 未來評估：`jobs/test_fs_zfs.sh`（data fs 層級 ZFS 測試，需在 guest 內建 zpool，仿 LVM-thin 前例）。
 - [x] 於 child-pipeline.yml 註冊 `test:os:ubuntu_zfs` job（amd64-only rules）+ EXPECTED_TEST_JOBS（amd64）+ notify-telegram.sh expected_test_jobs（2026-11-16；zfs image 已由 `images:build:zfs` 上 repo、runners 皆備）。main 驗證通過：pipeline 3073053485/child 3073054533，`test:os:ubuntu_zfs` success（682s @cicdrunner KVM，uefi+bios 兩變體，zip 20261116-tenacious）。
 - [x] 階段總收官（2026-11-16）：feature/ubuntu-zfs-on-root 16 commits 經 MR !6 + !7（補兩筆 github 領先 commit 後補合）併入 main（gitlab `9f1c8a9e`，github 同步）。全量 8-lane 電池 174/174 成功 0 失敗（PN42/F1/cicdrunner）；Telegram branch gate 實證靜音/正式版分流正常。
+- [x] 修 `test:os:ubuntu_zfs` 假失敗（2026-11-16，pipeline #26497）：job 本身 success，但 `notify:telegram` 與 `publish_reports` 的 `needs:` 皆漏 zfs → artifact 未到 → 兩邊「artifact 遺失」保護邏輯各自合成 failed → Telegram 與 Pages 誤紅（邏輯 bug，非測試失敗）。修法：兩處 needs 各補 `job: test:os:ubuntu_zfs optional: true`；`EXPECTED_TEST_JOBS`（yml）與 `expected_test_jobs()`（sh）加「四處同步」防再犯註解。**#26497 的 failed 報告刻意保留於 test-reports branch 作為 bug 歷史見證**。
 - [ ] 待建 GitLab Schedules：daily `IMAGE_SYNC=true`（images:sync）；weekly `IMAGE_SYNC=true` + `IMAGE_SYNC_FORCE=true`（重抓 daily 移動目標）。
 
 ---
