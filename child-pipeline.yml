@@ -352,6 +352,9 @@ build_singularity:
       IMAGE_DIR=""
       if [ -d "/data/cloudimages" ] && [ -w "/data/cloudimages" ]; then
         IMAGE_DIR="/data/cloudimages"
+      elif [ -d "/work1/u1597171/cloudimages" ] && [ -w "/work1/u1597171/cloudimages" ]; then
+        # F1 GPFS work1 layout: images live outside the symlink-farm fallback dir.
+        IMAGE_DIR="/work1/u1597171/cloudimages"
       elif [ -d "/home/u1597171/clonezilla-ci/qemu/cloudimages" ] && [ -w "/home/u1597171/clonezilla-ci/qemu/cloudimages" ]; then
         IMAGE_DIR="/home/u1597171/clonezilla-ci/qemu/cloudimages"
       fi
@@ -382,6 +385,12 @@ build_singularity:
         mkdir -p qemu/cloudimages
         ln -s /data/cloudimages/*.qcow2 qemu/cloudimages/
         echo "Linked cloud images from /data/cloudimages."
+      elif [ -d "/work1/u1597171/cloudimages" ]; then
+        echo "Available qcow imags in /work1/u1597171/cloudimages/:"
+        find /work1/u1597171/cloudimages/ -name "*.qcow2"
+        mkdir -p qemu/cloudimages
+        ln -s /work1/u1597171/cloudimages/*.qcow2 qemu/cloudimages/
+        echo "Linked cloud images from /work1/u1597171/cloudimages."
       elif [ -d "/home/u1597171/clonezilla-ci/qemu/cloudimages" ]; then
         echo "Available qcow imags in /home/u1597171/clonezilla-ci/qemu/cloudimages/:"
         find /home/u1597171/clonezilla-ci/qemu/cloudimages/ -name "*.qcow2"

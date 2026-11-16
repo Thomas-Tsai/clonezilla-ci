@@ -359,6 +359,8 @@ PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.24
 - [x] `child-pipeline.yml` 自動生成：before_script 缺 dataSets 時於 `/data` → `$HOME` 可寫處生成（~10s，僅首次），搜尋序 `/data/dataSets` → `/home/u1597171/dataSets` → `$HOME/dataSets`。
 - [ ] 部署驗證：cicdrunner `/data/dataSets` 已生成待驗 checksum 跨機一致（同 seed）；F1 由 u1597171 生成 `/home/u1597171/dataSets`；PN42 舊快照暫留（驗證穩定後再切換）。（待驗證）
 - [ ] cicdrunner 剩餘：vdb `cicd-volume`(50G) 之 vdb1 14G jfs `PARTLABEL=data-clone-source` 用途待確認（可留可切）；`ubuntu-2404-vm-runner`→`cicdrunner` 主機名對映集中管理之後再整理。
+- [x] F1 GPFS work1 佈局 + symlink 寫穿（2026-11-16）：F1 quota 風暴後，image 改放 `/work1/u1597171/cloudimages`（GPFS 100G），windows 碟刪除（-30G）、`concurrent=4`、runner env `SYNC_SKIP_OS=windows`；`image_common.sh` 新增 `resolve_write_target`（download/pull staging 用 `readlink -f` 寫穿 symlink 到真身、鏈結保留），`child-pipeline.yml` IMAGE_DIR 與 symlink 掛載候選加入 work1（優於 home fallback 舊鏈）。沙箱驗證：stale symlink → 內容寫穿至 target、sha 與 repo 一致、鏈結保留。
+- [x] 修 `SYNC_SKIP_OS` 未設時 `set -u` 崩潰（7d311bcd 引進；沙箱抓包）。
 - [ ] 後續改善：`build-ubuntu-zfs-image.sh` CI 內 ISO 下載進度洗爆 4MB job log 上限（wget dots；改導向 log 檔或 quiet）。
 - [ ] 後續改善：`sync_images.sh --push` 無上傳時跳過遠端 manifest 重建（no-op 目前仍遠端重 hash 20G ≈8min）。
 - [x] `child-pipeline.yml` before_script 自動 `--pull`：共享影像目錄可寫（`/data/cloudimages` 或 F1 fallback）且 `MISSING>0` 才拉（1200s timeout），stale 碟不在 job 內更新（避免 I/O 風暴），失敗退回警告；`IMAGE_PULL=false` 停用。（待驗證）

@@ -11,6 +11,8 @@
 #   --pull   Fetch config-referenced images that are missing or stale locally
 #            (stale = sha256 differs from the repo MANIFEST.sha256). Downloads
 #            are staged as .part files and verified against the manifest.
+#            Symlinked local files are written through to their targets, so
+#            fallback symlink farms (e.g. F1 -> /work1) are preserved.
 #   --push   Upload local config-referenced images to the repo, then rebuild the
 #            remote MANIFEST.sha256 / manifest.tsv. Run this on the producer
 #            machine (ASUS PN42) only. Symlinked images are uploaded as file
@@ -150,6 +152,9 @@ pull_entry() {
     local filename
     filename="$(image_filename)"
     local path="${CLOUD_IMAGES_DIR}/${filename}"
+    # Write through symlinks so fallback symlink farms (e.g. F1 -> /work1) survive.
+    local wpath
+    wpath="$(resolve_write_target "$path")"
     local remote_sha="${REMOTE_SHA[$filename]:-}"
 
     if [[ -z "$remote_sha" ]]; then
@@ -168,7 +173,7 @@ pull_entry() {
         echo "  ${filename}: missing; downloading."
     fi
 
-    local part="${path}.part"
+    local part="${wpath}.part"
     rm -f "$part"
     if ! rsync -az --partial --timeout=300 -e "$RSYNC_SSH" "${REMOTE}/${filename}" "$part"; then
         echo "  [ERROR] rsync failed for ${filename}" >&2
@@ -185,7 +190,7 @@ pull_entry() {
         PULL_SHA_FAILED="true"
         return
     fi
-    mv "$part" "$path"
+    mv "$part" "$wpath"
     echo "  ${filename}: synced."
 }
 

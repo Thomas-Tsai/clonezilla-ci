@@ -79,7 +79,9 @@ conf_url_is_downloadable() {
 # automatically exempts skipped entries instead of deleting them.
 # Empty/unset = no skipping.
 sync_skip_os_hit() {
-    local list="${SYNC_SKIP_OS//,/ }" skip
+    local list="${SYNC_SKIP_OS:-}"
+    list="${list//,/ }"
+    local skip
     for skip in $list; do
         [[ "$CI_OS" == "$skip" ]] && return 0
     done
@@ -115,6 +117,21 @@ list_conf_filenames() {
 # sha256_of <file>
 sha256_of() {
     sha256sum "$1" | awk '{print $1}'
+}
+
+# resolve_write_target <path>
+# If <path> is a symlink (including a broken one), print the resolved target
+# path; otherwise print <path>. Download/pull staging writes go to this
+# location so symlink farms (e.g. the F1 fallback dir pointing at /work1)
+# are preserved instead of being replaced by real files.
+resolve_write_target() {
+    local p="$1" resolved
+    resolved="$(readlink -f "$p" 2>/dev/null || true)"
+    if [[ -n "$resolved" && "$resolved" != "$p" ]]; then
+        echo "$resolved"
+    else
+        echo "$p"
+    fi
 }
 
 # confirm_or_skip <prompt>
