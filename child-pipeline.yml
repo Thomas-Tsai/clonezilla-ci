@@ -55,6 +55,11 @@ variables:
   # Note: test:os:windows11 (tag: windows) is NOT affected by this variable
   # — it keeps its dedicated tags.
   RUNNER_TAG: "clonezilla"
+  # IMAGE_PULL controls the central image repo pull in the test before_script:
+  # missing config-referenced images are fetched from the repo into a writable
+  # shared image dir (/data/cloudimages or the F1 fallback) before symlinking.
+  # Set to "false" to disable (e.g. repo maintenance / offline work).
+  IMAGE_PULL: "true"
   # TEST_FILTER (optional, empty = run everything): a grep -E regex matched
   # against each test job's name, e.g. "lvm_thin", "fs:(ext4|xfs)" or
   # "test:dev_to_dev". Non-matching test jobs exit 0 within seconds (kept
@@ -333,6 +338,43 @@ build_singularity:
         export ZIP_FILE="${ZIP_FILE_FROM_BUILD}"
       fi
 
+      # Sync missing cloud images from the central image repo (rsync/ssh).
+      # Only fires when a shared image dir is writable AND the config lists
+      # images that are missing locally (a cheap existence check; stale daily
+      # builds are NOT auto-refreshed here to avoid per-job sha256 I/O storms).
+      # IMAGE_PULL=false disables. Missing/stale images are pulled with a
+      # hard timeout; failure logs a warning and the job continues with
+      # whatever images exist locally.
+      # SYNC_SKIP_OS (set via the runner's config.toml `environment` list,
+      # e.g. environment = ["SYNC_SKIP_OS=windows"]) makes --check/pull/push
+      # ignore those OS entries on runners without room for big images.
+      echo "Checking cloud images against central repo..."
+      IMAGE_DIR=""
+      if [ -d "/data/cloudimages" ] && [ -w "/data/cloudimages" ]; then
+        IMAGE_DIR="/data/cloudimages"
+      elif [ -d "/home/u1597171/clonezilla-ci/qemu/cloudimages" ] && [ -w "/home/u1597171/clonezilla-ci/qemu/cloudimages" ]; then
+        IMAGE_DIR="/home/u1597171/clonezilla-ci/qemu/cloudimages"
+      fi
+      if [ "$IMAGE_PULL" = "false" ]; then
+        echo "IMAGE_PULL=false: skipping pull from image repo."
+      elif [ -z "$IMAGE_DIR" ]; then
+        echo "No writable shared cloud image dir found; skipping pull (tests may skip missing images)."
+      elif [ ! -x qemu/cloudimages/sync_images.sh ]; then
+        echo "qemu/cloudimages/sync_images.sh not found/executable; skipping pull."
+      else
+        MISSING_COUNT=$(CLOUD_IMAGES_DIR="$IMAGE_DIR" qemu/cloudimages/download_cloud_images.sh --check | grep -c '^MISSING' || true)
+        if [ "$MISSING_COUNT" -gt 0 ]; then
+          echo "$MISSING_COUNT image(s) missing in $IMAGE_DIR; pulling from central repo (timeout 1200s)..."
+          if CLOUD_IMAGES_DIR="$IMAGE_DIR" timeout 1200 qemu/cloudimages/sync_images.sh --pull --yes; then
+            echo "Cloud images synced from central repo."
+          else
+            echo "WARNING: image pull failed (repo unreachable / key missing); continuing with existing images."
+          fi
+        else
+          echo "All config-referenced images present in $IMAGE_DIR; no pull needed."
+        fi
+      fi
+
       echo "Setting up qemu cloud images in the project root..."
       if [ -d "/data/cloudimages" ]; then
         echo "Available qcow imags in /data/cloudimages/:"
@@ -358,13 +400,35 @@ build_singularity:
       mkdir -p $LOG_DIR
 
       echo "Setting up test data directory..."
-      if [ -d "/data/dataSets" ]; then
+      # Deterministic data set (dev/mk-test-data.sh, seed=42): the same bits
+      # on every runner — replaces per-runner hand-picked payloads. Search
+      # order matches the image repo pattern: shared dir first, then runner
+      # home. Missing and writable => generate locally (~10s, once ever).
+      DATASETS_DIR=""
+      for _d in "/data/dataSets" "/home/u1597171/dataSets" "$HOME/dataSets"; do
+        if [ -d "$_d" ]; then
+          DATASETS_DIR="$_d"
+          break
+        fi
+      done
+      if [ -z "$DATASETS_DIR" ]; then
+        for _d in "/data" "$HOME"; do
+          if [ -w "$_d" ] && [ -x dev/mk-test-data.sh ] && command -v openssl > /dev/null 2>&1; then
+            echo "Generating deterministic data set in ${_d}/dataSets (seed=42)..."
+            if mkdir -p "${_d}/dataSets" && dev/mk-test-data.sh --out "${_d}/dataSets" --seed 42 --force; then
+              DATASETS_DIR="${_d}/dataSets"
+            fi
+            break
+          fi
+        done
+      fi
+      if [ -n "$DATASETS_DIR" ]; then
         mkdir -p dev
         rm -rf dev/testData
-        ln -s /data/dataSets dev/testData
-        echo "Linked /data/dataSets to dev/testData."
+        ln -sfn "$DATASETS_DIR" dev/testData
+        echo "Linked ${DATASETS_DIR} to dev/testData."
       else
-        echo "Warning: /data/dataSets not found on runner. Data clone/restore tests might fail."
+        echo "Warning: no local dataSets available. Data clone/restore tests fall back to the repo sample payload."
       fi
   script:
     - |
@@ -566,9 +630,10 @@ test:lvm_thin_save_restore:
 #
 # Filter (enforced inside scripts/notify-telegram.sh, not via rules, so the
 # job itself never blocks or fails the pipeline):
+#   - non-default branch (e.g. feature/*)     -> always skip (official runs only)
 #   - scheduled + VERSION_STATUS=new_version  -> send summary (success or failure)
 #   - scheduled + no_change / in_progress / mirror_empty -> skip
-#   - manual (push / web / api / trigger)     -> always send summary
+#   - manual (push / web / api / trigger) on main -> always send summary
 #
 # needs mirrors publish_reports so this job (a) runs after every test job,
 # (b) receives the results/*.yml artifacts for the summary, and (c) receives

@@ -44,14 +44,25 @@ if [[ -n "$CLONEZILLA_ZIP" ]]; then
 fi
 
 # --- Test for windows clone and restore ---
-test_windows11_clone_restore() {
-    local image_path="$PROJECT_ROOT/qemu/cloudimages/windows-11-${ARCH}.qcow2"
+# Discovers windows entries (per firmware) from qemu/cloudimages/cloud_images.conf.
+# UEFI-named images boot with --efi automatically (os-clone-restore.sh detects
+# "uefi" in the template filename).
+test_windows_clone_restore() {
+    local os="windows"
 
-    if [ -f "$image_path" ]; then
-        run_os_clone_restore "$image_path" "$PROJECT_ROOT/isos/win11_cidata.iso" "$NO_SSH_FORWARD_ARG"
-    else
-        echo "Skipping test for windows-11-${ARCH}: image file not found at ${image_path}"
-    fi
+    grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" "$PROJECT_ROOT/qemu/cloudimages/cloud_images.conf" | while read -r config_line; do
+        # Derive the contract filename (handles the firmware column)
+        local image_name
+        image_name=$(image_name_from_conf_line "$config_line")
+        local image_path="$PROJECT_ROOT/qemu/cloudimages/${image_name}"
+
+        if [ -f "$image_path" ]; then
+            run_os_clone_restore "$image_path" "$PROJECT_ROOT/isos/win11_cidata.iso" "$NO_SSH_FORWARD_ARG"
+        else
+            echo "Skipping test for ${image_name%.qcow2}: image file not found at ${image_path}"
+            echo "  (windows images are prepared manually; see qemu/cloudimages/note)"
+        fi
+    done
 }
 
 # --- Main execution ---

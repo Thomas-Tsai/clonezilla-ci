@@ -7,9 +7,11 @@
 #   finished  - Test-suite summary, called from the notify:telegram job.
 #
 # Notification filter (this is what keeps the group quiet):
+#   - any pipeline on a non-default branch (e.g. feature/*)       -> always skip
+#     (exceptions: the default branch itself + the test-reports branch)
 #   - scheduled pipeline + VERSION_STATUS=new_version            -> send
 #   - scheduled pipeline + no_change / in_progress / mirror_empty -> skip
-#   - manual pipeline (push / web / api / trigger)                -> always send
+#   - manual pipeline (push / web / api / trigger) on main        -> always send
 #
 # The script NEVER fails the calling job: errors are logged as warnings
 # and the exit code is always 0.
@@ -93,6 +95,16 @@ html_escape() {
 
 # The notification filter. Returns 0 when a message should be sent.
 passes_filter() {
+    # Branch gate: the group reflects official runs only. Pipelines on
+    # non-default branches (feature work, WIP) never notify; the
+    # test-reports branch is allowed (report infrastructure).
+    local default_branch="${CI_DEFAULT_BRANCH:-main}"
+    if [[ -n "${CI_COMMIT_BRANCH:-}" ]] \
+        && [[ "${CI_COMMIT_BRANCH}" != "${default_branch}" && "${CI_COMMIT_BRANCH}" != "test-reports" ]]; then
+        log_info "Filter: branch '${CI_COMMIT_BRANCH}' is not '${default_branch}'; notification skipped."
+        return 1
+    fi
+
     case "$MODE" in
         started)
             [[ "${VERSION_STATUS:-}" == "new_version" ]]

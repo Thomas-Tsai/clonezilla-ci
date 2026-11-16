@@ -61,6 +61,7 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [x] child-pipeline.yml 新增 `notify:telegram` job（deploy stage, `when: always`, needs 比照 publish_reports），並在 `check_version` script 末端 source `version_check.env` 後呼叫 `started` 模式。
 - [x] 在 GitLab project 設定 masked CI/CD variables：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`（bot 需加入目標 group）。(已設定；masked、非 protected，feature branch 亦可用)
 - [x] 腳本實際發送驗證：以 SELFTEST 資料發送 started/finished 兩則訊息，Telegram group 已確認收到（2026-10-27）。
+- [x] branch gate（2026-11-13）：非預設 branch（feature/* 等）任何模式一律不送（`CI_COMMIT_BRANCH` != `CI_DEFAULT_BRANCH` 且 != `test-reports` 時 skip）；群組只反映正式版 pipeline。
 - [ ] 真實 pipeline 觸發驗證 `notify:telegram` job 行為（手動觸發一次完整測試）。已於 2026-10-27 觸發 child pipeline [#19019](https://gitlab.com/freelabstw/clonezilla-ci/-/pipelines/2993361835)（commit 484a1483，amd64/testing manual run；check_version 正確缺席、notify:telegram 待命），待 suite 完成後確認 Telegram group 收到 finished 摘要訊息。(驗證中)
 
 ### generate_report.sh
@@ -302,3 +303,66 @@ cloud init 已經完成於 dev/cloudinit/prepareiso.sh 會產生 dev/cloudinit/c
 - [x] `validate.sh` 增加 `--efi` 選項，啟用 AMD64 EFI 開機支援。
 - [x] `validate.sh` 增加 `--temp-dir` 選項，用於指定臨時檔案存放目錄，支援 UEFI VARS 檔案清理。
 - [x] `validate.sh` 將 UEFI 相關的 `-pflash` 參數改為明確的 `-drive if=pflash,format=raw...` 語法。
+---
+
+## Ubuntu ZFS-on-root 測試（partclone.zfs）
+
+- [x] `build-ubuntu-zfs-image.sh`：全自動建置 Ubuntu 24.04 ZFS-on-root golden image（subiquity autoinstall，免互動；kernel 直開 + NoCloud seed）。
+- [x] autoinstall 模板 `dev/cloudinit/autoinstall-zfs/`（UEFI：EFI+/boot ext4+zpool；BIOS：bios_grub+/boot ext4+zpool；含 growpart 替代 fix、zpool cache 清理、serial console）。
+- [x] `jobs/test_os_ubuntu_zfs.sh`：使用 `ubuntu-zfs` conf token 發現 image，版本 gate `3.3.4-20` / `20261030`（partclone.zfs 首次進 Live 的版本）。
+- [x] `qemu/cloudimages/cloud_images.conf` 補兩行 PLACEHOLDER（uefi / bios），不影響現有 `ubuntu` 測試。
+- [x] Dockerfile 補 `ovmf`（amd64 UEFI 建置/驗證需要）。
+- [x] BIOS 變體額外開機驗證（curtin `bios_grub` flag 配置正確性；BIOS 還原開機測試通過）。
+- [x] 確認 ocs-sr 對 `zfs_member` 分割區自動走 partclone.zfs（Live 20261111-tenacious：vda3 save/restore 皆 `partclone.zfs -a3`，非 dd fallback）。
+- [x] 全流程驗證：`test_os_ubuntu_zfs.sh` + clonezilla-live-20261111-tenacious（UEFI+BIOS 兩 image savedisk→restoredisk(80G,-k1)→開機 OK）；舊 zip（3.3.2-16 / 20260403）正確 SKIP。
+- [x] 已知陷阱修正：subiquity initramfs 無 IDE/ATA driver（ISO/seed 改掛 virtio-blk）；`updates: "none"` 遭 subiquity 拒絕（改 `security`）；libguestfs list-filesystems 不含 zfs_member（verify 改 `blkid` 逐分割區查 TYPE/LABEL）；smoke test 改 COW overlay 避免弄髒母碟（cloud-init instance-id 固定於 cidata）；`feature@large_dnodes` 遭 installer 環境拒絕（改回 ubiquity 官方 10-feature 清單，無 large_dnodes）。
+- [x] 佈局改版：由 cmtops 文章自訂佈局（ext4 /boot + 單 pool）改為 **Ubuntu 官方 ZFS 佈局**（ESP + bpool 2G + swap 2G + rpool；bpool/BOOT/ubuntu、rpool/ROOT/ubuntu 沒有 zsys），涵蓋 GRUB-from-ZFS、雙 zfs_member、swap 還原。UEFI+BIOS 雙變體全流程通過（20261111-tenacious，vda2/vda4 皆 partclone.zfs）。
+- [ ] 未來評估：arm64 變體（`qemu-system-aarch64` + QEMU_EFI.fd；TCG 建置慢，腳本保留 `--arch` 擴充點）。
+- [ ] 未來評估：`jobs/test_fs_zfs.sh`（data fs 層級 ZFS 測試，需在 guest 內建 zpool，仿 LVM-thin 前例）。
+- [ ] 未來評估：於 child-pipeline.yml 註冊 `test:os:ubuntu-zfs` job + publish needs + EXPECTED_TEST_JOBS（等 image 上線 `/data/cloudimages` 後）。
+
+---
+
+## Cloud image 集中化（image repo 架構）
+
+PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.240.58:3322:/home/cicd/clonezilla-cicd-cloudimages`）→ 各 test runner rsync/ssh pull。架構文件見 usage.md「qemu/cloudimages/ – 雲端映像庫與中央 repo」。
+
+### Phase 1：conf schema v2 + 工具腳本（done, 2026-11-13）
+- [x] `cloud_images.conf` schema v2：`OS RELEASE ARCH [FIRMWARE] URL [SHA256]`；檔名契約 `<OS>-<RELEASE>[-<FIRMWARE>]-<ARCH>.qcow2`（通用 image 不加 firmware；zfs/windows 加標）。
+- [x] `qemu/cloudimages/image_common.sh`：conf 解析／契約檔名推導（`image_name_from_conf_line`）／prune 共用函式，jobs/common.sh 亦改 source 此檔。
+- [x] `download_cloud_images.sh` 重寫：原子下載（`.part`→`mv`）、curl retry/resume、SHA256 驗證、`--check` / `--prune` / `--migrate` / `--yes`、`--force`。
+- [x] `sync_images.sh` 新增：`--pull`（runner：對照 MANIFEST.sha256 抓缺漏/過期，`.part`+驗 sha）、`--push`（PN42：rsync 上傳＋遠端重建 MANIFEST.sha256/manifest.tsv）、`--prune`；env：`IMAGE_REPO_HOST`（預設 140.110.240.58）/`IMAGE_REPO_USER`（預設 cicd）/`IMAGE_REPO_DIR`（預設 /home/cicd/clonezilla-cicd-cloudimages）/`IMAGE_REPO_SSH_PORT`（預設 3322）。stub 端到端驗證（push/pull/up-to-date/missing/stale/prune）通過。
+- [x] windows image 納入 conf（bios/uefi 兩行 MANUAL 條目）；guestfish 判定 `windows-11-amd64.qcow2`=BIOS、`win11-uefi.qcow2`=UEFI；本機已 `--migrate` 改名為 `windows-11-{bios,uefi}-amd64.qcow2`。
+- [x] `test_os_windows.sh` 改為 conf 驅動（bios+uefi 皆測，uefi 檔名自動帶 `--efi`）；`test_os_{debian,ubuntu,fedora,ubuntu_zfs}.sh` 改用契約推導。
+- [x] TODO: 注意 windows CI job 現在會連跑 bios+uefi 兩張碟，runner 時間約 2 倍（PN42 有 KVM 應可承受；超時再評估拆分 jobs）。
+
+### Phase 0：repo server 部署（done, 2026-11-13）
+- [x] 140.110.240.58 就位：`cicd` 帳號、ssh port 3322、影像目錄 `/home/cicd/clonezilla-cicd-cloudimages`。
+- [x] runner 判別：PN42／類似機器 job 以 `gitlab-runner` 執行（`ps`+`builds/` 擁有者驗證）；F1 以 `u1597171` 執行。
+- [x] ssh key 部署：三台（PN42、F1、vm-runner）皆有 `clonezilla-imgrepo` ssh config 別名，`ssh clonezilla-imgrepo` 可登入。
+- [x] PN42 首次實測通過（2026-11-13）：`/data/cloudimages` chown 給 gitlab-runner + setgid；`--migrate` 改 bios 名；小 push（debian-13-amd64）→ 全量 push（14 張 ~20G，115MB/s）→ remote manifest 重建 → `--pull` 全部 up to date；zfs×2 與 windows-11-uefi 僅存於 debian-lab，如預期顯示 `not on repo yet; skipping`。
+- [x] F1 多機取像驗證通過（2026-11-13）：`--migrate` 改 bios 名；`--pull` 偵測 10 張 daily 碟為 stale（兩機群版本漂移，sha256 錨點運作）並重抓、4 張 up to date、3 張 MANUAL skip；`--check` 全綠。
+- [ ] （之後）nginx 唯讀 http :80 作為備援取用管道。
+- [ ] repo 缺口補齊：`ubuntu-zfs-24.04-{uefi,bios}-amd64.qcow2` 已由 `images:build:zfs`（job 17998450553）push 上 repo（F1 pull 可見 downloading，待人機端下完即全綠）；`windows-11-uefi-amd64.qcow2` 仍僅在 debian-lab——補傳（debian-lab 加 ssh key 後 push）或由 PN42 windows 匯入流程補。
+- [ ] （延後）ssh 強化：test runner key 加 `command="rrsync -ro /home/cicd/clonezilla-cicd-cloudimages"` 唯讀限制（本輪先不鎖）；前置：先將 `--push` 的 manifest 重建從裸 `ssh "cd ... && sha256sum ..."` 改為 **producer 本機產生後隨檔推送**（純 rsync 檔案寫入），之後 PN42 key 也能鎖，server 零 shell。
+
+### Phase 2：CI 接線（done, 2026-11-13；排程建立與驗證待做）
+- [x] `.gitlab-ci.yml` 新增 `images:sync`（PN42，tags `clonezilla, windows`）：`--check` → `download_cloud_images.sh`（支援 `IMAGE_SYNC_FORCE=true` 全量重抓）→ `sync_images.sh --push --yes`；schedule `IMAGE_SYNC=true` 時自動跑，web/api 可手動觸發。（待建 GitLab Schedules：daily `IMAGE_SYNC=true`、weekly 加 `IMAGE_SYNC_FORCE=true`）（待驗證）
+- [x] 新增 `images:build:zfs`（manual、`allow_failure: true`）：`build-ubuntu-zfs-image.sh --firmware both --output /data/cloudimages` → push。（2026-11-13 手動 pipeline 3063635580 驗證：1276s 成功，PN42 KVM 建置 uefi+bios → push → manifest 重建；retry job 17998450553；mid-run 誤觸取消後 retry API 復原正常）
+- [x] `images:sync` 手動驗證（2026-11-13，job 17997620584，566s 成功）：全部 up to date、增量 525B、remote manifest 重建 OK。
+- [x] child 自動補像 gate 驗證（2026-11-13，child 3063638035 / test:fs:ext4 @F1 15min 成功）：before_script 正確走 F1 fallback 目錄、`MISSING=0` → `no pull needed.`；telegram branch gate 於 notify:telegram 實戰顯示 `branch 'feature/ubuntu-zfs-on-root' is not 'main'; notification skipped.`，群組靜音 ✓
+- [x] 新 runner cicdrunner 上線檢查（2026-11-15 遠端體檢）：Ubuntu 24.04/8C/16G/KVM（實即 ubuntu-2404-vm-runner，runner id 55772072、tag clonezilla、concurrent=1）；套件全齊（含 zfsutils-linux）；ssh alias + `/data/cloudimages`(gitlab-runner, setgid) 已設；bootstrap pull 進行中。
+- [x] cicdrunner 磁碟救援 + 200G 碟上線（2026-11-15）：root 滿載 ENOSPC 導致 systemd/dbus 半癱；於 IIC（GOV109213/ai-cloud）建 `cicdrunner-data` 200G SSD（f42bf728）+ attach → vdc mkfs ext4(label cicd-data) 掛 `/data`（fstab nofail UUID）；舊內容 rsync 搬移後 root 92%→66%；`/data/dataSets` 建立（gitlab-runner, setgid）；force reboot 後 systemd/journal 復原、runner active。
+- [x] cicdrunner kvm group：`usermod -aG kvm gitlab-runner`（重開機後生效，qemu --enable-kvm 可用）。
+- [x] cicdrunner bootstrap 完成：全套 17 image（44G 含 windows-11-uefi）`--pull` 到 `/data/cloudimages`，`--check` 全 OK；因 200G 碟容量足夠，**未使用** `SYNC_SKIP_OS`（功能保留給小容量 runner；cicdrunner 有 200G 就不必）。
+- [x] dataSets 統一（2026-11-15）：PN42 舊 dataSets 實為工作目錄快照（941M、含 .git/zip、三機不一致、F1 無）→ 改採 **`dev/mk-test-data.sh` 決定性產生器**（seed+path 純函數、AES-CTR 不可壓縮檔/zeros-lorem 可壓縮檔/sparse/深巢狀/特殊檔名/dotfiles/many-small/big；`SHA256SUMS.txt` 可 --verify；profile small/std/large；預設 0 symlinks）。三機同 seed=42 即產生 bit-identical payload，免傳輸。
+- [x] `child-pipeline.yml` 自動生成：before_script 缺 dataSets 時於 `/data` → `$HOME` 可寫處生成（~10s，僅首次），搜尋序 `/data/dataSets` → `/home/u1597171/dataSets` → `$HOME/dataSets`。
+- [ ] 部署驗證：cicdrunner `/data/dataSets` 已生成待驗 checksum 跨機一致（同 seed）；F1 由 u1597171 生成 `/home/u1597171/dataSets`；PN42 舊快照暫留（驗證穩定後再切換）。（待驗證）
+- [ ] cicdrunner 剩餘：vdb `cicd-volume`(50G) 之 vdb1 14G jfs `PARTLABEL=data-clone-source` 用途待確認（可留可切）；`ubuntu-2404-vm-runner`→`cicdrunner` 主機名對映集中管理之後再整理。
+- [ ] 後續改善：`build-ubuntu-zfs-image.sh` CI 內 ISO 下載進度洗爆 4MB job log 上限（wget dots；改導向 log 檔或 quiet）。
+- [ ] 後續改善：`sync_images.sh --push` 無上傳時跳過遠端 manifest 重建（no-op 目前仍遠端重 hash 20G ≈8min）。
+- [x] `child-pipeline.yml` before_script 自動 `--pull`：共享影像目錄可寫（`/data/cloudimages` 或 F1 fallback）且 `MISSING>0` 才拉（1200s timeout），stale 碟不在 job 內更新（避免 I/O 風暴），失敗退回警告；`IMAGE_PULL=false` 停用。（待驗證）
+- [ ] windows 手動匯入流程 runbook（usage.md 補章節；含 checksum 登錄）。
+
+### Phase 3：zfs 測試上線（等 image 上 repo）
+- [ ] 解除原 todo: 於 child-pipeline.yml 註冊 `test:os:ubuntu-zfs` job + publish needs + EXPECTED_TEST_JOBS。

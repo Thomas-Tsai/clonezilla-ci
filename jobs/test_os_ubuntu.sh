@@ -49,15 +49,15 @@ test_ubuntu_clone_restore() {
     
     # Find all ubuntu releases for the given arch in the conf file
     grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" "$PROJECT_ROOT/qemu/cloudimages/cloud_images.conf" | while read -r config_line; do
-        # Extract release from the line
-        local release=$(echo "$config_line" | awk '{print $2}')
-        local image_name="${os}-${release}-${ARCH}.qcow2"
+        # Derive the contract filename (handles optional firmware column)
+        local image_name
+        image_name=$(image_name_from_conf_line "$config_line")
         local image_path="$PROJECT_ROOT/qemu/cloudimages/${image_name}"
 
         if [ -f "$image_path" ]; then
             run_os_clone_restore "$image_path" "$PROJECT_ROOT/isos/cidata.iso" "$NO_SSH_FORWARD_ARG"
         else
-            echo "Skipping test for ${os}-${release}-${ARCH}: image file not found at ${image_path}"
+            echo "Skipping test for ${image_name%.qcow2}: image file not found at ${image_path}"
         fi
     done
 }

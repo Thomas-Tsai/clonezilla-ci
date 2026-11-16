@@ -155,7 +155,7 @@ Before using these scripts, ensure the following dependencies are installed on y
 
 ```bash
 sudo apt update
-sudo apt install qemu-utils qemu-system-riscv64 qemu-system-arm64 qemu-system-x86 qemu-system-arm qemu-efi-aarch64 guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount  e2fsprogs btrfs-progs xfsprogs ntfs-3g dosfstools exfatprogs bc shunit2 jq u-boot-qemu
+sudo apt install qemu-utils qemu-system-riscv64 qemu-system-arm64 qemu-system-x86 qemu-system-arm qemu-efi-aarch64 ovmf guestfs-tools unzip curl wget uuid-runtime genisoimage guestfish guestmount  e2fsprogs btrfs-progs xfsprogs ntfs-3g dosfstools exfatprogs bc shunit2 jq u-boot-qemu
 ```
 
 Here's a breakdown of what each package provides:
@@ -167,6 +167,7 @@ Here's a breakdown of what each package provides:
 - **`wget`**: For retrieving files from the web.
 - **`uuid-runtime`**: Provides `uuidgen` for generating unique identifiers.
 - **`genisoimage`**: For creating ISO-9660 filesystem images.
+- **`ovmf`**: Provides AMD64 UEFI firmware (`/usr/share/OVMF/OVMF_*_4M.fd`) for `--efi` runs and UEFI image builds.
 
 ## Directory Structure
 
@@ -223,6 +224,84 @@ Options:
 # See the URL for the latest arm64 release without downloading
 ./download-clonezilla.sh --arch arm64 --dry-run
 ```
+
+### `qemu/cloudimages/` – 雲端映像庫與中央 repo
+
+`qemu/cloudimages/` 是所有 OS/FS 測試所用 qcow2 的目錄。Git 只追蹤 `cloud_images.conf`、`download_cloud_images.sh`、`sync_images.sh`、`image_common.sh` 與 `note`；`*.qcow2` 一律 gitignore。
+
+**Config schema（`cloud_images.conf`）**：每行 `OS RELEASE ARCH [FIRMWARE] URL [SHA256]`
+- 檔名契約：`<OS>-<RELEASE>[-<FIRMWARE>]-<ARCH>.qcow2`。
+- `FIRMWARE`（`bios`/`uefi`）僅在影像為韌體專屬時填寫（`ubuntu-zfs`、`windows`）；BIOS/UEFI 通吃的通用 cloud image 不填（沿用舊檔名）。
+- `URL`：直接下載的 `https://` 位址；非 http(s) 的值（如 `PLACEHOLDER_*`、`MANUAL_*`）代表需本機建置／手動準備，下載流程會略過並提示。
+- `SHA256`：選填；填寫後下載與既有檔案皆會校驗。
+
+#### `download_cloud_images.sh`
+```bash
+./download_cloud_images.sh              # 下載 conf 中缺少的 image（.part 暫存 + mv，原子）
+./download_cloud_images.sh --force      # 全部重新下載
+./download_cloud_images.sh --check      # 只回報狀態（OK/MISSING/SHA-MISMATCH/MANUAL）
+./download_cloud_images.sh --prune      # 刪除不在 conf 內的 qcow2（互動確認；--yes 跳過）
+./download_cloud_images.sh --migrate    # 舊檔名 → 契約檔名（例如 win11-uefi.qcow2）
+```
+
+#### 中央 image repo 架構（同步方式）
+```
+PN42（producer, tag: windows）  --rsync/ssh push-->  140.110.240.58  <--rsync/ssh pull--  test runners
+                                                    cicd@140.110.240.58:3322
+                                                    /home/cicd/clonezilla-cicd-cloudimages
+                                                    + MANIFEST.sha256 / manifest.tsv
+```
+- runner 不再各自上網抓 image；由 PN42 統一下載／建置（含未來 ZFS golden image 與 Windows 匯入）後推送。
+- repo 上的 `MANIFEST.sha256` 是完整性錨點：pull 端以 sha256 判斷「缺漏／過期」，`.part` 暫存驗證後才換名。
+- 各 runner 的 ssh key 已部署：PN42 等以 `gitlab-runner` 使用者跑 job（私鑰在 `/home/gitlab-runner/.ssh/`），F1 以 `u1597171` 跑 job（key 在該帳號 `~/.ssh/`）；三台皆有 `clonezilla-imgrepo` ssh config 別名可用。
+
+#### `sync_images.sh`
+```bash
+# runner 端：依 conf 需求，向 repo 補齊缺漏或 sha256 不符的 image
+./sync_images.sh --pull [--yes]
+
+# producer 端（PN42）：上傳 conf 引用的本機 image 並重建遠端 manifest
+./sync_images.sh --push [--yes]
+
+./sync_images.sh --prune [--yes]     # 清理本機 orphan（同 download_cloud_images.sh --prune）
+```
+- 環境變數：`IMAGE_REPO_HOST`（預設 `140.110.240.58`，runner 上也可用 `clonezilla-imgrepo` 別名）、`IMAGE_REPO_USER`（預設 `cicd`）、`IMAGE_REPO_DIR`（預設 `/home/cicd/clonezilla-cicd-cloudimages`）、`IMAGE_REPO_SSH_PORT`（預設 `3322`）、`CLOUD_IMAGES_DIR`（本機影像目錄；預設腳本所在目錄，PN42 上可指到 `/data/cloudimages`）、`SYNC_SKIP_OS`（空白/逗號分隔的 OS 排除清單，如 `windows`；被排除條目不 check/pull/push 且 prune 豁免）。
+- `--push` 對符號連結會傳**實際內容**（`rsync --copy-links`），本機是 symlink 農場也沒問題。
+- **容量受限 runner** 建議在該 runner 的 `/etc/gitlab-runner/config.toml` `[[runners]]` 下加 `environment = ["SYNC_SKIP_OS=windows"]`，CI 每個 job 即自動忽略大碟；再先手動 `--pull` bootstrap 其餘影像到共享目錄。
+- exit code：`2`＝repo 不可達（CI 應退回舊行為）；`3`＝校驗失敗。
+- 取用協定採 rsync/ssh。http（唯讀 nginx）之後再加。
+
+#### runner 上影像的取用（CI）
+- `child-pipeline.yml` before_script：先檢查共享影像目錄（`/data/cloudimages`，F1 退回 `/home/u1597171/clonezilla-ci/qemu/cloudimages`）是否可寫且 conf 有缺像（`--check` 的 `MISSING` 計數）；缺像才 `sync_images.sh --pull --yes`（1200s timeout，失敗只警告），然後才做既有的 symlink 掛載。**stale（舊版 daily）影像不會在每個 job 重抓**（避免 sha256 I/O 風暴），更新由 PN42 的 `images:sync --force` 排程負責。設 `IMAGE_PULL=false` 可整體停用。
+- `.gitlab-ci.yml` 影像 jobs（皆跑在 PN42，tags `clonezilla, windows`）：
+  - `images:sync`：`download_cloud_images.sh`（補新條目）→ `sync_images.sh --push --yes`。GitLab schedule 建議：daily `IMAGE_SYNC=true`；weekly 另建 `IMAGE_SYNC=true IMAGE_SYNC_FORCE=true`（重抓 daily 移動目標）。
+  - `images:build:zfs`（manual，`allow_failure: true`）：`build-ubuntu-zfs-image.sh --firmware both --output /data/cloudimages` → push。驗證穩定後再考慮週期化。
+- 本地手動取用範例：測試腳本（`jobs/test_os_*.sh`）依 `cloud_images.conf` 的 `OS`+`ARCH` 找到對應檔名（`jobs/common.sh` 的 `image_name_from_conf_line`），存在才跑。
+
+#### `dev/mk-test-data.sh`（決定性測試資料集）
+
+data clone/restore 測試（`jobs/test_fs_*.sh` → `data-clone-restore.sh --data`）的 payload 目錄產生器。**每個檔案的內容是 (seed, 相對路徑) 的純函數**（AES-128-CTR 流餵 zeros = 不可壓縮檔；zeros/重複 lorem = 可壓縮檔），同一個 seed 在任何機器產生 bit-identical 的目錄樹，免除各 runner 間資料集不一致與同步問題。
+
+```bash
+# 本機快速驗證
+./dev/mk-test-data.sh --profile small --out /tmp/td --force
+
+# runner 標準佈署（CI before_script 缺 dataSets 時也會自動產生）
+./dev/mk-test-data.sh --out /data/dataSets --seed 42
+
+# 完整性複核（對 SHA256SUMS.txt）
+./dev/mk-test-data.sh --out /data/dataSets --verify
+```
+
+- profile：`small` ~100M / `std` ~1G（預設） / `large` ~10G；seed 預設 42。
+- 內容矩陣：many-small（inode 壓力）、mid、big（不可壓縮）、text（高壓縮）、sparse、empty/1-byte、特殊檔名（空格/unicode/長名）、深巢狀目錄、dotfiles；**預設 0 symlinks**（vfat/exfat/ntfs 相容；`--links` 產生 posix-only 連結陣列）。
+- CI 行為：before_script 依序找 `/data/dataSets` → `/home/u1597171/dataSets` → `$HOME/dataSets`；都沒有且可寫就自動生成（約 10 秒，僅首次），失敗才退回 repo 內建小樣品（`dev/testData`）。
+- dependencies：openssl、dd、truncate、find/sort/xargs/sha256sum（runner 基本內建）。
+
+#### Windows image
+- conf 登錄 `windows 11 amd64 bios` 與 `windows 11 amd64 uefi` 兩行（`MANUAL_*`，不下載）。
+- 取得方式：cloudbase.it 提供 Windows cloud images（見 `qemu/cloudimages/note`），需手動轉 qcow2、以 cloud-init（`isos/win11_cidata.iso`）完成首次開機設定後複製為模板，檔名依契約置於 `qemu/cloudimages/`。
+- `windows-11-uefi-amd64.qcow2` 檔名含 `uefi`，`os-clone-restore.sh` 會自動帶 `--efi`。
 
 ### `start.sh`
 
@@ -352,7 +431,7 @@ This is an orchestration script that automates the full backup, restore, and val
 # Run a full cycle with a custom image name and an UEFI template (will auto-detect EFI)
 ./os-clone-restore.sh \
   --zip ./isos/clonezilla-live-20251124-resolute-amd64.zip \
-  --tmpl ./qemu/win11-uefi.qcow2 \
+  --tmpl ./qemu/cloudimages/windows-11-uefi-amd64.qcow2 \
   --image-name "my-windows-efi-image"
 
 # Display help
@@ -564,17 +643,53 @@ This script starts a QEMU VM to install Debian from a netinst ISO onto a QCOW2 d
 ./debian-install.sh --help
 ```
 
+### `build-ubuntu-zfs-image.sh`
+
+Builds an **Ubuntu 24.04 golden image with root on ZFS** (no official cloud image exists) fully unattended. It downloads the Ubuntu live-server ISO, renders a NoCloud seed from the subiquity autoinstall templates in `dev/cloudinit/autoinstall-zfs/`, boots the installer kernel directly in QEMU (`autoinstall ---`), and waits for the install to power off. There is no interactive input.
+
+**Layout** (official Ubuntu ZFS layout, matching desktop/server installs):
+- UEFI variant: `p1` ESP 600M (fat32, `/boot/efi`) → `p2` **bpool** 2G (GRUB-compatible feature flags, `bpool/BOOT/ubuntu` → `/boot` on ZFS) → `p3` swap 2G → `p4` **rpool** (lz4, autoexpand; `rpool/ROOT/ubuntu` → `/`, `rpool/var/log`).
+- BIOS variant: same, with a 1M `bios_grub` partition instead of the ESP (grub-pc reads `/boot` from bpool directly).
+- This deliberately exercises the harder case: GRUB boots straight from ZFS, two `zfs_member` partitions (bpool with GRUB-compatible flags vs rpool with full features) plus a real swap partition.
+- Hard-codes the cloud-init workarounds the [cmtops.dev guide](https://cmtops.dev/posts/ubuntu-cloud-template-zfs/) recommends: disabled upstream `growpart`/`resize_rootfs` + per-boot ZFS growth fix for every pool (works together with `restoredisk -k1` growing the disk to 80G in tests), `cachefile=none` + per-instance pool-cache restore, serial console on `ttyS0`.
+
+**Output naming contract**: `qemu/cloudimages/ubuntu-zfs-<release>-<firmware>-<arch>.qcow2`, matching the `ubuntu-zfs` stanzas in `qemu/cloudimages/cloud_images.conf` used by `jobs/test_os_ubuntu_zfs.sh`. Default login after boot is `ubuntu / ubuntu` (test-only image).
+
+**Usage:**
+```bash
+# Build both variants (UEFI + BIOS), amd64 (ISO auto-downloads to isos/)
+./build-ubuntu-zfs-image.sh
+
+# Build only the UEFI variant
+./build-ubuntu-zfs-image.sh --firmware uefi
+
+# Use an existing ISO, custom output dir, keep temp files for debugging
+./build-ubuntu-zfs-image.sh --firmware bios --iso isos/ubuntu-24.04.5-live-server-amd64.iso \
+    --output qemu/cloudimages --keep-workdir
+
+# Rebuild from scratch
+./build-ubuntu-zfs-image.sh --force
+```
+
+**Options:** `--firmware <uefi|bios|both>` (default: both), `--arch` (amd64 only), `--release` (24.04 only), `--iso <path>`, `--output <dir>`, `--name <name>` (single firmware only), `--disk-size <size>` (default `10G`), `-m/--mem`, `--smp`, `--timeout-min` (default 90; raise under TCG), `--skip-smoke-test`, `--keep-workdir`, `--force`, `-h/--help`.
+
+**Notes:**
+- Requires KVM for reasonable runtime (`--timeout-min 180+` suggested under TCG).
+- The UEFI variant needs the `ovmf` package (already in the Dockerfile).
+- Each built image is boot-validated with `validate.sh` (`--efi` for UEFI) unless `--skip-smoke-test` is given.
+
 ### `scripts/notify-telegram.sh`
 
 Sends Clonezilla CI notifications to a Telegram group via the Bot API. It is called automatically by the child pipeline (`check_version` job and the `notify:telegram` job) and is designed to **never fail the pipeline**: without `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` it only logs a warning and exits 0.
 
-**Notification filter** (the group stays quiet on no-op scheduled runs):
+**Notification filter** (the group only reflects official runs on the default branch or `test-reports`):
 
-| Pipeline source | Condition | Message |
-|---|---|---|
-| Scheduled | `VERSION_STATUS=new_version` | "New version detected" at the start + summary at the end |
-| Scheduled | `no_change` / `in_progress` / `mirror_empty` | none |
-| Manual (push / web / api / trigger) | tests finished | summary (success or failure) |
+| Pipeline source | Branch | Condition | Message |
+|---|---|---|---|
+| any | non-default (e.g. `feature/*`) | — | **none** (branch gate) |
+| Scheduled | default | `VERSION_STATUS=new_version` | "New version detected" at the start + summary at the end |
+| Scheduled | default | `no_change` / `in_progress` / `mirror_empty` | none |
+| Manual (push / web / api / trigger) | default | tests finished | summary (success or failure) |
 
 **Modes:**
 - `started` — new-version notice; used by the `check_version` job.
@@ -687,6 +802,26 @@ docker run --rm -it \
   -v $(pwd)/logs:/app/logs \
   clonezilla-ci ./test_lvm_thin_save_restore.sh --zip /app/zip/clonezilla-live-3.3.4-23-amd64.zip
 ```
+
+### `jobs/test_os_ubuntu_zfs.sh`
+
+End-to-end **Ubuntu ZFS-on-root** clone/restore test exercising `partclone.zfs`. Discovers `ubuntu-zfs` images from `qemu/cloudimages/cloud_images.conf` (e.g. `ubuntu-zfs-24.04-uefi-amd64.qcow2`, `ubuntu-zfs-24.04-bios-amd64.qcow2`), then runs the standard `os-clone-restore.sh` cycle: savedisk → restoredisk to an 80G disk (`-k1`, partition growth) → cloud-init boot validation. UEFI-named images boot with `--efi` automatically.
+
+> **Minimum Clonezilla Live version: `3.3.4-20` (stable/testing) or `20261030-*` (daily).**
+> ZFS support (`partclone.zfs`) first shipped with those releases. With an older zip the
+> test exits 0 as SKIPPED (`skip_unless_clonezilla_version_or_newer`), so pipelines and
+> local `start.sh` runs never fail on unsupported versions.
+
+**Usage:**
+```bash
+# Build the golden images first (once)
+./build-ubuntu-zfs-image.sh
+
+# Run the test (from jobs/)
+cd jobs && ./test_os_ubuntu_zfs.sh --zip /path/to/clonezilla-live-3.3.4-20-amd64.zip --arch amd64
+```
+
+Missing images are skipped with a hint to run the build script — they never fail the job.
 
 ## Troubleshooting
 

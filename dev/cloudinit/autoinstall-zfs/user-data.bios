@@ -1,0 +1,259 @@
+#cloud-config
+#
+# Subiquity autoinstall template: Ubuntu Server with root on ZFS, following the
+# OFFICIAL Ubuntu ZFS layout adapted to BIOS boot (SeaBIOS / grub-pc):
+# bios_grub + bpool (GRUB-compatible, /boot on ZFS) + swap partition + rpool.
+# Dataset naming mirrors ubiquity-era installs (bpool/BOOT/ubuntu,
+# rpool/ROOT/ubuntu) without zsys. Consumed by build-ubuntu-zfs-image.sh;
+# __USER_PASSWORD_HASH__ is replaced at build time.
+#
+autoinstall:
+  version: 1
+
+  apt:
+    mirror-selection:
+      primary:
+        - uri: https://free.nchc.org.tw/ubuntu
+    sources_list: |
+      deb $PRIMARY $RELEASE           main restricted universe multiverse
+      deb $PRIMARY $RELEASE-updates   main restricted universe multiverse
+      deb $PRIMARY $RELEASE-security  main restricted universe multiverse
+      deb $PRIMARY $RELEASE-backports main restricted universe multiverse
+    fallback: abort
+
+  storage:
+    # Disable automatic swapfile; a real swap partition is defined below.
+    swap:
+      size: 0
+    config:
+      - id: disk0
+        type: disk
+        ptable: gpt
+        match:
+          size: largest
+        wipe: superblock-recursive
+        preserve: false
+        grub_device: true
+
+      - id: bios-part
+        type: partition
+        device: disk0
+        size: 1M
+        flag: bios_grub
+        preserve: false
+
+      - id: bpool-part
+        type: partition
+        device: disk0
+        size: 2G
+        preserve: false
+
+      - id: swap-part
+        type: partition
+        device: disk0
+        size: 2G
+        preserve: false
+
+      - id: rpool-part
+        type: partition
+        device: disk0
+        size: -1
+        preserve: false
+
+      - id: swap-format
+        type: format
+        fstype: swap
+        volume: swap-part
+        preserve: false
+
+      # bpool: GRUB reads this pool, so only GRUB-compatible feature flags
+      # (default_features: false -> zpool create -d, then opt-in features).
+      # version: null is required because curtin defaults to version=28, which
+      # conflicts with feature@ properties.
+      - id: bpool
+        type: zpool
+        pool: bpool
+        vdevs:
+          - bpool-part
+        mountpoint: /boot
+        default_features: false
+        pool_properties:
+          ashift: 12
+          version: null
+          feature@async_destroy: enabled
+          feature@bookmarks: enabled
+          feature@embedded_data: enabled
+          feature@empty_bpobj: enabled
+          feature@enabled_txg: enabled
+          feature@extensible_dataset: enabled
+          feature@hole_birth: enabled
+          feature@large_blocks: enabled
+          feature@lz4_compress: enabled
+          feature@spacemap_histogram: enabled
+        fs_properties:
+          compression: lz4
+          acltype: posixacl
+          xattr: sa
+          relatime: on
+          canmount: off
+
+      - id: rpool
+        type: zpool
+        pool: rpool
+        vdevs:
+          - rpool-part
+        mountpoint: /
+        pool_properties:
+          autotrim: on
+          autoexpand: on
+          version: null
+        fs_properties:
+          compression: lz4
+          acltype: posixacl
+          xattr: sa
+          relatime: on
+          dnodesize: auto
+          canmount: off
+
+      # Parent datasets must exist before nested children can be created
+      # (curtin invokes `zfs create` without -p).
+      - id: bpool-boot-parent
+        type: zfs
+        pool: bpool
+        volume: BOOT
+        properties:
+          canmount: off
+          mountpoint: none
+
+      - id: rpool-root-parent
+        type: zfs
+        pool: rpool
+        volume: ROOT
+        properties:
+          canmount: off
+          mountpoint: none
+
+      - id: rpool-var-parent
+        type: zfs
+        pool: rpool
+        volume: var
+        properties:
+          canmount: off
+          mountpoint: none
+
+      - id: bpool-boot
+        type: zfs
+        pool: bpool
+        volume: BOOT/ubuntu
+        properties:
+          canmount: 'on'
+          mountpoint: /boot
+
+      - id: rpool-root
+        type: zfs
+        pool: rpool
+        volume: ROOT/ubuntu
+        properties:
+          canmount: 'on'
+          mountpoint: /
+
+      - id: rpool-log
+        type: zfs
+        pool: rpool
+        volume: var/log
+        properties:
+          canmount: 'on'
+          mountpoint: /var/log
+
+  identity:
+    username: ubuntu
+    hostname: ubuntu-zfs
+    password: '__USER_PASSWORD_HASH__'
+
+  ssh:
+    install-server: true
+    allow-pw: true
+
+  packages:
+    - cloud-guest-utils
+  updates: security
+
+  late-commands:
+    # --- Cleanup cloud-init leftovers (mkdir works around legacy clean logic) ---
+    - curtin in-target -- install -dm 755 /var/lib/cloud
+    - curtin in-target -- cloud-init clean --machine-id --seed --logs --configs all
+    - curtin in-target -- /bin/bash -c 'install -dm 755 /var/lib/cloud/scripts/per-{boot,instance}'
+
+    # --- Automatic disk expansion: upstream growpart/resize_rootfs are broken
+    #     for ZFS (cloud-init#5788); do it per-boot for every pool instead.
+    - |
+      curtin in-target -- tee /etc/cloud/cloud.cfg.d/99-zpool-expand-fix.cfg << 'END'
+      # Buggy functionality.
+      # /var/lib/cloud/scripts/per-boot/99-zpool-expand-fix.sh and zpool autoexpand are used instead.
+      growpart:
+        mode: off
+      resize_rootfs: off
+      END
+    - |
+      curtin in-target -- tee /var/lib/cloud/scripts/per-boot/99-zpool-expand-fix.sh << 'END'
+      #!/bin/sh
+
+      set -e
+
+      # growpart and resize_rootfs are disabled.
+      # This fix and zpool autoexpand are used instead.
+      for pool in $(zpool list -H -o name); do
+        zpool status "$pool" -LP \
+        | grep '^\s*/dev/' \
+        | awk '{ print $1 }' \
+        | xargs lsblk -pno pkname,partn \
+        | xargs -I{} sh -c '
+          growpart -N {}
+          if [ $? -eq 0 ]
+            then growpart {}
+          else
+            true
+          fi
+        '
+      done
+      END
+    - curtin in-target -- chmod 754 /var/lib/cloud/scripts/per-boot/99-zpool-expand-fix.sh
+
+    # --- ZFS pool cache: disk ids change across hypervisors/after cloning,
+    #     so boot without a stale cache and re-populate it per instance.
+    - curtin in-target -- /bin/bash -c 'for pool in $(zpool list -H -o name); do zpool set cachefile=none "$pool"; done'
+    - |
+      curtin in-target -- tee /var/lib/cloud/scripts/per-instance/99-zpool-set-cache.sh << 'END'
+      #!/bin/sh
+      for pool in $(zpool list -H -o name); do
+        zpool set cachefile=/etc/zfs/zpool.cache "$pool"
+      done
+      END
+    - curtin in-target -- chmod 754 /var/lib/cloud/scripts/per-instance/99-zpool-set-cache.sh
+
+    # --- Some per-instance steps need a refreshed initramfs; keep this last.
+    - |
+      curtin in-target -- tee /var/lib/cloud/scripts/per-instance/999999-update-initramfs.sh << 'END'
+      #!/bin/sh
+      update-initramfs -uk all
+      END
+    - curtin in-target -- chmod 754 /var/lib/cloud/scripts/per-instance/999999-update-initramfs.sh
+
+    # --- Serial console for QEMU -nographic testing.
+    - |
+      curtin in-target -- tee /etc/default/grub.d/10-overrides.cfg << 'END'
+      GRUB_TERMINAL="console serial"
+      GRUB_SERIAL_COMMAND="serial --speed=115200"
+      GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200"
+      GRUB_CMDLINE_LINUX_DEFAULT="console=tty0 console=ttyS0,115200"
+      END
+    - curtin in-target -- systemctl enable serial-getty@ttyS0
+
+    # --- Final touches.
+    - curtin in-target -- apt-get autoremove -y
+    - curtin in-target -- apt-get clean
+
+    - curtin in-target -- update-grub
+    - curtin in-target -- update-initramfs -uk all
+
+  shutdown: poweroff

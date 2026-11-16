@@ -11,4 +11,9 @@ custom / special
 
 windows https://cloudbase.it/windows-cloud-images/
 
+---
 
+Inventory, download and sync are managed by cloud_images.conf +
+download_cloud_images.sh + sync_images.sh (schema: OS RELEASE ARCH
+[FIRMWARE] URL [SHA256]). See usage.md section
+"qemu/cloudimages/ – 雲端映像庫與中央 repo".
