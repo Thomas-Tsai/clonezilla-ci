@@ -365,7 +365,8 @@ PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.24
 - [x] F1 GPFS work1 佈局 + symlink 寫穿（2026-11-16）：F1 quota 風暴後，image 改放 `/work1/u1597171/cloudimages`（GPFS 100G），windows 碟刪除（-30G）、`concurrent=4`、runner env `SYNC_SKIP_OS=windows`；`image_common.sh` 新增 `resolve_write_target`（download/pull staging 用 `readlink -f` 寫穿 symlink 到真身、鏈結保留），`child-pipeline.yml` IMAGE_DIR 與 symlink 掛載候選加入 work1（優於 home fallback 舊鏈）。沙箱驗證：stale symlink → 內容寫穿至 target、sha 與 repo 一致、鏈結保留。
 - [x] 修 `SYNC_SKIP_OS` 未設時 `set -u` 崩潰（7d311bcd 引進；沙箱抓包）。
 - [ ] 後續改善：`build-ubuntu-zfs-image.sh` CI 內 ISO 下載進度洗爆 4MB job log 上限（wget dots；改導向 log 檔或 quiet）。
-- [ ] 後續改善：`sync_images.sh --push` 無上傳時跳過遠端 manifest 重建（no-op 目前仍遠端重 hash 20G ≈8min）。
+- [ ] 後續改善：`sync_images.sh --push` **無上傳時跳過遠端 manifest 重建**（2026-11-16 實測：17 檔 no-op 時仍在 devhost2 重 hash **46G ≈ 23min/次**；每個 daily 排程都白跑一次。做法：rsync 前先算本地 sha 清單、與遠端 MANIFEST.sha256 比對，無差異直接跳過 push+rebuild；或改 manifest 由 push 端本機產生後一併上傳）。
+- [ ] 後續改善：**manifest 本機化（解 rrsync 鎖死限制）**：目前 `--push` 的遠端 manifest 重建走裸 `ssh "cd ... && sha256sum ..."`，所以所有 key 都必須給 shell、無法用 `command="rrsync -ro ..."` 限縮為唯讀/僅限目錄。改為 producer 本機對上傳清單算 sha256 產生 MANIFEST.sha256/manifest.tsv、與影像一起 rsync 上傳（純檔案傳輸）→ 屆時 pull key 全可 rrsync 唯讀、PN42 push key 也能 rrsync 限定目錄、58 端零 shell（todo.md Phase 0 區塊的「延後 ssh 強化」前置就是這項）。
 - [x] `child-pipeline.yml` before_script 自動 `--pull`：共享影像目錄可寫（`/data/cloudimages` 或 F1 fallback）且 `MISSING>0` 才拉（1200s timeout），stale 碟不在 job 內更新（避免 I/O 風暴），失敗退回警告；`IMAGE_PULL=false` 停用。（待驗證）
 - [ ] windows 手動匯入流程 runbook（usage.md 補章節；含 checksum 登錄）。
 
