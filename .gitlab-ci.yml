@@ -191,10 +191,9 @@ update_sif:
 # images:sync downloads missing config-referenced cloud images onto PN42's
 # /data/cloudimages and pushes them to the repo (rsync is incremental; the
 # remote MANIFEST.sha256 is rebuilt afterwards).
-# Schedules (create in GitLab > CI/CD > Schedules):
-#   - daily  "image-sync":        IMAGE_SYNC=true  (fetch newly added config images)
-#   - weekly "image-sync-force":  IMAGE_SYNC=true + IMAGE_SYNC_FORCE=true
-#     (re-download the moving-target daily images to refresh stale copies)
+# Schedule: daily "image-sync" (id 4556619) with IMAGE_SYNC=true covers both
+# refresh modes, because GitLab.com Free caps schedules at 10 total:
+# Sundays the job itself switches to a full --force re-download (see script).
 images:sync:
   stage: trigger
   tags:
@@ -212,10 +211,15 @@ images:sync:
     - export CLOUD_IMAGES_DIR=/data/cloudimages
     - ./download_cloud_images.sh --check
     - |
-      # PLACEHOLDER/MANUAL entries are skipped by the script. Download
-      # failures only warn: the push below still uploads whatever exists.
-      if [ "$IMAGE_SYNC_FORCE" = "true" ]; then
-        echo "IMAGE_SYNC_FORCE=true: re-downloading all downloadable images."
+      # Refresh policy (the daily IMAGE_SYNC schedule covers both modes,
+      # since GitLab.com Free caps schedules at 10 total):
+      #  - Sunday (or IMAGE_SYNC_FORCE=true): re-download the moving-target
+      #    daily images so stale copies on runners get refreshed.
+      #  - Other days: only fetch images that are missing locally.
+      # PLACEHOLDER/MANUAL entries are skipped by the script; download
+      # failures only warn (the push below still uploads whatever exists).
+      if [ "$IMAGE_SYNC_FORCE" = "true" ] || [ "$(date +%u)" = "7" ]; then
+        echo "Weekly/hard refresh: re-downloading all downloadable images."
         ./download_cloud_images.sh --force || echo "WARNING: some downloads failed (see above)."
       else
         ./download_cloud_images.sh || echo "WARNING: some downloads failed (see above)."
