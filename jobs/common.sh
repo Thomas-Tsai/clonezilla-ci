@@ -156,11 +156,12 @@ run_os_clone_restore() {
     local DISK_IMAGE="$1"
     local VALIDATE_ISO="$2"
     local NO_SSH_FORWARD_PARAM="$3"
+    local EXTRA_PARAMS="${4:-}" # Optional extra args for os-clone-restore.sh (e.g. "--efi")
     # Standardize log file name based on the CI job name for easy linking
     local LOG_FILE="$LOG_DIR/${CI_JOB_NAME}.log"
 
     echo "--- Running OS $DISK_IMAGE ($ARCH) Clone/Restore Test (Log: $LOG_FILE) ---"
-    (cd .. && ./os-clone-restore.sh --zip "$CLONEZILLA_ZIP" --tmpl "$DISK_IMAGE" --arch "$ARCH" --validate-iso "$VALIDATE_ISO" $NO_SSH_FORWARD_PARAM) 2>&1 | tee -a "$LOG_FILE"
+    (cd .. && ./os-clone-restore.sh --zip "$CLONEZILLA_ZIP" --tmpl "$DISK_IMAGE" --arch "$ARCH" --validate-iso "$VALIDATE_ISO" $NO_SSH_FORWARD_PARAM $EXTRA_PARAMS) 2>&1 | tee -a "$LOG_FILE"
     local SCRIPT_RESULT="${PIPESTATUS[0]}"
     local RESULT="$SCRIPT_RESULT"
     local TEST_END_TIME=$(date +%s) # Record end time for this specific test
@@ -172,6 +173,38 @@ run_os_clone_restore() {
         echo "--- OS $DISK_IMAGE Clone/Restore Test FAILED (${TEST_DURATION} seconds) ---"
     fi
     assertEquals "OS $DISK_IMAGE clone/restore script failed. Check log: $LOG_FILE" 0 "$RESULT"
+}
+
+# Run an EFI-boot clone/restore over every generic (no firmware column) cloud
+# image of one distro, e.g. debian 13 + sid. Images containing "uefi" in the
+# filename would be auto-detected by os-clone-restore.sh; for generic cloud
+# images the --efi flag must be passed explicitly via run_os_clone_restore.
+# Usage: run_os_efi_conf_suite <os> <validate_iso> [no_ssh_forward_arg]
+run_os_efi_conf_suite() {
+    local os="$1"
+    local validate_iso="$2"
+    local no_ssh_forward_arg="${3:-}"
+
+    grep -E "^\s*${os}\s+.*\s+${ARCH}\s+" "$PROJECT_ROOT/qemu/cloudimages/cloud_images.conf" | while read -r config_line; do
+        # Skip firmware-specific entries (bios/uefi column); this suite only
+        # exercises generic images booted with OVMF.
+        local firmware
+        firmware=$(echo "$config_line" | awk '{if ($4=="bios"||$4=="uefi") print $4}')
+        if [ -n "$firmware" ]; then
+            continue
+        fi
+
+        # Derive the contract filename
+        local image_name
+        image_name=$(image_name_from_conf_line "$config_line")
+        local image_path="$PROJECT_ROOT/qemu/cloudimages/${image_name}"
+
+        if [ -f "$image_path" ]; then
+            run_os_clone_restore "$image_path" "$validate_iso" "$no_ssh_forward_arg" "--efi"
+        else
+            echo "Skipping test for ${image_name%.qcow2}: image file not found at ${image_path}"
+        fi
+    done
 }
 
 # Test for file system clone and restore¬

@@ -1,1 +1,1 @@
-/usr/sbin/ocs-sr -g auto -e1 auto -e2 -b -r -j2 -edio -k1 -scr -icds -p poweroff restoredisk "debian-sid" vda
+/usr/sbin/ocs-sr -g auto -e1 auto -e2 -b -r -j2 -edio -k1 -scr -icds -cmf -p poweroff restoredisk "debian-sid" vda

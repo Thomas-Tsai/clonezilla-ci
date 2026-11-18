@@ -9,7 +9,8 @@ The primary goal is to enable fully automated, non-interactive validation of Clo
 ## Key Features
 
 - **Automated Test Suite**: `start.sh` runs a comprehensive suite of tests using `shunit2`.
-- **OS Testing**: Automatically tests cloning and restoring full Linux distributions (e.g., Debian, Ubuntu) using `os-clone-restore.sh`.
+- **OS Testing**: Automatically tests cloning and restoring full Linux distributions (e.g., Debian, Ubuntu) using `os-clone-restore.sh`, with file-level b3sum integrity checking (`ocs-sr -gmf` at save / `-cmf` at restore).
+- **EFI Boot Testing**: Per-distro jobs (`jobs/test_os_debian_efi.sh`, `jobs/test_os_ubuntu_efi.sh`) re-run the OS clone/restore cycle on generic cloud images under OVMF (amd64-only).
 - **Filesystem Testing**: Automatically tests cloning and restoring various filesystems (e.g., ext4, xfs, btrfs, ntfs) with data integrity checks using `data-clone-restore.sh`.
 - **LVM & Thin Provisioning Testing**: Automatically tests local disk-to-disk (`ocs-onthefly`) cloning as well as image backup and restore (`savedisk` / `restoredisk`) with complex LVM layouts, including LVM Thin Pools and Thin Volumes, validating data integrity and volume structure. Requires Clonezilla Live >= `3.3.4-23` or `20261108-*`; older zips are gracefully skipped (`jobs/common.sh`, `skip_unless_clonezilla_version_or_newer`).
 - **ZFS-on-Root Testing**: `build-ubuntu-zfs-image.sh` fully automates building Ubuntu 24.04 golden images with root on ZFS (UEFI and BIOS variants, subiquity autoinstall), and `jobs/test_os_ubuntu_zfs.sh` exercises `partclone.zfs` via a savedisk/restoredisk cycle. Requires Clonezilla Live >= `3.3.4-20` or `20261030-*`; older zips are gracefully skipped.

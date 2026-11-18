@@ -412,7 +412,8 @@ This is an orchestration script that automates the full backup, restore, and val
 - Validates argument existence for input files.
 - Makes the Clonezilla image name configurable via `--image-name`.
 - Generates temporary `ocs-sr` command scripts to dynamically set the image name.
-- **Automatically detects UEFI boot mode** if the `--tmpl` QCOW2 filename contains "uefi".
+- **File-level b3sum integrity checking**: the save phase runs `ocs-sr` with `-gmf` (generate b3sum checksums for files in the source device, stored with the image); the restore phase runs with `-cmf` (verify those checksums against the restored files). Defined in `dev/ocscmd/clone-first-disk.sh` / `dev/ocscmd/restore-first-disk.sh`, so every `jobs/test_os_*.sh` test inherits it. Note this adds runtime roughly proportional to the file count.
+- **Automatically detects UEFI boot mode** if the `--tmpl` QCOW2 filename contains "uefi"; `--efi` can also be passed explicitly for generic images.
 - Returns 0 for success and 1 for failure.
 
 **Workflow:**
@@ -823,6 +824,20 @@ cd jobs && ./test_os_ubuntu_zfs.sh --zip /path/to/clonezilla-live-3.3.4-20-amd64
 ```
 
 Missing images are skipped with a hint to run the build script — they never fail the job.
+
+### `jobs/test_os_debian_efi.sh` / `jobs/test_os_ubuntu_efi.sh` (EFI boot)
+
+Per-distro **EFI boot** clone/restore tests. Each discovers its generic cloud images from `qemu/cloudimages/cloud_images.conf` and runs the standard `os-clone-restore.sh` cycle with `--efi` (OVMF) for all three stages (save → restore → cloud-init boot validation). **amd64-only** — on any other `--arch` the job prints SKIPPED and exits 0.
+
+The shared loop lives in `run_os_efi_conf_suite()` in `jobs/common.sh`; firmware-specific entries (bios/uefi column, e.g. windows / ubuntu-zfs) are excluded because they are covered by their own tests.
+
+**Usage:**
+```bash
+cd jobs && ./test_os_debian_efi.sh --zip /path/to/clonezilla-live-amd64.zip --arch amd64
+cd jobs && ./test_os_ubuntu_efi.sh --zip /path/to/clonezilla-live-amd64.zip --arch amd64
+```
+
+**Adding a new distro** (e.g. fedora): copy one wrapper to `jobs/test_os_fedora_efi.sh`, change the `run_os_efi_conf_suite "<os>" ...` argument, then register `test:os:fedora_efi` in `child-pipeline.yml` following the FOUR-synced-edits note at `EXPECTED_TEST_JOBS` (job def, `needs:` of notify:telegram + publish_reports, `EXPECTED_TEST_JOBS`, and `expected_test_jobs()` in `scripts/notify-telegram.sh`).
 
 ## Troubleshooting
 

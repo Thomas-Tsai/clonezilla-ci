@@ -108,6 +108,10 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 - [ ] CI 報表發布問題：GitLab Pages 上檔名含 `:` 的 per-job log（如 `test:dev_to_dev_lvm_thin.log`）404；results yml 的 `job_duration` 顯示為時鐘時間而非 duration。
 - [ ] `clonezilla-zip2qcow.sh` 平行不安全性：兩個 CI job 同時解同一 zip 時，共用 output dir 且 `virt-make-fs` 寫入相同路徑，會造成 libguestfs 崩潰或產出毀損的 live media（guest 開機報 "Unable to find a medium containing a live file system"）。需加 lock 機制或 per-job 隔離目錄。（本地驗證時實際觀測到）
 
+## OS 測試強化（2026-11-18）：
+- [ ] OS 相關測試啟用檔案級 b3sum 校驗：`dev/ocscmd/clone-first-disk.sh` 的 savedisk 加 `-gmf` 產生 b3sum checksum、`dev/ocscmd/restore-first-disk.sh` 的 restoredisk 加 `-cmf` 於還原後檢查；透過 os-clone-restore.sh 覆蓋全部 test_os_*（debian/ubuntu/fedora/windows/ubuntu_zfs）。
+- [ ] EFI 開機 OS clone/restore 測試改為 per-distro 獨立 job：`jobs/test_os_debian_efi.sh` / `jobs/test_os_ubuntu_efi.sh`（amd64-only；generic cloud images 以 `--efi` 跑完整 save→restore→validate）；`jobs/common.sh` 新增 `run_os_efi_conf_suite` helper；未來新增 distro = 複製薄 wrapper + CI 註冊。
+
 ## liteserver.sh 改進事項：
 開發一個 liteserver.sh 腳本，這個腳本主要用來啟動一個簡易的 clonezilla lite server 來提供 clonezilla server 服務的場景
 場景會先跑起一個 clonezilla lite server，以 qemu-clonezilla-ci-run.sh 來啟動 lite server ，須考量增加網卡的需求

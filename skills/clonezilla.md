@@ -32,6 +32,7 @@ applyTo: '**'
 - **Saving options** (selected):
   - `-z0` … `-z9p` – compression level & algorithm (gzip, bzip2, lzop, lzma, xz, lz4, zstd, etc.).
   - `-gm` / `-gs` – generate MD5 / SHA1 checksum for the image.
+  - `-gmf` – generate b3sum checksum for files in the source device (saved with the image); pair with `-cmf` at restore time.
   - `-enc` / `-senc` – enable/skip image encryption (passphrase via `-pe`).
   - `-sfsck` / `-fsck` – skip / run fsck on source before saving.
   - `-j2` – clone hidden data between MBR and first partition.
@@ -43,6 +44,7 @@ applyTo: '**'
   - `-k0`, `-k1`, `-k2` – partition table handling.
   - `-t` / `-t1` / `-t2` – control MBR/EBR restoration.
   - `-cm`, `-cs` – check MD5 / SHA1 checksum.
+  - `-cmf` – check the b3sum checksum for files in the destination device after restore (requires `-gmf` at save time; the file system must be mountable read-only by the Linux kernel).
   - `-scr` – skip restore‑ability check.
   - `-iefi` – ignore EFI NVRAM update.
   - `-f` – restore a specific partition.

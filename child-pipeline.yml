@@ -545,6 +545,28 @@ test:os:ubuntu_zfs:
   variables:
     TEST_SCRIPT: "jobs/test_os_ubuntu_zfs.sh"
 
+# EFI boot OS tests: generic cloud images booted under OVMF (amd64-only).
+# Add new distros by copying the thin wrapper jobs/test_os_<distro>_efi.sh
+# and registering the job here (see the FOUR synced edits note at
+# EXPECTED_TEST_JOBS below).
+test:os:debian_efi:
+  extends: .test_template
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_SCRIPT: "jobs/test_os_debian_efi.sh"
+
+test:os:ubuntu_efi:
+  extends: .test_template
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_SCRIPT: "jobs/test_os_ubuntu_efi.sh"
+
 #--- Filesystem Tests ---
 
 .fs_test_template:
@@ -678,6 +700,10 @@ notify:telegram:
       optional: true
     - job: test:os:ubuntu_zfs
       optional: true
+    - job: test:os:debian_efi
+      optional: true
+    - job: test:os:ubuntu_efi
+      optional: true
     - test:fs:exfat
     - test:fs:ntfs
     - test:fs:vfat
@@ -726,6 +752,10 @@ publish_reports:
       optional: true
     - job: test:os:ubuntu_zfs
       optional: true
+    - job: test:os:debian_efi
+      optional: true
+    - job: test:os:ubuntu_efi
+      optional: true
     - test:fs:exfat
     - test:fs:ntfs
     - test:fs:vfat
@@ -767,7 +797,7 @@ publish_reports:
       #   4. expected_test_jobs() in scripts/notify-telegram.sh
       EXPECTED_TEST_JOBS="test:os:ubuntu test:os:debian test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev test:dev_to_dev_lvm_thin test:lvm_thin_save_restore"
       if [ "$ARCH" = "amd64" ]; then
-        EXPECTED_TEST_JOBS="$EXPECTED_TEST_JOBS test:os:windows11 test:os:ubuntu_zfs"
+        EXPECTED_TEST_JOBS="$EXPECTED_TEST_JOBS test:os:windows11 test:os:ubuntu_zfs test:os:debian_efi test:os:ubuntu_efi"
       fi
       # Selective run: only expect the TEST_FILTER-matched jobs; jobs skipped
       # by the filter would otherwise be wrongly synthesized as missing.

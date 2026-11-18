@@ -167,7 +167,7 @@ EOF
 expected_test_jobs() {
     local jobs="test:os:ubuntu test:os:debian test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev"
     if [[ "${ARCH:-}" == "amd64" ]]; then
-        jobs="${jobs} test:os:windows11 test:os:ubuntu_zfs"
+        jobs="${jobs} test:os:windows11 test:os:ubuntu_zfs test:os:debian_efi test:os:ubuntu_efi"
     fi
     printf '%s' "$jobs"
 }
