@@ -51,7 +51,7 @@ fi
 
 # --- Test for debian system clone and restore (EFI boot) ---
 test_debian_efi_clone_restore() {
-    run_os_efi_conf_suite "debian" "$PROJECT_ROOT/isos/cidata.iso" "$NO_SSH_FORWARD_ARG"
+    run_os_conf_suite "debian" "$PROJECT_ROOT/isos/cidata.iso" "$NO_SSH_FORWARD_ARG" "generic" "--efi"
 }
 
 # --- Main execution ---

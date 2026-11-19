@@ -655,7 +655,7 @@ Builds an **Ubuntu 24.04 golden image with root on ZFS** (no official cloud imag
 - This deliberately exercises the harder case: GRUB boots straight from ZFS, two `zfs_member` partitions (bpool with GRUB-compatible flags vs rpool with full features) plus a real swap partition.
 - Hard-codes the cloud-init workarounds the [cmtops.dev guide](https://cmtops.dev/posts/ubuntu-cloud-template-zfs/) recommends: disabled upstream `growpart`/`resize_rootfs` + per-boot ZFS growth fix for every pool (works together with `restoredisk -k1` growing the disk to 80G in tests), `cachefile=none` + per-instance pool-cache restore, serial console on `ttyS0`.
 
-**Output naming contract**: `qemu/cloudimages/ubuntu-zfs-<release>-<firmware>-<arch>.qcow2`, matching the `ubuntu-zfs` stanzas in `qemu/cloudimages/cloud_images.conf` used by `jobs/test_os_ubuntu_zfs.sh`. Default login after boot is `ubuntu / ubuntu` (test-only image).
+**Output naming contract**: `qemu/cloudimages/ubuntu-zfs-<release>-<firmware>-<arch>.qcow2`, matching the `ubuntu-zfs` stanzas in `qemu/cloudimages/cloud_images.conf` used by `jobs/test_os_ubuntu_zfs_bios.sh` / `jobs/test_os_ubuntu_zfs_efi.sh`. Default login after boot is `ubuntu / ubuntu` (test-only image).
 
 **Usage:**
 ```bash
@@ -805,9 +805,9 @@ docker run --rm -it \
   clonezilla-ci ./test_lvm_thin_save_restore.sh --zip /app/zip/clonezilla-live-3.3.4-23-amd64.zip
 ```
 
-### `jobs/test_os_ubuntu_zfs.sh`
+### `jobs/test_os_ubuntu_zfs_bios.sh` / `jobs/test_os_ubuntu_zfs_efi.sh`
 
-End-to-end **Ubuntu ZFS-on-root** clone/restore test exercising `partclone.zfs`. Discovers `ubuntu-zfs` images from `qemu/cloudimages/cloud_images.conf` (e.g. `ubuntu-zfs-24.04-uefi-amd64.qcow2`, `ubuntu-zfs-24.04-bios-amd64.qcow2`), then runs the standard `os-clone-restore.sh` cycle: savedisk → restoredisk to an 80G disk (`-k1`, partition growth) → cloud-init boot validation. UEFI-named images boot with `--efi` automatically.
+End-to-end **Ubuntu ZFS-on-root** clone/restore tests exercising `partclone.zfs`, split into independent BIOS and EFI jobs. Each discovers its firmware-matching `ubuntu-zfs` image from `qemu/cloudimages/cloud_images.conf` (`ubuntu-zfs-24.04-bios-amd64.qcow2` / `ubuntu-zfs-24.04-uefi-amd64.qcow2`), then runs the standard `os-clone-restore.sh` cycle: savedisk → restoredisk to an 80G disk (`-k1`, partition growth) → cloud-init boot validation. The EFI job boots the whole cycle under OVMF (`--efi`).
 
 > **Minimum Clonezilla Live version: `3.3.4-20` (stable/testing) or `20261030-*` (daily).**
 > ZFS support (`partclone.zfs`) first shipped with those releases. With an older zip the
@@ -819,25 +819,34 @@ End-to-end **Ubuntu ZFS-on-root** clone/restore test exercising `partclone.zfs`.
 # Build the golden images first (once)
 ./build-ubuntu-zfs-image.sh
 
-# Run the test (from jobs/)
-cd jobs && ./test_os_ubuntu_zfs.sh --zip /path/to/clonezilla-live-3.3.4-20-amd64.zip --arch amd64
+# Run the tests (from jobs/)
+cd jobs && ./test_os_ubuntu_zfs_bios.sh --zip /path/to/clonezilla-live-3.3.4-20-amd64.zip --arch amd64
+cd jobs && ./test_os_ubuntu_zfs_efi.sh --zip /path/to/clonezilla-live-3.3.4-20-amd64.zip --arch amd64
 ```
 
 Missing images are skipped with a hint to run the build script — they never fail the job.
 
-### `jobs/test_os_debian_efi.sh` / `jobs/test_os_ubuntu_efi.sh` (EFI boot)
+### `jobs/test_os_windows_bios.sh` / `jobs/test_os_windows_efi.sh`
 
-Per-distro **EFI boot** clone/restore tests. Each discovers its generic cloud images from `qemu/cloudimages/cloud_images.conf` and runs the standard `os-clone-restore.sh` cycle with `--efi` (OVMF) for all three stages (save → restore → cloud-init boot validation). **amd64-only** — on any other `--arch` the job prints SKIPPED and exits 0.
+Windows 11 OS clone/restore tests, split into independent BIOS and EFI jobs (replacing the former combined `test_os_windows.sh`). Discovers the manually prepared `windows 11 amd64 bios` / `windows 11 amd64 uefi` images from the conf (see `qemu/cloudimages/note`) and validates with `isos/win11_cidata.iso`. In CI these run only on the dedicated `windows`-tagged runner; **amd64-only**.
 
-The shared loop lives in `run_os_efi_conf_suite()` in `jobs/common.sh`; firmware-specific entries (bios/uefi column, e.g. windows / ubuntu-zfs) are excluded because they are covered by their own tests.
+### `jobs/test_os_<distro>_efi.sh` (EFI boot)
+
+Per-distro **EFI boot** clone/restore tests: `test_os_debian_efi.sh`, `test_os_ubuntu_efi.sh`, `test_os_fedora_efi.sh`, `test_os_almalinux_efi.sh`, `test_os_rocky_efi.sh`. Each discovers its generic cloud images from `qemu/cloudimages/cloud_images.conf` and runs the standard `os-clone-restore.sh` cycle with `--efi` (OVMF) for all three stages (save → restore → cloud-init boot validation). **amd64-only** — on any other `--arch` the job prints SKIPPED and exits 0.
+
+Firmware-specific entries (windows / ubuntu-zfs) are covered by their own `_bios`/`_efi` jobs above. Note that **arm64 OS tests are implicitly EFI**: both `qemu-clonezilla-ci-run.sh` and `validate.sh` always boot arm64 guests via `-bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd`, so the regular arm64 jobs already exercise UEFI boot and need no `_efi` variants.
+
+The shared loop lives in `run_os_conf_suite()` in `jobs/common.sh`:
+`run_os_conf_suite <os> <validate_iso> <no_ssh_arg> <generic|bios|uefi> [extra_params] [skip_hint]`
+(`uefi` adds `--efi` automatically; `generic` matches conf entries without a firmware column and needs an explicit `--efi`).
 
 **Usage:**
 ```bash
 cd jobs && ./test_os_debian_efi.sh --zip /path/to/clonezilla-live-amd64.zip --arch amd64
-cd jobs && ./test_os_ubuntu_efi.sh --zip /path/to/clonezilla-live-amd64.zip --arch amd64
+cd jobs && ./test_os_fedora_efi.sh --zip /path/to/clonezilla-live-amd64.zip --arch amd64
 ```
 
-**Adding a new distro** (e.g. fedora): copy one wrapper to `jobs/test_os_fedora_efi.sh`, change the `run_os_efi_conf_suite "<os>" ...` argument, then register `test:os:fedora_efi` in `child-pipeline.yml` following the FOUR-synced-edits note at `EXPECTED_TEST_JOBS` (job def, `needs:` of notify:telegram + publish_reports, `EXPECTED_TEST_JOBS`, and `expected_test_jobs()` in `scripts/notify-telegram.sh`).
+**Adding a new distro** (e.g. opensuse): copy one wrapper to `jobs/test_os_opensuse_efi.sh`, change the `run_os_conf_suite "<os>" ...` argument, then register `test:os:opensuse_efi` in `child-pipeline.yml` following the FOUR-synced-edits note at `EXPECTED_TEST_JOBS` (job def, `needs:` of notify:telegram + publish_reports, `EXPECTED_TEST_JOBS`, and `expected_test_jobs()` in `scripts/notify-telegram.sh`).
 
 ## Troubleshooting
 

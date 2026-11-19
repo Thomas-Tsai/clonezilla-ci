@@ -32,8 +32,9 @@ default:
   # - check_version, download_zip, .test_template: use $RUNNER_TAG
   #   (default "clonezilla", override per-run when starting a manual pipeline)
   # - build_singularity: tag "build"
-  # - test:os:windows11: tags "clonezilla, windows" (always uses clonezilla,
-  #   not affected by RUNNER_TAG, since it needs the physical asus pn42)
+  # - test:os:windows11_bios / test:os:windows11_efi: tags "clonezilla,
+  #   windows" (always uses clonezilla, not affected by RUNNER_TAG, since
+  #   they need the physical asus pn42)
   # Note: update_sif was moved to .gitlab-ci.yml (own daily schedule with an
   # F1 connectivity probe) so an offline F1 node can no longer jam these
   # test pipelines.
@@ -52,8 +53,8 @@ variables:
   # - Default: "clonezilla" (matches all self-hosted clonezilla runners)
   # - Override when starting a manual pipeline (Run pipeline → variables) to
   #   route all test jobs to a different runner, e.g. for testing new runners.
-  # Note: test:os:windows11 (tag: windows) is NOT affected by this variable
-  # — it keeps its dedicated tags.
+  # Note: test:os:windows11_bios / test:os:windows11_efi (tag: windows) are
+  # NOT affected by this variable — they keep their dedicated tags.
   RUNNER_TAG: "clonezilla"
   # IMAGE_PULL controls the central image repo pull in the test before_script:
   # missing config-referenced images are fetched from the repo into a writable
@@ -520,7 +521,7 @@ test:os:debian:
   variables:
     TEST_SCRIPT: "jobs/test_os_debian.sh"
 
-test:os:windows11:
+test:os:windows11_bios:
   extends: .test_template
   tags:
     - clonezilla
@@ -532,18 +533,41 @@ test:os:windows11:
   variables:
     TEST_ENV: "local"
     FORCE_LOCAL: "true"
-    TEST_SCRIPT: "jobs/test_os_windows.sh"
+    TEST_SCRIPT: "jobs/test_os_windows_bios.sh"
 
-# ZFS images are amd64-only for now; the gate in test_os_ubuntu_zfs.sh skips
+test:os:windows11_efi:
+  extends: .test_template
+  tags:
+    - clonezilla
+    - windows
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_ENV: "local"
+    FORCE_LOCAL: "true"
+    TEST_SCRIPT: "jobs/test_os_windows_efi.sh"
+
+# ZFS images are amd64-only for now; the gate in the wrapper scripts skips
 # cleanly on older Clonezilla zips (< 3.3.4-20 / 20261030).
-test:os:ubuntu_zfs:
+test:os:ubuntu_zfs_bios:
   extends: .test_template
   rules:
     - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
       when: never
     - when: on_success
   variables:
-    TEST_SCRIPT: "jobs/test_os_ubuntu_zfs.sh"
+    TEST_SCRIPT: "jobs/test_os_ubuntu_zfs_bios.sh"
+
+test:os:ubuntu_zfs_efi:
+  extends: .test_template
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_SCRIPT: "jobs/test_os_ubuntu_zfs_efi.sh"
 
 # EFI boot OS tests: generic cloud images booted under OVMF (amd64-only).
 # Add new distros by copying the thin wrapper jobs/test_os_<distro>_efi.sh
@@ -566,6 +590,63 @@ test:os:ubuntu_efi:
     - when: on_success
   variables:
     TEST_SCRIPT: "jobs/test_os_ubuntu_efi.sh"
+
+# Additional amd64 distro coverage: each distro gets independent BIOS and
+# EFI jobs. Note the scripts discover images by their conf OS token
+# (fedora / almalinux / rocky).
+test:os:fedora:
+  extends: .test_template
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_SCRIPT: "jobs/test_os_fedora.sh"
+
+test:os:fedora_efi:
+  extends: .test_template
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_SCRIPT: "jobs/test_os_fedora_efi.sh"
+
+test:os:almalinux:
+  extends: .test_template
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_SCRIPT: "jobs/test_os_almalinux.sh"
+
+test:os:almalinux_efi:
+  extends: .test_template
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_SCRIPT: "jobs/test_os_almalinux_efi.sh"
+
+test:os:rocky:
+  extends: .test_template
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_SCRIPT: "jobs/test_os_rocky.sh"
+
+test:os:rocky_efi:
+  extends: .test_template
+  rules:
+    - if: '$ARCH == "arm64" || $ARCH == "riscv64"'
+      when: never
+    - when: on_success
+  variables:
+    TEST_SCRIPT: "jobs/test_os_rocky_efi.sh"
 
 #--- Filesystem Tests ---
 
@@ -696,13 +777,29 @@ notify:telegram:
       artifacts: true
     - test:os:ubuntu
     - test:os:debian
-    - job: test:os:windows11
+    - job: test:os:windows11_bios
       optional: true
-    - job: test:os:ubuntu_zfs
+    - job: test:os:windows11_efi
+      optional: true
+    - job: test:os:ubuntu_zfs_bios
+      optional: true
+    - job: test:os:ubuntu_zfs_efi
       optional: true
     - job: test:os:debian_efi
       optional: true
     - job: test:os:ubuntu_efi
+      optional: true
+    - job: test:os:fedora
+      optional: true
+    - job: test:os:fedora_efi
+      optional: true
+    - job: test:os:almalinux
+      optional: true
+    - job: test:os:almalinux_efi
+      optional: true
+    - job: test:os:rocky
+      optional: true
+    - job: test:os:rocky_efi
       optional: true
     - test:fs:exfat
     - test:fs:ntfs
@@ -748,13 +845,29 @@ publish_reports:
       artifacts: true
     - test:os:ubuntu
     - test:os:debian
-    - job: test:os:windows11
+    - job: test:os:windows11_bios
       optional: true
-    - job: test:os:ubuntu_zfs
+    - job: test:os:windows11_efi
+      optional: true
+    - job: test:os:ubuntu_zfs_bios
+      optional: true
+    - job: test:os:ubuntu_zfs_efi
       optional: true
     - job: test:os:debian_efi
       optional: true
     - job: test:os:ubuntu_efi
+      optional: true
+    - job: test:os:fedora
+      optional: true
+    - job: test:os:fedora_efi
+      optional: true
+    - job: test:os:almalinux
+      optional: true
+    - job: test:os:almalinux_efi
+      optional: true
+    - job: test:os:rocky
+      optional: true
+    - job: test:os:rocky_efi
       optional: true
     - test:fs:exfat
     - test:fs:ntfs
@@ -786,8 +899,9 @@ publish_reports:
       fi
       # Build the expected-test-job list per ARCH for publish_reports.sh's
       # missing-artifact synthesis. Jobs that legitimately never exist for an
-      # arch MUST NOT be included (e.g. test:os:windows11 is ruled out for
-      # arm64/riscv64; adding it would falsely mark the report failed).
+      # arch MUST NOT be included (e.g. the test:os:windows11_* jobs are
+      # ruled out for arm64/riscv64; adding them would falsely mark the
+      # report failed).
       # NOTE: adding a new test job requires FOUR synced edits, else artifacts
       # go missing and the job is falsely synthesized as failed (see the
       # test:os:ubuntu_zfs false-fail incident, pipeline #26497):
@@ -797,7 +911,7 @@ publish_reports:
       #   4. expected_test_jobs() in scripts/notify-telegram.sh
       EXPECTED_TEST_JOBS="test:os:ubuntu test:os:debian test:fs:exfat test:fs:ntfs test:fs:vfat test:fs:ext4 test:fs:xfs test:fs:btrfs test:slurm:sample test:lite_bt_from_device test:lite_bt_from_image test:lite_multicast_from_image test:lite_multicast_from_device test:lite_raw_data test:disk_512en_4kn_ext4_data test:dev_to_dev test:dev_to_dev_lvm_thin test:lvm_thin_save_restore"
       if [ "$ARCH" = "amd64" ]; then
-        EXPECTED_TEST_JOBS="$EXPECTED_TEST_JOBS test:os:windows11 test:os:ubuntu_zfs test:os:debian_efi test:os:ubuntu_efi"
+        EXPECTED_TEST_JOBS="$EXPECTED_TEST_JOBS test:os:windows11_bios test:os:windows11_efi test:os:ubuntu_zfs_bios test:os:ubuntu_zfs_efi test:os:debian_efi test:os:ubuntu_efi test:os:fedora test:os:fedora_efi test:os:almalinux test:os:almalinux_efi test:os:rocky test:os:rocky_efi"
       fi
       # Selective run: only expect the TEST_FILTER-matched jobs; jobs skipped
       # by the filter would otherwise be wrongly synthesized as missing.

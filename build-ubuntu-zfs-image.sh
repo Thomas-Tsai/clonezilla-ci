@@ -33,7 +33,7 @@
 #
 # Notes:
 #   - Built images land in qemu/cloudimages/ as ubuntu-zfs-<release>-<fw>-<arch>.qcow2
-#     where jobs/test_os_ubuntu_zfs.sh discovers them via cloud_images.conf.
+#     where jobs/test_os_ubuntu_zfs_{bios,efi}.sh discover them via cloud_images.conf.
 #   - The default login is ubuntu / ubuntu (test-only image; change on first use).
 #
 # Author: Thomas (maintainer)

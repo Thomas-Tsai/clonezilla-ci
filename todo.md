@@ -110,7 +110,11 @@ variable arch=arm64 zip=https://.../clonezilla-live-xxxx-arm64.zip
 
 ## OS 測試強化（2026-11-18）：
 - [ ] OS 相關測試啟用檔案級 b3sum 校驗：`dev/ocscmd/clone-first-disk.sh` 的 savedisk 加 `-gmf` 產生 b3sum checksum、`dev/ocscmd/restore-first-disk.sh` 的 restoredisk 加 `-cmf` 於還原後檢查；透過 os-clone-restore.sh 覆蓋全部 test_os_*（debian/ubuntu/fedora/windows/ubuntu_zfs）。
-- [ ] EFI 開機 OS clone/restore 測試改為 per-distro 獨立 job：`jobs/test_os_debian_efi.sh` / `jobs/test_os_ubuntu_efi.sh`（amd64-only；generic cloud images 以 `--efi` 跑完整 save→restore→validate）；`jobs/common.sh` 新增 `run_os_efi_conf_suite` helper；未來新增 distro = 複製薄 wrapper + CI 註冊。
+- [ ] EFI 開機 OS clone/restore 測試改為 per-distro 獨立 job：`jobs/test_os_debian_efi.sh` / `jobs/test_os_ubuntu_efi.sh`（amd64-only；generic cloud images 以 `--efi` 跑完整 save→restore→validate）；`jobs/common.sh` 新增 `run_os_conf_suite` helper；未來新增 distro = 複製薄 wrapper + CI 註冊。
+- [ ] windows 與 ubuntu_zfs 拆分 bios/efi 獨立 job：`test_os_windows.sh` → `test_os_windows_bios.sh` + `test_os_windows_efi.sh`（舊檔刪除）；`test_os_ubuntu_zfs.sh` → `test_os_ubuntu_zfs_bios.sh` + `test_os_ubuntu_zfs_efi.sh`（舊檔刪除）；CI 改為 `test:os:windows11_bios/_efi`、`test:os:ubuntu_zfs_bios/_efi`。
+- [ ] 補齊 fedora / almalinux / rocky 每個 distro bios/efi 獨立 job 並全部 CI 註冊：新增 `test_os_almalinux.sh`、`test_os_rocky.sh`（BIOS）與 `test_os_fedora_efi.sh`、`test_os_almalinux_efi.sh`、`test_os_rocky_efi.sh`（amd64-only；fedora BIOS 沿用既有 `test_os_fedora.sh` 首次註冊 CI）；amd64 lane OS jobs 由 6 增至 14。※ 已確認因 `ocs-install-grub` fallback 寫入 `/grub` 且未生成 `grub.cfg`，導致 BIOS 開機失敗，CI 中保留錯誤，等待上游修正。
+- [x] 回報上游 bug：Clonezilla `ocs-install-grub` 對 RHEL-family 系統（separate /boot + /grub2 佈局）在 fallback 時寫入 `/grub` 且未生成 `grub.cfg`，導致 BIOS 開機停在 `grub>`。已以 A/B 測試證明去除 `-g auto` 時恢復正常（issue 草稿存於 `ocs-install-grub-issue.md`；已回報上游，等待修正）。
+- [ ] （文件註記）arm64 路徑恒以 QEMU_EFI.fd 開機（`qemu-clonezilla-ci-run.sh` / `validate.sh`），arm64 的 OS 測試實質等於 EFI 測試，不需另開 job。
 
 ## liteserver.sh 改進事項：
 開發一個 liteserver.sh 腳本，這個腳本主要用來啟動一個簡易的 clonezilla lite server 來提供 clonezilla server 服務的場景

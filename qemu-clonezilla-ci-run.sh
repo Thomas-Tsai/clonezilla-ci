@@ -79,9 +79,12 @@ print_usage() {
 # Cleanup function to remove temporary files and directories
 cleanup() {
     echo "--- Running cleanup ---"
-    if [ -n "$HOST_SCRIPT_DIR" ] && [ -d "$HOST_SCRIPT_DIR" ]; then
-        echo "Removing temporary script directory: $HOST_SCRIPT_DIR"
-        rm -rf "$HOST_SCRIPT_DIR"
+    # Remove only this run's staged script (never the whole shared cmd_scripts
+    # dir — parallel runs may still need their own files in there).
+    if [ -n "$STAGED_SCRIPT_FILE" ] && [ -f "$STAGED_SCRIPT_FILE" ]; then
+        echo "Removing staged script: $STAGED_SCRIPT_FILE"
+        rm -f "$STAGED_SCRIPT_FILE"
+        rmdir "$HOST_SCRIPT_DIR" 2>/dev/null || true
     fi
 
     END_TIME=$(date +%s)
@@ -111,6 +114,7 @@ CMDPATH=""
 CUSTOM_APPEND_ARGS=""
 APPEND_ARGS_FILE=""
 HOST_SCRIPT_DIR="" # Ensure variable is declared for the trap
+STAGED_SCRIPT_FILE="" # Per-run staged script path (unique per process) for cleanup
 LOG_FILE="" # Initialize LOG_FILE
 CLONEZILLA_ZIP=""
 ZIP_OUTPUT_DIR="${PROJECT_ROOT}/zip"
@@ -463,18 +467,21 @@ if [ -n "$CMDPATH" ]; then
     # in a multi-VM setup (like lite server).
     SCRIPT_DIR_NAME="cmd_scripts"
     HOST_SCRIPT_DIR="$PARTIMAG_PATH/$SCRIPT_DIR_NAME"
-    
+
     # Ensure the directory exists for the script.
     # We don't wipe the whole directory here because multiple VMs (like server and client)
     # might be sharing this folder via 9p.
     mkdir -p "$HOST_SCRIPT_DIR"
-    
-    # Copy the user's script to the directory.
-    cp "$CMDPATH" "$HOST_SCRIPT_DIR/"
+
+    # Stage the script under a unique name: parallel runs sharing the same
+    # partimag dir must never overwrite each other's staged script.
     SCRIPT_BASENAME=$(basename "$CMDPATH")
-    
+    STAGED_BASENAME="${SCRIPT_BASENAME%.*}_$$.sh"
+    STAGED_SCRIPT_FILE="$HOST_SCRIPT_DIR/$STAGED_BASENAME"
+    cp "$CMDPATH" "$STAGED_SCRIPT_FILE"
+
     # The command to be run in the VM is now 'bash' on the script's path in the shared folder.
-    VM_SCRIPT_PATH="/home/partimag/$SCRIPT_DIR_NAME/$SCRIPT_BASENAME"
+    VM_SCRIPT_PATH="/home/partimag/$SCRIPT_DIR_NAME/$STAGED_BASENAME"
     OCS_COMMAND="bash $VM_SCRIPT_PATH"
 fi
 
@@ -490,7 +497,9 @@ fi
 # Set log file name (only needed in non-interactive mode)
 if [ "$INTERACTIVE_MODE" -eq 0 ]; then
     mkdir -p "$LOG_DIR" # Ensure log directory exists
-    LOG_FILE="$LOG_DIR/clonezilla_ci_$(date +%Y%m%d_%H%M%S).log"
+    # The PID suffix keeps parallel runs that launch within the same second
+    # from clobbering each other's log file.
+    LOG_FILE="$LOG_DIR/clonezilla_ci_$(date +%Y%m%d_%H%M%S)_$$.log"
 fi
 
 # Check if files exist

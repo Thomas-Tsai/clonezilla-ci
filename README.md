@@ -9,11 +9,11 @@ The primary goal is to enable fully automated, non-interactive validation of Clo
 ## Key Features
 
 - **Automated Test Suite**: `start.sh` runs a comprehensive suite of tests using `shunit2`.
-- **OS Testing**: Automatically tests cloning and restoring full Linux distributions (e.g., Debian, Ubuntu) using `os-clone-restore.sh`, with file-level b3sum integrity checking (`ocs-sr -gmf` at save / `-cmf` at restore).
-- **EFI Boot Testing**: Per-distro jobs (`jobs/test_os_debian_efi.sh`, `jobs/test_os_ubuntu_efi.sh`) re-run the OS clone/restore cycle on generic cloud images under OVMF (amd64-only).
+- **OS Testing**: Automatically tests cloning and restoring full Linux distributions (Debian, Ubuntu, Fedora, AlmaLinux, Rocky) using `os-clone-restore.sh`, with file-level b3sum integrity checking (`ocs-sr -gmf` at save / `-cmf` at restore).
+- **EFI Boot Testing**: Per-distro BIOS/EFI job pairs (`jobs/test_os_{debian,ubuntu,fedora,almalinux,rocky}_efi.sh`, `test_os_{windows11,ubuntu_zfs}_{bios,efi}.sh`) run the OS clone/restore cycle under SeaBIOS or OVMF independently (amd64-only; arm64 OS tests always boot UEFI via QEMU_EFI.fd).
 - **Filesystem Testing**: Automatically tests cloning and restoring various filesystems (e.g., ext4, xfs, btrfs, ntfs) with data integrity checks using `data-clone-restore.sh`.
 - **LVM & Thin Provisioning Testing**: Automatically tests local disk-to-disk (`ocs-onthefly`) cloning as well as image backup and restore (`savedisk` / `restoredisk`) with complex LVM layouts, including LVM Thin Pools and Thin Volumes, validating data integrity and volume structure. Requires Clonezilla Live >= `3.3.4-23` or `20261108-*`; older zips are gracefully skipped (`jobs/common.sh`, `skip_unless_clonezilla_version_or_newer`).
-- **ZFS-on-Root Testing**: `build-ubuntu-zfs-image.sh` fully automates building Ubuntu 24.04 golden images with root on ZFS (UEFI and BIOS variants, subiquity autoinstall), and `jobs/test_os_ubuntu_zfs.sh` exercises `partclone.zfs` via a savedisk/restoredisk cycle. Requires Clonezilla Live >= `3.3.4-20` or `20261030-*`; older zips are gracefully skipped.
+- **ZFS-on-Root Testing**: `build-ubuntu-zfs-image.sh` fully automates building Ubuntu 24.04 golden images with root on ZFS (UEFI and BIOS variants, subiquity autoinstall), and `jobs/test_os_ubuntu_zfs_{bios,efi}.sh` exercise `partclone.zfs` via a savedisk/restoredisk cycle. Requires Clonezilla Live >= `3.3.4-20` or `20261030-*`; older zips are gracefully skipped.
 - **Flexible QEMU Runner**: `qemu-clonezilla-ci-run.sh` provides a powerful interface to run ad-hoc Clonezilla commands in a QEMU VM, with features like automatic ZIP extraction, script execution, and customizable kernel parameters.
 - **Dependency Automation**: Scripts can automatically download necessary ISOs (Debian, Clonezilla) if they are not found locally.
 
@@ -130,7 +130,7 @@ Test results are shown in the console, and detailed logs for each major operatio
 - **`qemu-clonezilla-ci-run.sh`**: The core component for executing commands within a Clonezilla QEMU VM. It handles the complexities of setting up the VM, storage, networking, and boot parameters.
 - **`clonezilla-zip2qcow.sh`**: A utility to convert a Clonezilla Live ZIP archive into the QCOW2, kernel, and initrd files required for booting in QEMU.
 - **`validate.sh`**: A helper script to verify that a restored OS disk image can boot successfully, using cloud-init for automation.
-- **`build-ubuntu-zfs-image.sh`**: Builds Ubuntu 24.04 ZFS-on-root golden images (UEFI/BIOS) fully unattended via subiquity autoinstall; output lands in `qemu/cloudimages/` for `jobs/test_os_ubuntu_zfs.sh`.
+- **`build-ubuntu-zfs-image.sh`**: Builds Ubuntu 24.04 ZFS-on-root golden images (UEFI/BIOS) fully unattended via subiquity autoinstall; output lands in `qemu/cloudimages/` for `jobs/test_os_ubuntu_zfs_{bios,efi}.sh`.
 - **`qemu/cloudimages/download_cloud_images.sh`**: Downloads cloud images per `cloud_images.conf` (`OS RELEASE ARCH [FIRMWARE] URL [SHA256]`; atomic download, optional checksums; `--check`/`--prune`/`--migrate` modes).
 - **`qemu/cloudimages/sync_images.sh`**: Syncs local `qemu/cloudimages/` with the central image repo (PN42 pushes, test runners pull over rsync/ssh, sha256-manifest based). See usage.md for the repo layout.
 
