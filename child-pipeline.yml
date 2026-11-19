@@ -460,6 +460,9 @@ build_singularity:
         EXTRA_BINDS=""
         [ -e "/dev/kvm" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /dev/kvm:/dev/kvm"
         [ -d "/data/cloudimages" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/cloudimages"
+        # F1 fallback: before_script symlinks images from /work1 (not under
+        # the auto-bound $HOME), so bind it too or the symlinks dangle.
+        [ -d "/work1/u1597171/cloudimages" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /work1/u1597171/cloudimages"
         [ -d "/data/dataSets" ] && EXTRA_BINDS="$EXTRA_BINDS --bind /data/dataSets"
         timeout -k 30 "${TEST_TIMEOUT_SECONDS}" \
         srun -p "${SLURM_PARTITION}" --account="${SLURM_ACCOUNT}" \

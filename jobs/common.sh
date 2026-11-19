@@ -213,9 +213,12 @@ run_os_conf_suite() {
             run_os_clone_restore "$image_path" "$validate_iso" "$no_ssh_forward_arg" "$params"
         else
             echo "Skipping test for ${image_name%.qcow2}: image file not found at ${image_path}"
-            [ -n "$skip_hint" ] && echo "  ($skip_hint)"
+            if [ -n "$skip_hint" ]; then echo "  ($skip_hint)"; fi
         fi
     done
+
+    # Skips are never failures; real failures are recorded via assertEquals.
+    return 0
 }
 
 # Test for file system clone and restore¬

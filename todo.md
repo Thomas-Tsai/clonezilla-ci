@@ -379,3 +379,9 @@ PN42（producer）生產 image → 140.110.240.58（image repo, `cicd@140.110.24
 
 ### Phase 3：zfs 測試上線（等 image 上 repo）
 - [ ] 解除原 todo: 於 child-pipeline.yml 註冊 `test:os:ubuntu-zfs` job + publish needs + EXPECTED_TEST_JOBS。
+
+## F1 Slurm 容器 bind 缺口修法（2026-11-19，pipeline 3088165591 復盤）
+- [x] `child-pipeline.yml` srun 區塊 `EXTRA_BINDS` 加 `[ -d "/work1/u1597171/cloudimages" ] --bind`：before_script 在 F1 把 `/work1/.../*.qcow2` symlink 進 `qemu/cloudimages/`，但容器內 `/work1` 未掛 → symlink 懸空 → 7 個 `test:os:*` 全數「image file not found」(13–59s 假測)。main 上同樣潛伏（no_change skip 沒炸到）。
+- [x] `jobs/common.sh` `run_os_conf_suite` skip 退路碼 bug：`[ -n "$skip_hint" ] && echo` 無 hint 時回 1 → 管線末端 exit 1 → shunit2 ERROR（此 bug 反而正確爆出 bind 缺口）。改 `if...fi` + 明確 `return 0`（契約：skip 永不 fail；真失敗由內部 assertEquals 計入）。
+- [ ] retry pipeline 驗證：debian/ubuntu/fedora EFI 應轉綠；almalinux/rocky EFI 開始真跑；almalinux/rocky BIOS 預期紅（已知 RHEL 家族 `-g auto` grub 上游 bug，刻意保留紅燈當提醒）。
+- [ ] 獨立問題：`test:slurm:sample` guest hang ~7200s timeout（與 bind 無關；留意 `EXTRA_BINDS` 的 `[ -e /dev/kvm ]` 是在 login node 判斷、VM 實跑 compute node icpnq425，KVM 可用性可能不一致）。
